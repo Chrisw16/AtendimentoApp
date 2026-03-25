@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CITmax · Internet Fibra Óptica · Contrate Agora</title>
+<meta name="description" content="Contrate internet fibra óptica CITmax. Planos a partir de 300 Mega. Natal, Macaíba, São Gonçalo do Amarante e São Miguel do Gostoso.">
+<meta name="theme-color" content="#00c896">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--g1:#00c896;--g2:#00e6aa;--bg:#0a1628;--card:#0f2035;--border:rgba(0,200,150,.15);--text:#e8f4f0;--muted:#8ba4a0;--dim:#5a7370;--red:#ff4757;--blue:#3ecfff}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+a{color:var(--g1);text-decoration:none}
+
+/* Header */
+.header{background:linear-gradient(135deg,#032d3d 0%,#064e5e 50%,#032d3d 100%);padding:24px 20px;text-align:center;border-bottom:2px solid var(--g1)}
+.header h1{font-size:1.8rem;font-weight:800;letter-spacing:1px}
+.header h1 span{color:var(--g1)}
+.header p{color:var(--muted);font-size:.9rem;margin-top:4px}
+
+/* Container */
+.container{max-width:640px;margin:0 auto;padding:20px}
+
+/* Planos */
+.planos{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:20px 0}
+.plano{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:16px 12px;text-align:center;cursor:pointer;transition:all .2s}
+.plano:hover{border-color:var(--g1);transform:translateY(-2px)}
+.plano.active{border-color:var(--g1);background:rgba(0,200,150,.08);box-shadow:0 0 20px rgba(0,200,150,.15)}
+.plano .speed{font-size:1.6rem;font-weight:800;color:var(--g1);line-height:1.2}
+.plano .unit{font-size:.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:1px}
+.plano .name{font-size:.8rem;font-weight:700;margin-top:6px;color:var(--text)}
+.plano .price{font-size:.75rem;color:var(--muted);margin-top:4px}
+.plano .tag{display:inline-block;background:var(--g1);color:#032d3d;font-size:.6rem;font-weight:800;padding:2px 8px;border-radius:99px;margin-top:6px;text-transform:uppercase}
+
+/* Form */
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:16px}
+.section-title{font-size:.85rem;font-weight:700;color:var(--g1);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.grid{display:grid;gap:12px}
+.grid-2{grid-template-columns:1fr 1fr}
+.grid-3{grid-template-columns:2fr 1fr}
+label{display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+input,select,textarea{width:100%;padding:12px 14px;background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:.9rem;font-family:inherit;transition:border .2s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--g1);box-shadow:0 0 0 3px rgba(0,200,150,.1)}
+input::placeholder{color:var(--dim)}
+select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%235a7370'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+textarea{resize:vertical;min-height:60px}
+.required::after{content:' *';color:var(--red);font-weight:400}
+
+/* Cidade selector */
+.cidades{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px}
+.cidade-btn{padding:12px;background:rgba(0,0,0,.2);border:2px solid var(--border);border-radius:12px;text-align:center;cursor:pointer;transition:all .2s;font-size:.82rem;font-weight:600}
+.cidade-btn:hover{border-color:var(--g1)}
+.cidade-btn.active{border-color:var(--g1);background:rgba(0,200,150,.08);color:var(--g1)}
+
+/* Button */
+.btn-submit{width:100%;padding:16px;background:linear-gradient(135deg,var(--g1),var(--g2));color:#032d3d;border:none;border-radius:12px;font-size:1rem;font-weight:800;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:1px}
+.btn-submit:hover{transform:translateY(-1px);box-shadow:0 8px 25px rgba(0,200,150,.3)}
+.btn-submit:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* Steps */
+.steps{display:flex;gap:0;margin-bottom:24px;overflow:hidden;border-radius:10px}
+.step{flex:1;padding:10px;text-align:center;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:rgba(0,0,0,.3);color:var(--dim);border-right:1px solid var(--border);transition:all .3s}
+.step:last-child{border-right:none}
+.step.active{background:rgba(0,200,150,.1);color:var(--g1)}
+.step.done{background:rgba(0,200,150,.06);color:var(--g2)}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--dim);color:var(--bg);font-size:.65rem;margin-right:4px;transition:all .3s}
+.step.active .step-num{background:var(--g1)}
+.step.done .step-num{background:var(--g2)}
+
+/* Resultado */
+.resultado{text-align:center;padding:40px 20px}
+.resultado .icon{font-size:4rem;margin-bottom:16px}
+.resultado h2{font-size:1.4rem;margin-bottom:8px}
+.resultado p{color:var(--muted);font-size:.9rem}
+.resultado .protocolo{font-family:'Courier New',monospace;font-size:1.2rem;font-weight:800;color:var(--g1);background:rgba(0,200,150,.08);padding:12px 24px;border-radius:10px;display:inline-block;margin:16px 0;border:1px solid var(--border)}
+
+/* Error */
+.error{background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:10px;padding:12px 16px;color:var(--red);font-size:.82rem;margin-bottom:16px}
+
+/* Footer */
+.footer{text-align:center;padding:24px;color:var(--dim);font-size:.75rem;border-top:1px solid var(--border);margin-top:40px}
+
+/* Geo banner */
+.geo-banner{background:rgba(0,200,150,.08);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;animation:fadeIn .4s ease}
+.geo-banner p{font-size:.85rem;margin-bottom:12px}
+.geo-banner strong{color:var(--g1)}
+.geo-btns{display:flex;gap:8px;justify-content:center}
+.geo-btns button{padding:10px 24px;border-radius:10px;font-weight:700;font-size:.85rem;cursor:pointer;border:none;transition:all .2s}
+.geo-yes{background:var(--g1);color:#032d3d}
+.geo-no{background:rgba(0,0,0,.3);color:var(--muted);border:1px solid var(--border) !important}
+.geo-loading{color:var(--muted);font-size:.82rem;padding:12px;text-align:center}
+
+/* Responsive */
+@media(max-width:480px){
+  .header h1{font-size:1.4rem}
+  .planos{grid-template-columns:1fr}
+  .plano{padding:14px;display:flex;align-items:center;gap:14px;text-align:left}
+  .plano .speed{font-size:1.3rem}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .cidades{grid-template-columns:1fr}
+  .container{padding:14px}
+  .card{padding:18px}
+  .steps .step-label{display:none}
+}
+
+/* Animations */
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,200,150,.3)}50%{box-shadow:0 0 0 10px rgba(0,200,150,0)}}
+.fade-in{animation:fadeIn .4s ease}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🌐 <span>CIT</span>max</h1>
+  <p>Internet Fibra Óptica · Natal/RN</p>
+</div>
+
+<div class="container" id="app">
+  <!-- Steps -->
+  <div class="steps" id="steps">
+    <div class="step active" data-step="1"><span class="step-num">1</span><span class="step-label">Cidade</span></div>
+    <div class="step" data-step="2"><span class="step-num">2</span><span class="step-label">Plano</span></div>
+    <div class="step" data-step="3"><span class="step-num">3</span><span class="step-label">Dados</span></div>
+    <div class="step" data-step="4"><span class="step-num">4</span><span class="step-label">Endereço</span></div>
+  </div>
+
+  <!-- STEP 1: Cidade -->
+  <div class="card fade-in" id="step1">
+    <div class="section-title">📍 Onde você mora?</div>
+
+    <!-- Geo detection -->
+    <div id="geo-area">
+      <div class="geo-loading" id="geo-loading">📡 Detectando sua localização...</div>
+    </div>
+
+    <!-- Fallback: botões manuais -->
+    <div id="cidades-manual" style="display:none">
+      <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px;text-align:center">Selecione sua cidade:</p>
+      <div class="cidades" id="cidades"></div>
+    </div>
+  </div>
+
+  <!-- STEP 2: Plano -->
+  <div class="card fade-in" id="step2" style="display:none">
+    <div class="section-title">📡 Escolha seu plano</div>
+    <div class="planos" id="planos"></div>
+  </div>
+
+  <!-- STEP 3: Dados -->
+  <div class="card fade-in" id="step3" style="display:none">
+    <div class="section-title">👤 Seus dados</div>
+    <div class="grid">
+      <div>
+        <label class="required">Nome completo</label>
+        <input id="nome" placeholder="João da Silva Santos" autocomplete="name">
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label class="required">CPF</label>
+          <input id="cpf" placeholder="000.000.000-00" maxlength="14" inputmode="numeric" autocomplete="off">
+        </div>
+        <div>
+          <label>Data de nascimento</label>
+          <input id="datanasc" type="date">
+        </div>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label class="required">Celular (WhatsApp)</label>
+          <input id="celular" placeholder="(84) 99999-9999" maxlength="15" inputmode="tel" autocomplete="tel">
+        </div>
+        <div>
+          <label>E-mail</label>
+          <input id="email" type="email" placeholder="seu@email.com" autocomplete="email">
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn-submit" style="width:auto;padding:12px 32px;font-size:.85rem" onclick="goStep(4)">Continuar →</button>
+    </div>
+  </div>
+
+  <!-- STEP 4: Endereço -->
+  <div class="card fade-in" id="step4" style="display:none">
+    <div class="section-title">🏠 Endereço de instalação</div>
+    <div class="grid">
+      <div class="grid grid-3">
+        <div>
+          <label class="required">Logradouro</label>
+          <input id="logradouro" placeholder="Rua José Coelho" autocomplete="street-address">
+        </div>
+        <div>
+          <label class="required">Número</label>
+          <input id="numero" placeholder="155" inputmode="numeric">
+        </div>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label>Complemento</label>
+          <input id="complemento" placeholder="Apt 201, Bloco A">
+        </div>
+        <div>
+          <label class="required">Bairro</label>
+          <input id="bairro" placeholder="Centro">
+        </div>
+      </div>
+      <div>
+        <label>Ponto de referência</label>
+        <input id="pontoreferencia" placeholder="Próximo ao mercado">
+      </div>
+      <div>
+        <label>Dia de vencimento preferido</label>
+        <select id="vencimento">
+          <option value="">Selecione...</option>
+          <option value="1">Dia 5</option>
+          <option value="2">Dia 10</option>
+          <option value="3">Dia 15</option>
+          <option value="4">Dia 20</option>
+          <option value="5">Dia 25</option>
+        </select>
+      </div>
+    </div>
+    <div id="errorBox" class="error" style="display:none"></div>
+    <button class="btn-submit" style="margin-top:16px" id="btnSubmit" onclick="submitForm()">✅ Contratar agora</button>
+  </div>
+
+  <!-- RESULTADO -->
+  <div id="resultado" style="display:none"></div>
+</div>
+
+<div class="footer">
+  <p>CITmax Telecom · CNPJ 44.727.694/0001-39</p>
+  <p style="margin-top:4px">Natal · Macaíba · São Gonçalo do Amarante · São Miguel do Gostoso</p>
+</div>
+
+<!-- removed wa-float -->
+
+<script>
+let CIDADES = [];
+let PLANOS_POR_CIDADE = {};
+let state = { step: 1, cidade: '', cidadeObj: null, plano_id: '', pop_id: '', portador_id: '' };
+
+// Carrega cidades e planos da API
+async function loadData() {
+  try {
+    const r = await fetch('/api/public/planos');
+    const data = await r.json();
+    if (Array.isArray(data) && data.length > 0) {
+      CIDADES = data.map(d => ({ nome: d.cidade, pop_id: d.pop_id, portador_id: d.portador_id }));
+      data.forEach(d => {
+        PLANOS_POR_CIDADE[d.cidade] = (d.planos || []).map(p => ({
+          id: p.sgp_id, nome: p.nome, speed: p.velocidade, mega: p.unidade || 'Mega',
+          valor: p.valor, beneficios: p.beneficios || [], tag: p.destaque ? 'Mais vendido' : null,
+        }));
+      });
+    }
+  } catch {}
+
+  // Fallback se API falhar
+  if (CIDADES.length === 0) {
+    CIDADES = [
+      { nome: 'Natal', pop_id: 1, portador_id: 16 },
+      { nome: 'Macaíba', pop_id: 1, portador_id: 16 },
+      { nome: 'São Gonçalo do Amarante', pop_id: 4, portador_id: 16 },
+      { nome: 'São Miguel do Gostoso', pop_id: 3, portador_id: 18 },
+    ];
+    const base = [{ id:12, nome:'Essencial', speed:'300', mega:'Mega', valor:79.90, beneficios:[], tag:null },
+                  { id:13, nome:'Avançado', speed:'500', mega:'Mega', valor:99.90, beneficios:[], tag:null },
+                  { id:16, nome:'Premium', speed:'1', mega:'Giga', valor:119.90, beneficios:[], tag:'Mais vendido' }];
+    CIDADES.forEach(c => { PLANOS_POR_CIDADE[c.nome] = base; });
+  }
+
+  renderCidades();
+  detectLocation();
+}
+loadData();
+
+// ── GEOLOCALIZAÇÃO ──
+function showManualCities() {
+  document.getElementById('geo-area').style.display = 'none';
+  document.getElementById('cidades-manual').style.display = 'block';
+}
+
+function selectCidade(nome) {
+  const c = CIDADES.find(ci => ci.nome === nome);
+  if (!c) return;
+  state.cidade = c.nome; state.pop_id = c.pop_id; state.portador_id = c.portador_id;
+  document.querySelectorAll('.cidade-btn').forEach(b => b.classList.toggle('active', b.dataset.cidade === nome));
+  renderPlanos();
+  goStep(2);
+}
+
+function showGeoConfirm(cidadeDetectada) {
+  const area = document.getElementById('geo-area');
+  area.innerHTML = `
+    <div class="geo-banner">
+      <p>📍 Detectamos que você está em <strong>${cidadeDetectada}</strong></p>
+      <div class="geo-btns">
+        <button class="geo-yes" onclick="selectCidade('${cidadeDetectada}')">✅ Sim, é aqui!</button>
+        <button class="geo-no" onclick="showManualCities()">Não, outra cidade</button>
+      </div>
+    </div>
+  `;
+}
+
+function showGeoError() {
+  document.getElementById('geo-loading').style.display = 'none';
+  showManualCities();
+}
+
+// Tenta detectar localização
+function detectLocation() {
+  if (!navigator.geolocation) { showGeoError(); return; }
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        // Reverse geocode via Nominatim (free, no API key)
+        const { latitude, longitude } = pos.coords;
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&zoom=10&accept-language=pt-BR`);
+        const data = await r.json();
+        const city = data?.address?.city || data?.address?.town || data?.address?.municipality || data?.address?.county || '';
+
+        // Verifica se a cidade detectada está na lista de atendimento
+        const match = CIDADES.find(c => {
+          const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          return norm(city).includes(norm(c.nome)) || norm(c.nome).includes(norm(city));
+        });
+
+        if (match) {
+          showGeoConfirm(match.nome);
+        } else if (city) {
+          // Cidade detectada mas fora da cobertura
+          const area = document.getElementById('geo-area');
+          area.innerHTML = `
+            <div class="geo-banner">
+              <p>📍 Você está em <strong>${city}</strong></p>
+              <p style="font-size:.78rem;color:var(--red);margin-bottom:12px">Ainda não atendemos essa cidade, mas selecione onde deseja a instalação:</p>
+              <div class="geo-btns">
+                <button class="geo-no" onclick="showManualCities()">Ver cidades disponíveis</button>
+              </div>
+            </div>
+          `;
+        } else {
+          showGeoError();
+        }
+      } catch { showGeoError(); }
+    },
+    () => { showGeoError(); },
+    { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+  );
+
+  // Timeout safety: se demorar muito, mostra botões
+  setTimeout(() => {
+    if (document.getElementById('geo-loading')?.style.display !== 'none') showGeoError();
+  }, 10000);
+}
+
+// Render botões de cidade (manual) — chamado após loadData
+function renderCidades() {
+  const cidadesDiv = document.getElementById('cidades');
+  cidadesDiv.innerHTML = '';
+  CIDADES.forEach(c => {
+    const btn = document.createElement('div');
+    btn.className = 'cidade-btn';
+    btn.dataset.cidade = c.nome;
+    btn.textContent = '📍 ' + c.nome;
+    btn.onclick = () => selectCidade(c.nome);
+    cidadesDiv.appendChild(btn);
+  });
+}
+
+function renderPlanos() {
+  const div = document.getElementById('planos');
+  div.innerHTML = '';
+  const planos = PLANOS_POR_CIDADE[state.cidade] || [];
+  planos.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'plano';
+    const benefHtml = (p.beneficios || []).map(b => `<div style="font-size:.7rem;color:var(--muted);padding:1px 0">✅ ${b}</div>`).join('');
+    const valorHtml = p.valor ? `<div style="font-size:.85rem;font-weight:800;color:var(--g1);margin-top:4px">R$ ${parseFloat(p.valor).toFixed(2).replace('.',',')}<span style="font-size:.6rem;font-weight:400;color:var(--muted)">/mês</span></div>` : '';
+    el.innerHTML = `
+      <div>
+        <div class="speed">${p.speed}</div>
+        <div class="unit">${p.mega}</div>
+      </div>
+      <div style="flex:1">
+        <div class="name">${p.nome}</div>
+        ${valorHtml}
+        ${benefHtml}
+        ${p.tag ? `<div class="tag">${p.tag}</div>` : ''}
+      </div>
+    `;
+    el.onclick = () => {
+      state.plano_id = p.id;
+      div.querySelectorAll('.plano').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      goStep(3);
+    };
+    div.appendChild(el);
+  });
+}
+
+function goStep(n) {
+  // Validate step 3 before going to 4
+  if (n === 4) {
+    const nome = document.getElementById('nome').value.trim();
+    const cpf = document.getElementById('cpf').value.replace(/\D/g,'');
+    const cel = document.getElementById('celular').value.replace(/\D/g,'');
+    if (!nome || nome.split(' ').length < 2) { alert('Informe nome e sobrenome'); return; }
+    if (cpf.length < 11) { alert('CPF inválido'); return; }
+    if (cel.length < 10) { alert('Celular inválido'); return; }
+  }
+  state.step = n;
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('step' + i);
+    if (el) el.style.display = i === n ? 'block' : 'none';
+  }
+  document.querySelectorAll('.step').forEach(s => {
+    const sn = parseInt(s.dataset.step);
+    s.classList.toggle('active', sn === n);
+    s.classList.toggle('done', sn < n);
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// CPF mask
+document.getElementById('cpf').addEventListener('input', function(e) {
+  let v = this.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+  else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+  else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+  this.value = v;
+});
+
+// Phone mask
+document.getElementById('celular').addEventListener('input', function(e) {
+  let v = this.value.replace(/\D/g,'').slice(0,11);
+  if (v.length > 6) v = v.replace(/(\d{2})(\d{5})(\d{1,4})/, '($1) $2-$3');
+  else if (v.length > 2) v = v.replace(/(\d{2})(\d{1,5})/, '($1) $2');
+  this.value = v;
+});
+
+// Load vencimentos from API
+fetch('/api/public/vencimentos').then(r => r.json()).then(data => {
+  const sel = document.getElementById('vencimento');
+  const list = data?.vencimentos || data?.results || (Array.isArray(data) ? data : []);
+  if (list.length > 0) {
+    sel.innerHTML = '<option value="">Selecione...</option>';
+    list.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = 'Dia ' + (v.dia || v.vencimento || v.label || v.id);
+      sel.appendChild(opt);
+    });
+  }
+}).catch(() => {});
+
+async function submitForm() {
+  const btn = document.getElementById('btnSubmit');
+  const errBox = document.getElementById('errorBox');
+  errBox.style.display = 'none';
+
+  const body = {
+    nome: document.getElementById('nome').value.trim(),
+    cpf: document.getElementById('cpf').value.replace(/\D/g,''),
+    datanasc: document.getElementById('datanasc').value,
+    email: document.getElementById('email').value.trim(),
+    celular: document.getElementById('celular').value.replace(/\D/g,''),
+    logradouro: document.getElementById('logradouro').value.trim(),
+    numero: document.getElementById('numero').value.trim(),
+    complemento: document.getElementById('complemento').value.trim(),
+    bairro: document.getElementById('bairro').value.trim(),
+    cidade: state.cidade,
+    pontoreferencia: document.getElementById('pontoreferencia').value.trim(),
+    plano_id: state.plano_id,
+    vencimento_id: document.getElementById('vencimento').value,
+    pop_id: state.pop_id,
+    portador_id: state.portador_id,
+  };
+
+  // Validações
+  if (!body.nome || body.nome.split(' ').length < 2) { errBox.textContent = 'Informe nome e sobrenome'; errBox.style.display = 'block'; return; }
+  if (body.cpf.length < 11) { errBox.textContent = 'CPF inválido'; errBox.style.display = 'block'; return; }
+  if (body.celular.length < 10) { errBox.textContent = 'Celular inválido'; errBox.style.display = 'block'; return; }
+  if (!body.logradouro) { errBox.textContent = 'Informe o logradouro'; errBox.style.display = 'block'; return; }
+  if (!body.numero) { errBox.textContent = 'Informe o número'; errBox.style.display = 'block'; return; }
+  if (!body.bairro) { errBox.textContent = 'Informe o bairro'; errBox.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Cadastrando...';
+
+  try {
+    const r = await fetch('/api/public/lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+
+    const resDiv = document.getElementById('resultado');
+    document.querySelectorAll('.card').forEach(c => c.style.display = 'none');
+    document.getElementById('steps').style.display = 'none';
+
+    if (data.ok) {
+      resDiv.innerHTML = `
+        <div class="resultado card fade-in">
+          <div class="icon">🎉</div>
+          <h2>Cadastro realizado!</h2>
+          <p>Parabéns! Seu pedido de instalação foi registrado.</p>
+          ${data.protocolo ? `<div class="protocolo">Protocolo: ${data.protocolo}</div>` : ''}
+          <p style="margin-top:16px">Nossa equipe entrará em contato em até <strong>48 horas</strong> para agendar a instalação.</p>
+          <div style="margin-top:24px;padding:16px;background:rgba(0,200,150,.06);border-radius:12px;border:1px solid var(--border)">
+            <p style="font-size:.85rem;font-weight:700;margin-bottom:8px">📱 Acompanhe pelo WhatsApp</p>
+            <a href="https://wa.me/558487278686" target="_blank" style="display:inline-block;padding:10px 24px;background:#25D366;color:#fff;border-radius:8px;font-weight:700;font-size:.85rem">Falar com a CITmax</a>
+          </div>
+        </div>
+      `;
+    } else {
+      resDiv.innerHTML = `
+        <div class="resultado card fade-in">
+          <div class="icon">😔</div>
+          <h2>Ops, algo deu errado</h2>
+          <p>${data.error || 'Tente novamente ou entre em contato pelo WhatsApp.'}</p>
+          <div style="margin-top:20px">
+            <a href="https://wa.me/558487278686" target="_blank" style="display:inline-block;padding:10px 24px;background:#25D366;color:#fff;border-radius:8px;font-weight:700;font-size:.85rem">Falar pelo WhatsApp</a>
+          </div>
+        </div>
+      `;
+    }
+    resDiv.style.display = 'block';
+  } catch (e) {
+    errBox.textContent = 'Erro de conexão. Tente novamente.';
+    errBox.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '✅ Contratar agora';
+  }
+}
+</script>
+</body>
+</html>

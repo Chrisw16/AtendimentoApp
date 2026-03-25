@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Maxxi — Atendente IA · CITmax</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,300;0,700;0,900;1,300&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#020c0a;
+  --g1:#00c896;
+  --g2:#008b87;
+  --g3:#036271;
+  --text:#e4f5f0;
+  --muted:#4a7a72;
+  --panel:rgba(0,200,150,.04);
+  --border:rgba(0,200,150,.12);
+}
+html{scroll-behavior:smooth}
+body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+
+/* ── CANVAS BACKGROUND ───────────────────────────────────────── */
+#bg-canvas{position:fixed;inset:0;z-index:0;opacity:.35}
+
+/* ── NAV ─────────────────────────────────────────────────────── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;padding:0 5vw;height:68px;
+  background:rgba(2,12,10,.7);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  transition:background .3s;
+}
+.nav-logo{display:flex;align-items:center;gap:10px;font-weight:900;font-size:1.25rem;letter-spacing:-.02em;color:var(--g1);flex:1}
+.nav-logo .bolt{font-size:1.4rem;filter:drop-shadow(0 0 8px var(--g1))}
+.nav-logo span{color:var(--text)}
+nav ul{list-style:none;display:flex;gap:32px}
+nav ul a{color:var(--muted);font-size:.85rem;text-decoration:none;font-weight:700;letter-spacing:.06em;text-transform:uppercase;transition:color .2s}
+nav ul a:hover{color:var(--g1)}
+.nav-cta{
+  margin-left:32px;padding:9px 22px;border-radius:6px;
+  background:linear-gradient(135deg,var(--g1),var(--g2));
+  color:#041a15;font-weight:900;font-size:.82rem;letter-spacing:.06em;text-transform:uppercase;
+  text-decoration:none;transition:opacity .2s,transform .1s;white-space:nowrap;
+}
+.nav-cta:hover{opacity:.85;transform:translateY(-1px)}
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:4px}
+.hamburger span{width:22px;height:2px;background:var(--g1);border-radius:2px;transition:.3s}
+
+/* ── HERO ────────────────────────────────────────────────────── */
+#hero{
+  position:relative;z-index:1;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:120px 5vw 80px;text-align:center;
+}
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:6px 16px;border-radius:999px;
+  border:1px solid var(--border);background:rgba(0,200,150,.06);
+  font-family:'Space Mono',monospace;font-size:.72rem;color:var(--g1);
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:32px;
+  animation:fadeUp .8s ease both;
+}
+.hero-eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--g1);box-shadow:0 0 8px var(--g1);animation:pulse 2s ease-in-out infinite}
+h1{
+  font-size:clamp(2.8rem,8vw,6.5rem);font-weight:900;line-height:1.0;
+  letter-spacing:-.03em;margin-bottom:28px;
+  animation:fadeUp .8s .1s ease both;
+}
+h1 .line-accent{
+  display:block;
+  background:linear-gradient(90deg,var(--g1),var(--g2),var(--g1));
+  background-size:200% auto;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  animation:fadeUp .8s .1s ease both, shimmer 4s linear infinite;
+}
+.hero-sub{
+  max-width:600px;font-size:clamp(1rem,2.5vw,1.2rem);color:var(--muted);
+  line-height:1.7;margin-bottom:48px;font-weight:300;
+  animation:fadeUp .8s .2s ease both;
+}
+.hero-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;animation:fadeUp .8s .3s ease both}
+.btn-hero-primary{
+  padding:16px 40px;border-radius:8px;
+  background:linear-gradient(135deg,var(--g1),var(--g2));
+  color:#041a15;font-weight:900;font-size:1rem;letter-spacing:.04em;
+  text-decoration:none;transition:all .2s;border:none;cursor:pointer;
+  box-shadow:0 0 40px rgba(0,200,150,.25);
+}
+.btn-hero-primary:hover{transform:translateY(-3px);box-shadow:0 8px 40px rgba(0,200,150,.4)}
+.btn-hero-ghost{
+  padding:16px 40px;border-radius:8px;
+  border:1px solid var(--border);background:transparent;
+  color:var(--text);font-weight:700;font-size:1rem;
+  text-decoration:none;transition:all .2s;
+}
+.btn-hero-ghost:hover{border-color:var(--g1);color:var(--g1);background:rgba(0,200,150,.06)}
+
+.hero-scroll{
+  margin-top:64px;display:flex;flex-direction:column;align-items:center;gap:8px;
+  color:var(--muted);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
+  animation:fadeUp .8s .5s ease both;
+}
+.scroll-line{width:1px;height:48px;background:linear-gradient(var(--g1),transparent);animation:scrollAnim 2s ease-in-out infinite}
+
+/* ── STATS BAR ───────────────────────────────────────────────── */
+#stats{
+  position:relative;z-index:1;padding:48px 5vw;
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  background:rgba(0,200,150,.025);
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:32px;
+  text-align:center;
+}
+.stat-num{
+  font-family:'Space Mono',monospace;font-size:2.2rem;font-weight:700;
+  color:var(--g1);line-height:1;margin-bottom:6px;
+}
+.stat-label{font-size:.75rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+
+/* ── SECTION ─────────────────────────────────────────────────── */
+.section{position:relative;z-index:1;padding:100px 5vw}
+.section-label{
+  font-family:'Space Mono',monospace;font-size:.7rem;color:var(--g1);
+  letter-spacing:.15em;text-transform:uppercase;margin-bottom:16px;
+  display:flex;align-items:center;gap:10px;
+}
+.section-label::before{content:"";flex:0 0 24px;height:1px;background:var(--g1)}
+h2{font-size:clamp(1.8rem,4vw,3rem);font-weight:900;letter-spacing:-.02em;line-height:1.1;margin-bottom:16px}
+.section-sub{font-size:1.05rem;color:var(--muted);max-width:540px;line-height:1.7;font-weight:300}
+
+/* ── FEATURES GRID ───────────────────────────────────────────── */
+#features .grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:2px;margin-top:64px;
+  border:1px solid var(--border);border-radius:16px;overflow:hidden;
+}
+.feat-card{
+  padding:36px 32px;background:var(--panel);
+  border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+  transition:background .2s;position:relative;overflow:hidden;
+}
+.feat-card::before{
+  content:"";position:absolute;top:-40px;right:-40px;
+  width:100px;height:100px;border-radius:50%;
+  background:radial-gradient(circle,rgba(0,200,150,.08),transparent 70%);
+  transition:transform .4s;
+}
+.feat-card:hover{background:rgba(0,200,150,.07)}
+.feat-card:hover::before{transform:scale(2.5)}
+.feat-icon{font-size:2rem;margin-bottom:16px;display:block}
+.feat-title{font-weight:900;font-size:1rem;margin-bottom:8px;letter-spacing:-.01em}
+.feat-desc{font-size:.84rem;color:var(--muted);line-height:1.6;font-weight:300}
+.feat-tag{
+  display:inline-block;margin-top:12px;padding:3px 10px;border-radius:4px;
+  font-size:.68rem;font-family:'Space Mono',monospace;letter-spacing:.06em;
+  background:rgba(0,200,150,.1);color:var(--g1);border:1px solid rgba(0,200,150,.15);
+}
+
+/* ── COMO FUNCIONA ───────────────────────────────────────────── */
+#como{background:rgba(0,139,135,.03)}
+.steps{display:flex;flex-direction:column;gap:0;margin-top:64px;max-width:700px}
+.step{
+  display:grid;grid-template-columns:64px 1fr;gap:24px;
+  padding:32px 0;border-bottom:1px solid var(--border);
+  align-items:start;
+}
+.step:last-child{border-bottom:none}
+.step-num{
+  width:48px;height:48px;border-radius:12px;
+  background:linear-gradient(135deg,var(--g1),var(--g3));
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Space Mono',monospace;font-weight:700;font-size:.9rem;color:#041a15;
+  flex-shrink:0;
+}
+.step-title{font-weight:900;font-size:1.05rem;margin-bottom:6px}
+.step-desc{font-size:.88rem;color:var(--muted);line-height:1.6;font-weight:300}
+
+/* ── CANAIS ──────────────────────────────────────────────────── */
+#canais .canal-list{
+  display:flex;flex-wrap:wrap;gap:12px;margin-top:48px;
+}
+.canal-pill{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 20px;border-radius:999px;
+  border:1px solid var(--border);background:var(--panel);
+  font-size:.88rem;font-weight:700;transition:all .2s;
+}
+.canal-pill:hover{border-color:var(--g1);background:rgba(0,200,150,.08);transform:translateY(-2px)}
+.canal-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--g1);box-shadow:0 0 6px var(--g1)}
+
+/* ── TERMINAL DEMO ───────────────────────────────────────────── */
+#demo{text-align:center}
+.terminal{
+  max-width:640px;margin:64px auto 0;text-align:left;
+  background:#030f0c;border:1px solid var(--border);border-radius:16px;
+  overflow:hidden;box-shadow:0 0 80px rgba(0,200,150,.08);
+}
+.terminal-bar{
+  height:42px;background:rgba(0,200,150,.06);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;gap:8px;
+}
+.terminal-bar .dot{width:10px;height:10px;border-radius:50%}
+.d-red{background:#ff5f57}.d-yellow{background:#febc2e}.d-green{background:#28c840}
+.terminal-bar .title{margin-left:8px;font-family:'Space Mono',monospace;font-size:.72rem;color:var(--muted)}
+.terminal-body{padding:24px;font-family:'Space Mono',monospace;font-size:.8rem;line-height:2}
+.t-user{color:var(--g1)}.t-bot{color:var(--text)}.t-muted{color:var(--muted)}
+.t-tag{color:var(--g2);font-style:italic}
+.cursor{display:inline-block;width:8px;height:14px;background:var(--g1);margin-left:2px;animation:blink 1s step-end infinite;vertical-align:middle}
+
+/* ── CTA ─────────────────────────────────────────────────────── */
+#cta{
+  text-align:center;padding:120px 5vw;
+  background:radial-gradient(ellipse 80% 60% at 50% 50%,rgba(0,200,150,.06),transparent);
+}
+#cta h2{margin-bottom:16px}
+#cta p{color:var(--muted);max-width:480px;margin:0 auto 48px;line-height:1.7;font-weight:300}
+.cta-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+
+/* ── FOOTER ──────────────────────────────────────────────────── */
+footer{
+  position:relative;z-index:1;padding:40px 5vw;
+  border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;
+}
+footer .logo{font-weight:900;color:var(--g1);font-size:1rem}
+footer p{font-size:.78rem;color:var(--muted)}
+.footer-links{display:flex;gap:24px}
+.footer-links a{font-size:.78rem;color:var(--muted);text-decoration:none;transition:color .2s}
+.footer-links a:hover{color:var(--g1)}
+
+/* ── ANIMATIONS ──────────────────────────────────────────────── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.7)}}
+@keyframes shimmer{to{background-position:200% center}}
+@keyframes scrollAnim{0%,100%{opacity:1;transform:scaleY(1)}50%{opacity:.3;transform:scaleY(.5)}}
+@keyframes blink{50%{opacity:0}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+
+.reveal{opacity:0;transform:translateY(32px);transition:opacity .7s ease,transform .7s ease}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* ── RESPONSIVE ──────────────────────────────────────────────── */
+@media(max-width:768px){
+  nav ul{display:none}
+  nav ul.open{display:flex;flex-direction:column;position:fixed;inset:68px 0 0;background:rgba(2,12,10,.97);padding:32px;gap:24px;z-index:99;backdrop-filter:blur(20px)}
+  nav ul.open a{font-size:1.2rem}
+  .nav-cta{display:none}
+  .hamburger{display:flex}
+  .hero-btns{flex-direction:column;align-items:center}
+  .btn-hero-primary,.btn-hero-ghost{width:100%;max-width:320px;text-align:center}
+  #stats{grid-template-columns:1fr 1fr}
+  .steps{max-width:100%}
+  #features .grid{grid-template-columns:1fr}
+  footer{flex-direction:column;text-align:center}
+  .footer-links{justify-content:center}
+}
+@media(max-width:480px){
+  #stats{grid-template-columns:1fr 1fr}
+  .stat-num{font-size:1.6rem}
+  h1{letter-spacing:-.04em}
+}
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+
+<!-- NAV -->
+<nav id="navbar">
+  <div class="nav-logo">
+    <span class="bolt">⚡</span>
+    Maxxi<span style="color:var(--muted);font-weight:300"> · CITmax</span>
+  </div>
+  <ul id="nav-menu">
+    <li><a href="#features">Funções</a></li>
+    <li><a href="#como">Como funciona</a></li>
+    <li><a href="#canais">Canais</a></li>
+    <li><a href="#demo">Demo</a></li>
+  </ul>
+  <a href="/admin" class="nav-cta">Acessar Painel</a>
+  <div class="hamburger" id="hamburger" onclick="toggleMenu()">
+    <span></span><span></span><span></span>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-eyebrow">
+    <span></span> Inteligência Artificial · Atendimento 24/7
+  </div>
+  <h1>
+    Atendimento que<br/>
+    <span class="line-accent">nunca dorme</span>
+  </h1>
+  <p class="hero-sub">
+    Maxxi é o agente de IA da CITmax — responde clientes, emite boletos,
+    abre chamados e fecha contratos pelo WhatsApp, Telegram e no seu site,
+    sem intervenção humana.
+  </p>
+  <div class="hero-btns">
+    <a href="/admin" class="btn-hero-primary">Acessar Painel Admin</a>
+    <a href="#features" class="btn-hero-ghost">Ver Funcionalidades</a>
+  </div>
+  <div class="hero-scroll">
+    <span>Scroll</span>
+    <div class="scroll-line"></div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div id="stats">
+  <div class="reveal">
+    <div class="stat-num" data-target="25">0</div>
+    <div class="stat-label">Ferramentas SGP</div>
+  </div>
+  <div class="reveal">
+    <div class="stat-num" data-target="5">0</div>
+    <div class="stat-label">Canais integrados</div>
+  </div>
+  <div class="reveal">
+    <div class="stat-num" data-target="24">0</div>
+    <div class="stat-label">Horas / dia ativo</div>
+  </div>
+  <div class="reveal">
+    <div class="stat-num" data-target="0" data-suffix="s">0</div>
+    <div class="stat-label">Tempo de resposta</div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features" class="section">
+  <div class="section-label">Funcionalidades</div>
+  <h2>Tudo que você precisa<br/>em um só agente</h2>
+  <p class="section-sub">Integração nativa com o SGP da CITmax — sem precisar de intermediários.</p>
+  <div class="grid">
+    <div class="feat-card reveal">
+      <span class="feat-icon">🧾</span>
+      <div class="feat-title">Segunda Via de Boleto</div>
+      <div class="feat-desc">Emite boleto e PIX copia-e-cola em segundos. Código formatado para copiar direto no WhatsApp.</div>
+      <span class="feat-tag">SGP + PIX</span>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">📋</span>
+      <div class="feat-title">Abertura de Chamados</div>
+      <div class="feat-desc">Identifica o problema, abre OS no SGP e informa protocolo ao cliente automaticamente.</div>
+      <span class="feat-tag">Suporte técnico</span>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">🔄</span>
+      <div class="feat-title">Cadastro de Novos Clientes</div>
+      <div class="feat-desc">Coleta dados, verifica disponibilidade e cadastra no SGP com 9 etapas validadas.</div>
+      <span class="feat-tag">Vendas</span>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">📡</span>
+      <div class="feat-title">Verificação de Conexão</div>
+      <div class="feat-desc">Consulta status do link em tempo real e identifica se a falha é na rede ou no equipamento.</div>
+      <span class="feat-tag">Técnico</span>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">👨‍💼</span>
+      <div class="feat-title">Transferência Humana</div>
+      <div class="feat-desc">Detecta quando o cliente precisa de um agente real e faz handoff com histórico completo.</div>
+      <span class="feat-tag">Chat interno</span>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">🧠</span>
+      <div class="feat-title">Memória de Sessão</div>
+      <div class="feat-desc">Lembra CPF, contrato e contexto por 12h — nunca pede os mesmos dados duas vezes.</div>
+      <span class="feat-tag">12h TTL</span>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">⭐</span>
+      <div class="feat-title">Pesquisa de Satisfação</div>
+      <div class="feat-desc">Coleta avaliação 1-5 ao fim do atendimento. Dashboard com métricas e histórico.</div>
+      <span class="feat-tag">NPS</span>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">🕐</span>
+      <div class="feat-title">Horário Inteligente</div>
+      <div class="feat-desc">Respeita horário de funcionamento por canal. Mensagem automática fora do horário.</div>
+      <span class="feat-tag">SLA</span>
+    </div>
+    <div class="feat-card reveal">
+      <span class="feat-icon">📊</span>
+      <div class="feat-title">Painel Admin Completo</div>
+      <div class="feat-desc">Dashboard com métricas, logs ao vivo, editor de prompt e controle total em tempo real.</div>
+      <span class="feat-tag">NOC</span>
+    </div>
+  </div>
+</section>
+
+<!-- COMO FUNCIONA -->
+<section id="como" class="section">
+  <div class="section-label">Fluxo</div>
+  <h2>Como funciona</h2>
+  <p class="section-sub">Do WhatsApp do cliente até o SGP da CITmax em menos de 3 segundos.</p>
+  <div class="steps">
+    <div class="step reveal">
+      <div class="step-num">01</div>
+      <div>
+        <div class="step-title">Cliente envia mensagem</div>
+        <div class="step-desc">WhatsApp, Telegram, Instagram, Facebook ou o chat no site cit.net.br.</div>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div class="step-num">02</div>
+      <div>
+        <div class="step-title">Maxxi identifica o cliente</div>
+        <div class="step-desc">Consulta CPF/CNPJ no SGP, carrega contratos ativos e histórico da sessão. Nunca pede o mesmo dado duas vezes.</div>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div class="step-num">03</div>
+      <div>
+        <div class="step-title">IA processa e executa</div>
+        <div class="step-desc">Claude Haiku decide quais ferramentas usar — emite boleto, abre chamado, consulta planos — em loop até resolver.</div>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div class="step-num">04</div>
+      <div>
+        <div class="step-title">Resposta entregue ao cliente</div>
+        <div class="step-desc">Mensagem formatada enviada de volta pelo canal de origem. PIX com copia-e-cola, protocolos destacados.</div>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div class="step-num">05</div>
+      <div>
+        <div class="step-title">Tudo registrado no painel</div>
+        <div class="step-desc">Log ao vivo, tokens consumidos, custo estimado, sentimento do atendimento e histórico do cliente.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CANAIS -->
+<section id="canais" class="section">
+  <div class="section-label">Canais</div>
+  <h2>Onde quer que<br/>seu cliente esteja</h2>
+  <p class="section-sub">Configure cada canal pelo painel em minutos. Saudações personalizadas por canal.</p>
+  <div class="canal-list">
+    <div class="canal-pill reveal"><div class="dot"></div> WhatsApp Oficial (Meta WABA)</div>
+    <div class="canal-pill reveal"><div class="dot"></div> Telegram Bot</div>
+    <div class="canal-pill reveal"><div class="dot"></div> Instagram DM</div>
+    <div class="canal-pill reveal"><div class="dot"></div> Facebook Messenger</div>
+    <div class="canal-pill reveal"><div class="dot"></div> Widget no site</div>
+    <div class="canal-pill reveal"><div class="dot"></div> Chatwoot (ativo)</div>
+  </div>
+
+  <!-- Destaque WhatsApp interativo -->
+  <div class="reveal" style="margin-top:48px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:760px">
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px">
+      <div style="font-size:1.4rem;margin-bottom:10px">🔘</div>
+      <div style="font-weight:900;font-size:.9rem;margin-bottom:6px">Botões Interativos</div>
+      <div style="font-size:.8rem;color:var(--muted);line-height:1.6">Até 3 botões clicáveis no WhatsApp Oficial — sem digitar, só tocar.</div>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px">
+      <div style="font-size:1.4rem;margin-bottom:10px">📋</div>
+      <div style="font-weight:900;font-size:.9rem;margin-bottom:6px">Listas de Menu</div>
+      <div style="font-size:.8rem;color:var(--muted);line-height:1.6">Menus com seções e até 10 opções — ideal para planos e serviços.</div>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px">
+      <div style="font-size:1.4rem;margin-bottom:10px">💰</div>
+      <div style="font-weight:900;font-size:.9rem;margin-bottom:6px">PIX Copia e Cola</div>
+      <div style="font-size:.8rem;color:var(--muted);line-height:1.6">Código PIX formatado, pronto para colar no app do banco.</div>
+    </div>
+  </div>
+</section>
+
+<!-- DEMO TERMINAL -->
+<section id="demo" class="section">
+  <div class="section-label">Exemplo</div>
+  <h2>Veja em ação</h2>
+  <p class="section-sub">Uma conversa real de segunda via de boleto — do início à entrega do PIX.</p>
+  <div class="terminal reveal">
+    <div class="terminal-bar">
+      <div class="dot d-red"></div>
+      <div class="dot d-yellow"></div>
+      <div class="dot d-green"></div>
+      <div class="title">WhatsApp · CITmax Fibra</div>
+    </div>
+    <div class="terminal-body" id="terminal-body"></div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta">
+  <div class="section-label" style="justify-content:center">Painel</div>
+  <h2 class="reveal">Pronto para gerenciar</h2>
+  <p class="reveal">Acesse o painel de controle para configurar canais, visualizar atendimentos em tempo real e ajustar a Maxxi.</p>
+  <div class="cta-btns reveal">
+    <a href="/admin" class="btn-hero-primary">Abrir Painel Admin</a>
+    <a href="/widget" target="_blank" class="btn-hero-ghost">Ver Widget de Chat</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="logo">⚡ Maxxi · CITmax</div>
+  <p>© 2026 CITmax Fibra Óptica · Natal/RN</p>
+  <div class="footer-links">
+    <a href="/admin">Admin</a>
+    <a href="/widget" target="_blank">Widget</a>
+    <a href="/health">Status</a>
+  </div>
+</footer>
+
+<script>
+// ── CANVAS: fibra óptica animada ──────────────────────────────────────────────
+(function(){
+  var canvas = document.getElementById("bg-canvas");
+  var ctx = canvas.getContext("2d");
+  var W, H, particles = [], lines = [];
+
+  function resize(){
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener("resize", resize);
+
+  // Partículas
+  for(var i=0;i<60;i++){
+    particles.push({
+      x: Math.random()*1920, y: Math.random()*1080,
+      vx: (Math.random()-.5)*.4, vy: (Math.random()-.5)*.4,
+      r: Math.random()*1.5+.5, a: Math.random()
+    });
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    // Linhas de conexão
+    for(var i=0;i<particles.length;i++){
+      for(var j=i+1;j<particles.length;j++){
+        var dx = particles[i].x-particles[j].x;
+        var dy = particles[i].y-particles[j].y;
+        var d  = Math.sqrt(dx*dx+dy*dy);
+        if(d < 180){
+          ctx.beginPath();
+          ctx.strokeStyle = "rgba(0,200,150,"+(1-d/180)*.15+")";
+          ctx.lineWidth = .5;
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Pontos
+    particles.forEach(function(p){
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(0,200,150,"+p.a*.5+")";
+      ctx.fill();
+      p.x += p.vx; p.y += p.vy;
+      if(p.x<0||p.x>W) p.vx *= -1;
+      if(p.y<0||p.y>H) p.vy *= -1;
+    });
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── REVEAL on scroll ──────────────────────────────────────────────────────────
+(function(){
+  var els = document.querySelectorAll(".reveal");
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        e.target.classList.add("visible");
+        io.unobserve(e.target);
+      }
+    });
+  },{threshold:.12});
+  els.forEach(function(el){ io.observe(el); });
+})();
+
+// ── COUNTER ANIMATION ─────────────────────────────────────────────────────────
+(function(){
+  var els = document.querySelectorAll("[data-target]");
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(!e.isIntersecting) return;
+      var el     = e.target;
+      var target = parseInt(el.dataset.target);
+      var suffix = el.dataset.suffix || "";
+      var start  = 0;
+      var dur    = 1200;
+      var step   = 16;
+      var inc    = target / (dur/step);
+      var t = setInterval(function(){
+        start += inc;
+        if(start >= target){ start = target; clearInterval(t); }
+        el.textContent = Math.floor(start) + suffix;
+      }, step);
+      io.unobserve(el);
+    });
+  },{threshold:.5});
+  els.forEach(function(el){ io.observe(el); });
+})();
+
+// ── TERMINAL TYPEWRITER ───────────────────────────────────────────────────────
+(function(){
+  var lines = [
+    {cls:"t-muted", text:"[10:32] Sessão iniciada · WhatsApp · 5584999887766"},
+    {cls:"t-user",  text:"👤 Olá, preciso de um boleto"},
+    {cls:"t-tag",   text:"  → buscando cliente no SGP..."},
+    {cls:"t-bot",   text:"🤖 Oi João! Encontrei sua conta."},
+    {cls:"t-bot",   text:"   Contrato #4821 · Plano 500MB · R$ 89,90"},
+    {cls:"t-bot",   text:"   Vencimento: 20/03/2026 · Status: Em aberto"},
+    {cls:"t-tag",   text:"  → gerando segunda via..."},
+    {cls:"t-bot",   text:"📲 PIX Copia e Cola:"},
+    {cls:"t-muted", text:"   00020126330014br.gov.bcb.pix0111..."},
+    {cls:"t-bot",   text:"✅ Pagamento via PIX — compensação em segundos!"},
+    {cls:"t-muted", text:"[10:32] Atendimento encerrado · 4.2s"},
+  ];
+  var body = document.getElementById("terminal-body");
+  var io = new IntersectionObserver(function(entries){
+    if(!entries[0].isIntersecting) return;
+    io.disconnect();
+    var i = 0;
+    function next(){
+      if(i >= lines.length) return;
+      var div = document.createElement("div");
+      div.className = lines[i].cls;
+      body.appendChild(div);
+      body.scrollTop = body.scrollHeight;
+      var t = lines[i].text; var j = 0;
+      var speed = lines[i].cls === "t-muted" ? 18 : 28;
+      var iv = setInterval(function(){
+        div.textContent = t.slice(0,j++);
+        if(j > t.length){ clearInterval(iv); setTimeout(next, lines[i-1]&&lines[i-1].cls==="t-tag"?300:120); i++; }
+      }, speed);
+    }
+    setTimeout(next, 400);
+  },{threshold:.3});
+  io.observe(body);
+})();
+
+// ── HAMBURGER ─────────────────────────────────────────────────────────────────
+function toggleMenu(){
+  document.getElementById("nav-menu").classList.toggle("open");
+}
+document.querySelectorAll("#nav-menu a").forEach(function(a){
+  a.addEventListener("click", function(){ document.getElementById("nav-menu").classList.remove("open"); });
+});
+
+// ── NAV SCROLL ────────────────────────────────────────────────────────────────
+window.addEventListener("scroll", function(){
+  document.getElementById("navbar").style.background =
+    window.scrollY > 40 ? "rgba(2,12,10,.95)" : "rgba(2,12,10,.7)";
+});
+</script>
+</body>
+</html>

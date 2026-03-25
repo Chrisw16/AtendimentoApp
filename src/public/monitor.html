@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maxxi · Monitor TV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --g1:#00c896; --g2:#008b87; --red:#ff4757; --yellow:#f5c518;
+  --blue:#3ecfff; --panel:rgba(2,60,72,.55); --border:rgba(0,200,150,.15);
+  --text:#fff; --muted:rgba(255,255,255,.5); --dim:rgba(255,255,255,.25);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  font-family:'DM Sans',sans-serif;
+  background:linear-gradient(135deg,#032d3d 0%,#036271 40%,#024a52 100%);
+  background-attachment:fixed;
+  color:var(--text);
+  min-height:100vh;
+}
+
+/* ── TELA DE LOGIN ── */
+#login-screen{
+  display:flex; align-items:center; justify-content:center;
+  min-height:100vh; padding:24px;
+}
+.login-box{
+  width:360px;
+  background:rgba(2,55,65,.7);
+  border:1px solid rgba(0,200,150,.15);
+  border-radius:16px;
+  padding:36px 32px;
+  backdrop-filter:blur(20px);
+  box-shadow:0 0 40px rgba(0,0,0,.3),0 0 24px rgba(0,200,150,.08);
+  animation:fadeIn .5s ease;
+}
+.login-logo{
+  width:120px; height:28px;
+  background:rgba(0,200,150,.12);
+  border:1px solid rgba(0,200,150,.2);
+  border-radius:6px;
+  margin:0 auto 20px;
+}
+.login-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:1.4rem; letter-spacing:1px;
+  text-align:center; margin-bottom:4px;
+}
+.login-sub{
+  font-size:.72rem; color:var(--muted);
+  text-align:center; margin-bottom:28px;
+  font-family:'JetBrains Mono',monospace;
+  letter-spacing:.06em;
+}
+.login-field{margin-bottom:14px;}
+.login-label{
+  display:block; font-size:.72rem;
+  color:var(--muted); margin-bottom:5px;
+  font-weight:600; letter-spacing:.04em;
+}
+.login-input{
+  width:100%; padding:11px 14px;
+  background:rgba(3,45,61,.6);
+  border:1px solid rgba(0,200,150,.12);
+  border-radius:9px; color:#fff;
+  font-size:.9rem; font-family:'DM Sans',sans-serif;
+  outline:none; transition:border-color .2s,box-shadow .2s;
+}
+.login-input:focus{
+  border-color:var(--g1);
+  box-shadow:0 0 0 2px rgba(0,200,150,.1);
+}
+.login-btn{
+  width:100%; padding:13px;
+  background:linear-gradient(135deg,var(--g1),var(--g2));
+  color:#032d3d; border:none; border-radius:9px;
+  font-size:.95rem; font-weight:700;
+  font-family:'DM Sans',sans-serif;
+  cursor:pointer; margin-top:4px;
+  transition:opacity .2s,transform .15s;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+}
+.login-btn:hover{opacity:.88; transform:translateY(-1px);}
+.login-btn:disabled{opacity:.5; cursor:not-allowed; transform:none;}
+.login-error{
+  font-size:.75rem; color:var(--red);
+  text-align:center; margin-top:10px;
+  font-family:'JetBrains Mono',monospace;
+  min-height:16px;
+}
+.login-hint{
+  font-size:.68rem; color:var(--dim);
+  text-align:center; margin-top:16px;
+  font-family:'JetBrains Mono',monospace;
+}
+
+/* ── TELA DO MONITOR ── */
+#monitor-screen{
+  display:none;
+  padding:20px;
+  min-height:100vh;
+}
+.monitor-header{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:20px; flex-wrap:wrap; gap:10px;
+}
+.monitor-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:2rem; letter-spacing:2px; color:var(--g1);
+}
+.monitor-ts{
+  font-size:.7rem; color:var(--muted);
+  font-family:'JetBrains Mono',monospace;
+}
+.monitor-logout{
+  padding:5px 12px;
+  background:transparent;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:7px;
+  color:var(--muted); font-size:.72rem;
+  cursor:pointer; font-family:'DM Sans',sans-serif;
+  transition:all .2s;
+}
+.monitor-logout:hover{color:var(--red); border-color:rgba(255,71,87,.3);}
+
+.kpi-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px; margin-bottom:20px;
+}
+.kpi{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:18px 20px; text-align:center;
+  position:relative; overflow:hidden;
+}
+.kpi::before{
+  content:'';
+  position:absolute; top:0; left:0; right:0;
+  height:2px;
+  background:linear-gradient(90deg,var(--g1),var(--g2));
+  opacity:.5;
+}
+.kpi-lbl{
+  font-size:.65rem; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.1em;
+  margin-bottom:8px; font-weight:600;
+}
+.kpi-val{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:2.8rem; color:var(--g1);
+  line-height:1;
+}
+.kpi-val.red{color:var(--red);}
+.kpi-val.yellow{color:var(--yellow);}
+.kpi-val.blue{color:var(--blue);}
+.kpi-sub{font-size:.68rem; color:var(--dim); margin-top:5px;}
+
+.two-col{
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:16px;
+}
+.panel-box{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:12px; padding:18px;
+}
+.panel-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:.95rem; letter-spacing:.5px;
+  color:var(--g1); margin-bottom:14px;
+  display:flex; align-items:center; gap:8px;
+}
+.panel-live{
+  font-size:.58rem;
+  background:rgba(0,200,150,.1);
+  color:var(--g1);
+  padding:1px 7px; border-radius:999px;
+  font-family:'JetBrains Mono',monospace;
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* Agentes */
+.agent-row{
+  display:flex; align-items:center;
+  gap:10px; padding:9px 0;
+  border-bottom:1px solid rgba(255,255,255,.04);
+}
+.agent-row:last-child{border-bottom:none;}
+.agent-avatar{
+  width:36px; height:36px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.1rem; flex-shrink:0;
+  border:2px solid;
+}
+.agent-name{font-weight:600; font-size:.85rem;}
+.agent-status{font-size:.68rem; color:var(--muted);}
+.agent-conv{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.75rem; font-weight:700;
+  padding:2px 8px; border-radius:6px;
+  background:rgba(0,200,150,.08);
+  color:var(--g1);
+  margin-left:auto;
+}
+.dot-on{
+  width:9px; height:9px; border-radius:50%;
+  background:var(--g1); box-shadow:0 0 6px var(--g1);
+  flex-shrink:0;
+}
+.dot-off{
+  width:9px; height:9px; border-radius:50%;
+  background:rgba(255,255,255,.2); flex-shrink:0;
+}
+.dot-np{
+  width:9px; height:9px; border-radius:50%;
+  background:var(--yellow); flex-shrink:0;
+}
+
+/* Fila */
+.queue-item{
+  display:flex; align-items:center;
+  gap:10px; padding:9px 12px;
+  border-radius:8px; margin-bottom:6px;
+}
+.queue-item:last-child{margin-bottom:0;}
+.q-critico{background:rgba(255,71,87,.07); border:1px solid rgba(255,71,87,.2);}
+.q-atencao{background:rgba(245,197,24,.05); border:1px solid rgba(245,197,24,.15);}
+.q-ok{background:rgba(0,200,150,.04); border:1px solid rgba(0,200,150,.1);}
+.queue-time{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.9rem; font-weight:700; min-width:58px;
+}
+.queue-time.r{color:var(--red); animation:pulse 1.5s ease infinite;}
+.queue-time.y{color:var(--yellow);}
+.queue-time.g{color:var(--g1);}
+.queue-name{flex:1; font-size:.85rem; font-weight:500;}
+.queue-canal{font-size:.68rem; color:var(--muted);}
+
+.empty-fila{
+  text-align:center; padding:28px;
+  color:var(--g1); font-size:.88rem;
+}
+
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.fadeIn{animation:fadeIn .4s ease;}
+
+/* SPINNER */
+.spinner{
+  width:20px; height:20px;
+  border:2px solid rgba(0,200,150,.2);
+  border-top-color:var(--g1);
+  border-radius:50%;
+  animation:spin .6s linear infinite;
+  display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:700px){
+  .kpi-grid{grid-template-columns:1fr 1fr;}
+  .two-col{grid-template-columns:1fr;}
+  .kpi-val{font-size:2.2rem;}
+}
+@media(max-width:400px){
+  .kpi-grid{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ── -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo"></div>
+    <h1 class="login-title">Monitor TV</h1>
+    <p class="login-sub">MAXXI · CITMAX FIBRA · NATAL/RN</p>
+
+    <div class="login-field">
+      <label class="login-label" for="mon-user">Login</label>
+      <input id="mon-user" class="login-input" type="text" placeholder="admin ou usuário" autocomplete="username" />
+    </div>
+    <div class="login-field">
+      <label class="login-label" for="mon-pwd">Senha</label>
+      <input id="mon-pwd" class="login-input" type="password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button id="login-btn" class="login-btn" onclick="doLogin()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      Entrar no Monitor
+    </button>
+    <p id="login-err" class="login-error"></p>
+    <p class="login-hint">Esta sessão não expira automaticamente</p>
+  </div>
+</div>
+
+<!-- ── MONITOR ── -->
+<div id="monitor-screen">
+  <div class="monitor-header">
+    <div>
+      <div class="monitor-title">Maxxi · Monitor</div>
+      <div class="monitor-ts" id="mon-ts">Carregando...</div>
+    </div>
+    <button class="monitor-logout" onclick="logout()">Sair</button>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-lbl">Na fila</div>
+      <div class="kpi-val yellow" id="kpi-fila">—</div>
+      <div class="kpi-sub">aguardando humano</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Críticos</div>
+      <div class="kpi-val red" id="kpi-crit">—</div>
+      <div class="kpi-sub">acima de 15 min</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Agentes online</div>
+      <div class="kpi-val" id="kpi-online">—</div>
+      <div class="kpi-sub" id="kpi-online-sub">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Atend. hoje</div>
+      <div class="kpi-val blue" id="kpi-hoje">—</div>
+      <div class="kpi-sub">encerrados</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel-box">
+      <div class="panel-title">
+        Agentes
+        <span class="panel-live">● AO VIVO</span>
+      </div>
+      <div id="agentes-list"><div class="spinner"></div></div>
+    </div>
+    <div class="panel-box">
+      <div class="panel-title">
+        Fila de espera
+        <span class="panel-live">● AO VIVO</span>
+      </div>
+      <div id="fila-list"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = '/admin';
+let token = sessionStorage.getItem('monitor_token') || '';
+let reloadTimer = null;
+
+// ── HELPERS ──────────────────────────────────────────────────────
+function fmtTempo(segs) {
+  segs = Math.max(0, Math.floor(segs));
+  const m = Math.floor(segs / 60), s = segs % 60;
+  return m > 0 ? m + ':' + String(s).padStart(2,'0') : '0:' + String(s).padStart(2,'0');
+}
+function fmtHora(iso) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────
+document.getElementById('mon-pwd').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('mon-user').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('mon-pwd').focus();
+});
+
+async function doLogin() {
+  const user = document.getElementById('mon-user').value || 'admin';
+  const pwd  = document.getElementById('mon-pwd').value;
+  if (!pwd) { showErr('Digite a senha.'); return; }
+
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px"></span> Verificando...';
+  showErr('');
+
+  try {
+    const r = await fetch(BASE + '/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: user, senha: pwd }),
+    });
+    const d = await r.json();
+    if (d.ok && d.token) {
+      token = d.token;
+      // Salva em sessionStorage — persiste enquanto a aba estiver aberta
+      // mas NÃO em localStorage para não interferir com sessão normal do painel
+      sessionStorage.setItem('monitor_token', token);
+      showMonitor();
+    } else {
+      showErr(d.error || 'Login ou senha incorretos.');
+    }
+  } catch {
+    showErr('Servidor offline.');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Entrar no Monitor';
+}
+
+function showErr(msg) {
+  document.getElementById('login-err').textContent = msg;
+}
+
+// ── MOSTRAR MONITOR ───────────────────────────────────────────────
+function showMonitor() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('monitor-screen').style.display = 'block';
+  load();
+  // Atualiza a cada 15s — sem heartbeat, sem beacon
+  reloadTimer = setInterval(load, 15000);
+}
+
+function logout() {
+  sessionStorage.removeItem('monitor_token');
+  token = '';
+  clearInterval(reloadTimer);
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('monitor-screen').style.display = 'none';
+}
+
+// ── CARREGAR DADOS ────────────────────────────────────────────────
+async function load() {
+  try {
+    const [monR, filaR] = await Promise.all([
+      fetch(BASE + '/monitor/dados', { headers: { 'x-admin-token': token } }),
+      fetch(BASE + '/api/fila/status', { headers: { 'x-admin-token': token } }),
+    ]);
+
+    // Se token inválido — volta pro login
+    if (monR.status === 401 || monR.status === 403) {
+      logout(); return;
+    }
+
+    const mon  = await monR.json();
+    const fila = filaR.ok ? await filaR.json() : { fila: [] };
+
+    renderKpis(mon, fila);
+    renderAgentes(mon.agentes || []);
+    renderFila(fila.fila || [], mon.fila);
+
+    document.getElementById('mon-ts').textContent =
+      new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' }) +
+      ' · atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+  } catch(e) {
+    console.error('Monitor load error:', e);
+  }
+}
+
+function renderKpis(mon, fila) {
+  const total   = parseInt(mon.fila?.total)          || 0;
+  const criticos = parseInt(mon.fila?.criticos)      || 0;
+  const online  = (mon.agentes || []).filter(a => a.online).length;
+  const disponiveis = (mon.agentes || []).filter(a => a.online && (!a.nao_perturbe_ate || new Date(a.nao_perturbe_ate) < new Date())).length;
+  const hoje    = parseInt(mon.hoje?.encerradas_hoje) || 0;
+
+  document.getElementById('kpi-fila').textContent   = total;
+  document.getElementById('kpi-crit').textContent   = criticos;
+  document.getElementById('kpi-online').textContent = online;
+  document.getElementById('kpi-online-sub').textContent = disponiveis + ' disponíveis';
+  document.getElementById('kpi-hoje').textContent   = hoje;
+
+  // Destaca KPI fila se crítico
+  document.getElementById('kpi-fila').className = 'kpi-val ' + (total > 5 ? 'red' : total > 2 ? 'yellow' : '');
+}
+
+function renderAgentes(agentes) {
+  const el = document.getElementById('agentes-list');
+  if (!agentes.length) {
+    el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px;font-size:.85rem">Nenhum agente cadastrado</div>';
+    return;
+  }
+  el.innerHTML = agentes.map(a => {
+    const np = a.nao_perturbe_ate && new Date(a.nao_perturbe_ate) > new Date();
+    const bcolor = a.online ? (np ? 'var(--yellow)' : 'var(--g1)') : 'rgba(255,255,255,.15)';
+    const dotClass = a.online ? (np ? 'dot-np' : 'dot-on') : 'dot-off';
+    const statusTxt = np
+      ? '🔕 ' + (a.nao_perturbe_motivo || 'não perturbe')
+      : a.online ? 'Online · ' + (a.ativas || 0) + ' conv.'
+      : 'Offline';
+    return `<div class="agent-row">
+      <div class="agent-avatar" style="border-color:${bcolor}">${a.avatar || '👤'}</div>
+      <div style="flex:1;min-width:0">
+        <div class="agent-name">${a.nome}</div>
+        <div class="agent-status">${statusTxt}</div>
+      </div>
+      <div class="${dotClass}"></div>
+      ${a.online && !np ? `<span class="agent-conv">${a.ativas || 0}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderFila(items, summary) {
+  const el = document.getElementById('fila-list');
+  const total = parseInt(summary?.total) || 0;
+
+  if (!total) {
+    el.innerHTML = '<div class="empty-fila">✅ Fila vazia — tudo em dia!</div>';
+    return;
+  }
+
+  if (!items.length) {
+    el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted)">
+      ${total} aguardando — carregando detalhes...</div>`;
+    return;
+  }
+
+  el.innerHTML = items.slice(0, 10).map(c => {
+    const segs = c.urgencia?.segundos || 0;
+    const nivel = c.urgencia?.nivel || 'ok';
+    const cls = nivel === 'critico' ? 'q-critico' : nivel === 'atencao' ? 'q-atencao' : 'q-ok';
+    const tcls = nivel === 'critico' ? 'r' : nivel === 'atencao' ? 'y' : 'g';
+    const nome = c.nome || c.telefone || '—';
+    return `<div class="queue-item ${cls}">
+      <span class="queue-time ${tcls}">${fmtTempo(segs)}</span>
+      <span class="queue-name">${nome}</span>
+      <span class="queue-canal">${(c.canal || 'wa').toUpperCase()}</span>
+    </div>`;
+  }).join('');
+
+  if (total > 10) {
+    el.innerHTML += `<div style="text-align:center;padding:8px;font-size:.72rem;color:var(--dim)">
+      + ${total - 10} mais na fila</div>`;
+  }
+}
+
+// ── AUTO-LOGIN se sessão ainda válida ────────────────────────────
+if (token) {
+  // Valida token antes de mostrar o monitor
+  fetch(BASE + '/api/stats', { headers: { 'x-admin-token': token } })
+    .then(r => { if (r.ok || r.status !== 401) showMonitor(); else { sessionStorage.removeItem('monitor_token'); token = ''; } })
+    .catch(() => showMonitor()); // offline? tenta mostrar mesmo assim
+}
+</script>
+</body>
+</html>
