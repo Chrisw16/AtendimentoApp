@@ -2,7 +2,7 @@
  * motor-fluxo.js — Motor de execução do editor visual de fluxos
  * Substitui a lógica de estados do agent.js
  */
-import { query } from "./db.js";
+import { query, CITMAX_TENANT_ID } from "./db.js";
 import { logger } from "./logger.js";
 
 // ── Cache de fluxo ativo ─────────────────────────────────────────────────────
@@ -106,12 +106,12 @@ function avaliarCondicao(variavel, op, valor, vars) {
 }
 
 // ── Executor principal ───────────────────────────────────────────────────────
-export async function executarFluxo({ telefone, mensagem, sessao, conversationId, canal, accountId, enviarFn, enviarBotoesFn, enviarListaFn, transferirFn }) {
+export async function executarFluxo({ telefone, mensagem, sessao, conversationId, canal, accountId, tenantId = CITMAX_TENANT_ID, enviarFn, enviarBotoesFn, enviarListaFn, transferirFn }) {
   // Suporte a fluxo específico via override (transferência manual pelo agente)
   let fluxo;
   if (sessao._fluxo_id_override) {
     const { query: dbQ } = await import("./db.js");
-    const r = await dbQ(`SELECT * FROM fluxos WHERE id=$1 AND publicado=true`, [sessao._fluxo_id_override]);
+    const r = await dbQ(`SELECT * FROM fluxos WHERE id=$1 AND publicado=true`, [sessao._fluxo_id_override]); // tenant implícito via sessão
     fluxo = r.rows[0] || null;
     if (!fluxo) { sessao._fluxo_id_override = null; } // fluxo não existe mais, limpa
   }

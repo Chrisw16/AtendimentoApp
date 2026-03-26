@@ -9,6 +9,8 @@ import { adminRouter } from "./src/admin.js";
 import { handleWebhook } from "./src/webhook.js";
 import { handleMetaWebhook, handleMetaVerify } from "./src/webhooks/meta.js";
 import { handleTelegramWebhook } from "./src/webhooks/telegram.js";
+import rateLimit from "express-rate-limit";
+import { requestLogger } from "./src/services/logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -27,8 +29,164 @@ app.use(cors({
 }));
 app.use(express.json({ limit: "10mb" }));
 
-// ── Responde health CHECK ANTES de qualquer import pesado ─────────────────────
-app.get("/health", (_req, res) => res.json({ status: "ok", agent: "Maxxi" }));
+// ── Rate Limiting global ──────────────────────────────────────────────────────
+// Estratégia em camadas: limites mais restritivos para endpoints sensíveis,
+// limite geral como fallback para todo o resto.
+
+// 1. API geral — 300 req/min por IP (cobre todos os /admin/api/* autenticados)
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === "/health" || req.path === "/health/detail",
+  message: { error: "Muitas requisições. Aguarde um momento." },
+});
+app.use("/admin/api/", apiLimiter);
+
+// 2. Webhooks — 600 req/min por IP (volume alto de mensagens de WhatsApp/Telegram)
+// Suficientemente alto para não bloquear rajadas legítimas de mensagens
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Rate limit de webhook atingido." },
+  keyGenerator: (req) => {
+    // Usa o IP real mesmo atrás de proxy (Coolify/Traefik)
+    return req.ip || req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || "unknown";
+  },
+});
+app.use("/webhook", webhookLimiter);
+
+// 3. API pública (onboarding, planos, lead) — 60 req/min por IP
+const publicApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas requisições. Tente novamente em instantes." },
+});
+app.use("/admin/api/onboarding/", publicApiLimiter);
+app.use("/api/public/",          publicApiLimiter);
+
+// 4. Gateway SMS — 120 req/min por IP
+// O SGP pode enviar múltiplas campanhas em sequência
+const smsGatewayLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Rate limit do gateway SMS atingido." },
+});
+app.use("/gateway/", smsGatewayLimiter);
+
+// 5. Widget de chat — 120 req/min por IP (usuários navegando no site)
+const widgetLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas requisições ao widget." },
+});
+app.use("/widget/", widgetLimiter);
+
+// ── Logging de requests HTTP (duração + tenantId + status) ─────────────────
+// Só loga requests lentos (>200ms) ou com erro — sem spam em alto volume
+app.use(requestLogger);
+
+// ── Health check robusto — responde ANTES de qualquer import pesado ──────────
+// GET /health        — check rápido (usado pelo Docker HEALTHCHECK e load balancers)
+// GET /health/detail — check completo com status de cada dependência
+
+const _healthState = {
+  dbOk: false,          // atualizado após startup
+  startedAt: Date.now(),
+  version: process.env.npm_package_version || "9.9.0",
+};
+
+// Expõe função para o startup marcar banco como OK
+export function markDbHealthy(ok = true) { _healthState.dbOk = ok; }
+
+// Leve e rápido — responde em <5ms — usado pelo Docker e Coolify
+app.get("/health", (_req, res) => {
+  const uptime = Math.floor((Date.now() - _healthState.startedAt) / 1000);
+  const memMB  = Math.round(process.memoryUsage().rss / 1024 / 1024);
+
+  const status = _healthState.dbOk ? "ok" : "degraded";
+  const httpStatus = status === "ok" ? 200 : 503;
+
+  res.status(httpStatus).json({
+    status,
+    version: _healthState.version,
+    uptime_seg: uptime,
+    mem_mb: memMB,
+    db: _healthState.dbOk ? "ok" : "down",
+    ts: Date.now(),
+  });
+});
+
+// Detalhado — faz queries reais — usado pelo super-admin e monitoramento externo
+app.get("/health/detail", async (_req, res) => {
+  const checks = {};
+  const t0 = Date.now();
+
+  // 1. Banco de dados
+  try {
+    const { getPool } = await import("./src/services/db.js");
+    const client = await getPool().connect();
+    const r = await client.query("SELECT 1 as ok, COUNT(*) as tenants FROM tenants");
+    client.release();
+    checks.db = {
+      status: "ok",
+      tenants: parseInt(r.rows[0]?.tenants || 0),
+      latencia_ms: Date.now() - t0,
+    };
+  } catch(e) {
+    checks.db = { status: "down", erro: e.message };
+  }
+
+  // 2. Memória
+  const mem = process.memoryUsage();
+  const memRssMB = Math.round(mem.rss / 1024 / 1024);
+  checks.memoria = {
+    status: memRssMB < 400 ? "ok" : memRssMB < 600 ? "aviso" : "critico",
+    rss_mb: memRssMB,
+    heap_mb: Math.round(mem.heapUsed / 1024 / 1024),
+    heap_total_mb: Math.round(mem.heapTotal / 1024 / 1024),
+  };
+
+  // 3. Timer worker (conv-state)
+  try {
+    const { initTimerWorker } = await import("./src/services/conv-state.js");
+    checks.timer_worker = { status: "ok" };
+  } catch(e) {
+    checks.timer_worker = { status: "erro", erro: e.message };
+  }
+
+  // 4. Ambiente
+  checks.env = {
+    database_url:      !!process.env.DATABASE_URL,
+    jwt_secret:        !!process.env.JWT_SECRET,
+    anthropic_key:     !!process.env.ANTHROPIC_API_KEY,
+    node_env:          process.env.NODE_ENV || "development",
+  };
+
+  // Status geral
+  const allOk = checks.db?.status === "ok" && checks.memoria?.status !== "critico";
+  const overallStatus = allOk ? "ok"
+    : checks.db?.status !== "ok" ? "degraded"
+    : "aviso";
+
+  res.status(overallStatus === "ok" ? 200 : 503).json({
+    status: overallStatus,
+    version: _healthState.version,
+    uptime_seg: Math.floor((Date.now() - _healthState.startedAt) / 1000),
+    checks,
+    duracao_ms: Date.now() - t0,
+    ts: Date.now(),
+  });
+});
 
 // ── ACS TR-069 via HTTPS (porta 443 / path /cwmp) ────────────────────────────
 // express.text captura qualquer Content-Type (XML, SOAP, etc.)
@@ -67,6 +225,18 @@ app.get("/status", (_req, res) => {
 
 // ── Redireciona / → /admin (para quando o domínio aponta para a raiz) ──────────
 app.get("/", (_req, res) => res.redirect(302, "/admin"));
+
+// Rota pública de onboarding — serve o React SPA sem exigir login
+app.get("/onboarding", (_req, res) => {
+  const reactIndex = join(__dirname, "admin-dist", "index.html");
+  if (existsSync(reactIndex)) {
+    res.setHeader("Content-Type", "text/html");
+    res.setHeader("Cache-Control", "no-cache");
+    res.send(readFileSync(reactIndex, "utf8"));
+  } else {
+    res.redirect(302, "/admin");
+  }
+});
 
 // ── Gateway SMS — recebe mensagens do SGP e envia via WhatsApp ───────────────
 // Suporta JSON e form-urlencoded (o SGP geralmente envia form-urlencoded)
@@ -285,6 +455,7 @@ try {
       await migrate();
       await loadStats();
       await carregarEstadoHandoff();
+      markDbHealthy(true); // banco OK — health check passa a reportar "ok"
 
       const { migrateFila, iniciarMonitorSLA } = await import("./src/services/fila.js");
       const { migrateAccountability } = await import("./src/services/agente-accountability.js");
@@ -298,6 +469,10 @@ try {
       await recarregarAgendamentos();
       iniciarMonitorSLA(broadcast);
       iniciarCronRelatorio();
+
+      // ── Fase 2: Timer worker — substitui followupTimer/closeTimer em memória
+      const { initTimerWorker } = await import("./src/services/conv-state.js");
+      initTimerWorker();
 
       const { iniciarMonitor, setAlertCallback } = await import("./src/services/monitor-rede.js");
       iniciarMonitor(30);

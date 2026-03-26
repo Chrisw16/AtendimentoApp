@@ -10,6 +10,7 @@
  */
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { CITMAX_TENANT_ID } from "./services/db.js";
 import { getConversationHistory } from "./services/chatwoot.js";
 import { tools as allTools, executeTool } from "./tools/index.js";
 import { logger } from "./services/logger.js";
@@ -455,7 +456,7 @@ export async function iaFluxo({ contexto, prompt, modelo, provedor, maxTokens, s
   }
 }
 
-export async function runMaxxi({ accountId, conversationId, messageId, content, sender, channel, protocolo, memoria, telefone, sessao }) {
+export async function runMaxxi({ accountId, conversationId, messageId, content, sender, channel, protocolo, memoria, telefone, sessao, tenantId = CITMAX_TENANT_ID }) {
   const t0 = Date.now();
   let sess = sessao ? { ...sessao } : {};
   sess._telefone = telefone;
@@ -1272,7 +1273,7 @@ O cliente selecionou "Suporte técnico". Com base no diagnóstico, inicie a conv
           novaEstado = "comercial_cep_confirm";
           // Salva estado já
           // salva sessão via salvarSessao normal
-          try { const { salvarSessao } = await import("./services/memoria.js"); await salvarSessao(telefone, { ...sess, _estado: novaEstado }); } catch {}
+          try { const { salvarSessao } = await import("./services/memoria.js"); await salvarSessao(telefone, { ...sess, _estado: novaEstado }, tenantId); } catch {}
           break_flag = true;
         } else if (resultado?.enderecoResolvido) {
           const e = resultado.enderecoResolvido;
@@ -1902,7 +1903,7 @@ Precisa de mais alguma coisa? 😊`;
 
   // Salvar sessão e histórico
   if (!accountId) saveLocal(conversationId, [...history, { role: "user", content }, ...(reply ? [{ role: "assistant", content: reply }] : [])]);
-  try { const { salvarSessao } = await import("./services/memoria.js"); await salvarSessao(telefone, sess); } catch {}
+  try { const { salvarSessao } = await import("./services/memoria.js"); await salvarSessao(telefone, sess, tenantId); } catch {}
 
   // Disparar pesquisa NPS quando encerra atendimento
   if (novaEstado === "inicio" && sess.nome && telefone) {
@@ -1928,7 +1929,7 @@ Precisa de mais alguma coisa? 😊`;
 // RESOLVER BOLETO — fluxo completo
 // ═══════════════════════════════════════════════════════════════
 async function resolverBoleto(sess, history, content, telefone, conversationId, accountId, t0) {
-  const saveSess = async () => { try { const { salvarSessao } = await import("./services/memoria.js"); await salvarSessao(telefone, sess); } catch {} };
+  const saveSess = async () => { try { const { salvarSessao } = await import("./services/memoria.js"); await salvarSessao(telefone, sess, tenantId); } catch {} };
 
   // Se não tem CPF, pede
   if (!sess.cpfcnpj) {

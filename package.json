@@ -1,13 +1,14 @@
 {
-  "name": "maxxi-citmax-agent",
-  "version": "8.8.3",
-  "description": "Agente de IA Maxxi para atendimento CITmax via Chatwoot",
+  "name": "maxxi-saas",
+  "version": "9.0.0",
+  "description": "Maxxi — Plataforma de atendimento IA multi-tenant SaaS",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "seed:fluxo": "node src/scripts/seed-fluxo-maxxi.js"
+    "seed:fluxo": "node src/scripts/seed-fluxo-maxxi.js",
+    "migrate:saas": "node migrate-saas-tenancy.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",

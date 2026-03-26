@@ -13,22 +13,22 @@ import { analisarImagem, analisarPDF } from "./services/vision.js";
 import { logger, appendHistorico } from "./services/logger.js";
 import { buscarMemoria, salvarMemoria, registrarHistorico, buscarSessao, salvarSessao, limparSessao } from "./services/memoria.js";
 import { estaComHumano, transferirParaHumano, devolverParaIA, encerrarHandoff, carregarEstadoHandoff } from "./services/handoff.js";
+import { CITMAX_TENANT_ID } from "./services/db.js";
+import {
+  lockConversa, unlockConversa, marcarAtividade,
+  conversaEstaAtiva, getPreferenciaAudio, setPreferenciaAudio, limparPreferenciaAudio,
+  agendarFollowup, agendarEncerramento, cancelarTimers,
+} from "./services/conv-state.js";
 
 // ─── ESTADO POR CONVERSA ─────────────────────────────────────────────────────
-const processing = new Set();
-const protocolSent = new Set();
-const audioPreference = new Map();
-const messageBuffer = new Map();  // anti-flood buffer
-const floodTimer = new Map();     // anti-flood timers
+// processing, protocolSent, audioPreference, followupTimer, closeTimer
+// foram migrados para o banco — ver src/services/conv-state.js (Fase 2 SaaS)
+
+const messageBuffer = new Map();  // anti-flood buffer (TTL 8s — OK em memória)
+const floodTimer = new Map();     // anti-flood timers (TTL 8s — OK em memória)
 
 const FLOOD_WINDOW_MS = 8000;
 const FLOOD_MAX_MSGS = 5;
-
-const FOLLOWUP_WAIT_MS = 30 * 60 * 1000;   // 30 minutos sem resposta → follow-up
-const FOLLOWUP_CLOSE_MS = 30 * 60 * 1000;  // mais 30 minutos sem resposta → encerra
-
-const followupTimer = new Map();   // conversationId → timer do follow-up
-const closeTimer = new Map();      // conversationId → timer de encerramento
 
 const AUDIO_TRIGGERS = [
   "manda áudio", "manda audio", "pode mandar áudio", "pode mandar audio",
@@ -45,7 +45,7 @@ function gerarProtocolo(conversationId) {
 }
 
 function clienteQuerAudio(text, conversationId) {
-  if (audioPreference.get(conversationId)) return true;
+  if (await getPreferenciaAudio(conversationId)) return true;
   const lower = (text || "").toLowerCase();
   return AUDIO_TRIGGERS.some(t => lower.includes(t));
 }
@@ -150,53 +150,12 @@ function detectarEtiqueta(result) {
 /**
  * Reinicia o timer de follow-up a cada mensagem do cliente
  */
-function resetFollowupTimer(accountId, conversationId) {
-  // Cancela timers anteriores
-  if (followupTimer.has(conversationId)) clearTimeout(followupTimer.get(conversationId));
-  if (closeTimer.has(conversationId)) clearTimeout(closeTimer.get(conversationId));
-  // Cancela reativação configurável também
+async function resetFollowupTimer(accountId, conversationId, tenantId = CITMAX_TENANT_ID) {
+  // Timers agora persistidos no banco via conv-state.js
+  // Reagenda follow-up a cada mensagem do cliente (reseta o contador de inatividade)
+  await agendarFollowup(conversationId, accountId, tenantId);
+  await marcarAtividade(conversationId, tenantId);
   cancelarReativacao(conversationId);
-
-  // Timer de follow-up: 30 min sem resposta
-  const ft = setTimeout(async () => {
-    followupTimer.delete(conversationId);
-
-    // Só envia se a conversa ainda está ativa (tem protocolo)
-    if (!protocolSent.has(conversationId)) return;
-
-    try {
-      await sendMessage(accountId, conversationId,
-        "Oi! 👋 Ainda estou por aqui caso precise de algo. Posso te ajudar com mais alguma coisa?"
-      );
-      logger.info(`⏰ Follow-up enviado | Conv #${conversationId}`);
-    } catch (e) {
-      logger.error(`❌ Follow-up erro: ${e.message}`);
-      return;
-    }
-
-    // Timer de encerramento: mais 30 min sem resposta após follow-up
-    const ct = setTimeout(async () => {
-      closeTimer.delete(conversationId);
-      if (!protocolSent.has(conversationId)) return;
-
-      try {
-        await sendMessage(accountId, conversationId,
-          "Vou encerrar nosso atendimento por inatividade. Se precisar é só chamar! 😊"
-        );
-        await addLabel(accountId, conversationId, "encerrado-inatividade").catch(() => {});
-        await resolveConversation(accountId, conversationId);
-        protocolSent.delete(conversationId);
-        audioPreference.delete(conversationId);
-        logger.info(`🔕 Encerrado por inatividade | Conv #${conversationId}`);
-      } catch (e) {
-        logger.error(`❌ Encerramento inatividade erro: ${e.message}`);
-      }
-    }, FOLLOWUP_CLOSE_MS);
-
-    closeTimer.set(conversationId, ct);
-  }, FOLLOWUP_WAIT_MS);
-
-  followupTimer.set(conversationId, ft);
 }
 
 /**
@@ -206,7 +165,7 @@ async function sendReply(accountId, conversationId, text, clientMessage) {
   const wantsAudio = clienteQuerAudio(clientMessage || "", conversationId);
 
   if (wantsAudio && process.env.ELEVENLABS_API_KEY) {
-    audioPreference.set(conversationId, true);
+    setPreferenciaAudio(conversationId, true);
     try {
       const audio = await textToSpeech(text);
       await sendAudio(accountId, conversationId, audio);
@@ -222,13 +181,14 @@ async function sendReply(accountId, conversationId, text, clientMessage) {
 /**
  * Processa uma conversa após anti-flood buffer
  */
-async function processConversation(accountId, conversationId, messages, sender, channel, protocolo, messageId) {
-  if (processing.has(conversationId)) return;
+async function processConversation(accountId, conversationId, messages, sender, channel, protocolo, messageId, tenantId = CITMAX_TENANT_ID) {
+  // Lock persistido — evita processamento duplo mesmo em multi-processo
 
   // Modo humano por conversa (via handoff) - IA silencia apenas para conversas assumidas
   // O modo global foi removido - IA sempre ativa por padrão
 
-  processing.add(conversationId);
+  const lockObtido = await lockConversa(conversationId, tenantId);
+  if (!lockObtido) { logger.warn(`🔒 Conv #${conversationId} já em processamento, ignorando`); return; }
 
   try {
     // Agrupa mensagens do buffer em uma só
@@ -239,34 +199,49 @@ async function processConversation(accountId, conversationId, messages, sender, 
 
     // Busca memória do cliente pelo telefone
     const telefone = sender?.phone_number || sender?.identifier || String(conversationId);
-    const memoria = await buscarMemoria(telefone);
+    const memoria = await buscarMemoria(telefone, tenantId);
 
     // Salva preferência de áudio se detectada
     if (clienteQuerAudio(content, conversationId)) {
-      await salvarMemoria(telefone, { prefere_audio: true });
+      await salvarMemoria(telefone, { prefere_audio: true }, tenantId);
     }
 
     // Ativa "digitando..."
     await setTyping(accountId, conversationId, true);
 
-    const sessao = await buscarSessao(telefone);
+    const sessao = await buscarSessao(telefone, tenantId);
 
-    const result = await runMaxxi({
-      accountId,
-      conversationId,
-      messageId,
-      content: contentFinal,
-      sender,
-      channel,
-      protocolo,
-      memoria,
+    // ── dispatch() — ponto de entrada único (motor-fluxo ou runMaxxi) ────────
+    const result = await dispatch({
       telefone,
+      mensagem:       contentFinal,
+      conversationId,
+      accountId,
+      canal:          channel,
+      tenantId,
       sessao,
+      memoria,
+      protocolo,
+      messageId,
+      sender,
+      // Funções de envio para o canal Chatwoot
+      enviarFn:       async (texto) => {
+        await sendReply(accountId, conversationId, texto, content);
+      },
+      enviarBotoesFn: async (corpo, botoes) => {
+        await sendMessage(accountId, conversationId, corpo);
+      },
+      enviarListaFn:  async (corpo, _label, _secoes) => {
+        await sendMessage(accountId, conversationId, corpo);
+      },
+      transferirFn:   async (motivo) => {
+        await transferirParaHumano(conversationId, null, motivo);
+      },
     });
 
-    // Salva sessão se agente identificou o cliente
+    // Salva sessão se motor identificou o cliente e atualiza Chatwoot
     if (result.sessaoAtualizada) {
-      await salvarSessao(telefone, result.sessaoAtualizada);
+      await salvarSessao(telefone, result.sessaoAtualizada, tenantId);
 
       // Atualiza contato no Chatwoot com dados do SGP
       const s = result.sessaoAtualizada;
@@ -293,6 +268,10 @@ async function processConversation(accountId, conversationId, messages, sender, 
       } catch {}
     }
 
+    // Motor de fluxo já enviou a resposta via enviarFn — não precisa de reply aqui
+    // Apenas trata handoff, resolve e reply quando vem do runMaxxi (sem enviarFn efetivo)
+    if (result.tipo === "aguardando" && result.reply === null) return;
+
     await setTyping(accountId, conversationId, false);
     // Inicia reativação configurável após resposta da IA
     iniciarReativacao({
@@ -307,7 +286,7 @@ async function processConversation(accountId, conversationId, messages, sender, 
       await addLabel(accountId, conversationId, "atendimento-humano");
       await assignToHuman(accountId, conversationId);
 
-      const sessaoAtiva = await buscarSessao(telefone);
+      const sessaoAtiva = await buscarSessao(telefone, tenantId);
 
       // Gera resumo estruturado com IA (Haiku — rápido e barato)
       let resumoIA = result.resumoAtendimento || "";
@@ -387,19 +366,15 @@ ${result.resumoAtendimento ? `Motivo transferência: ${result.resumoAtendimento}
       await addLabel(accountId, conversationId, "atendido").catch(() => {});
       await resolveConversation(accountId, conversationId).catch(() => {});
       // Salva memória e histórico ao encerrar
-      if (result.memoriaAtualizada) await salvarMemoria(telefone, result.memoriaAtualizada);
+      if (result.memoriaAtualizada) await salvarMemoria(telefone, result.memoriaAtualizada, tenantId);
       if (result.resumoAtendimento) await registrarHistorico(telefone, result.resumoAtendimento);
 
       // Análise de sentimento + tópico (async, não bloqueia)
       analisarSentimento({ result, sessao, telefone, protocolo }).catch(() => {});
 
-      await limparSessao(telefone);
-      protocolSent.delete(conversationId);
-      audioPreference.delete(conversationId);
-      if (followupTimer.has(conversationId)) clearTimeout(followupTimer.get(conversationId));
-      if (closeTimer.has(conversationId)) clearTimeout(closeTimer.get(conversationId));
-      followupTimer.delete(conversationId);
-      closeTimer.delete(conversationId);
+      await limparSessao(telefone, tenantId);
+      await cancelarTimers(conversationId, tenantId);
+      limparPreferenciaAudio(conversationId);
       logger.info(`✅ Encerrado | Conv #${conversationId}`);
 
     } else {
@@ -426,7 +401,7 @@ ${result.resumoAtendimento ? `Motivo transferência: ${result.resumoAtendimento}
     logger.error(`❌ Erro #${conversationId}: ${err.message}`);
     await sendMessage(accountId, conversationId, "Tive um problema ao processar. Tente novamente! 🙏");
   } finally {
-    processing.delete(conversationId);
+    await unlockConversa(conversationId, tenantId);
     messageBuffer.delete(conversationId);
   }
 }
@@ -472,6 +447,136 @@ Responda apenas o JSON, sem mais nada.`,
 
 
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// dispatch() — ponto de entrada único para todos os canais
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Decide qual motor usar:
+//   1. Se o canal tem fluxo visual ativo no banco → executarFluxo()
+//   2. Senão                                      → runMaxxi()
+//
+// Normaliza os retornos dos dois motores para o mesmo formato:
+//   { handled, tipo, reply?, sessaoAtualizada?, handoff?, resolve?, resumo? }
+//
+// USO (em qualquer webhook):
+//   const result = await dispatch({
+//     telefone, mensagem, conversationId, accountId,
+//     canal, tenantId, sessao,
+//     enviarFn, enviarBotoesFn, enviarListaFn, transferirFn,
+//   });
+//   if (!result.handled) { /* motor não processou — trate como erro */ }
+//
+export async function dispatch({
+  telefone,
+  mensagem,
+  conversationId,
+  accountId,
+  canal,
+  tenantId  = CITMAX_TENANT_ID,
+  sessao    = {},
+  memoria   = null,
+  protocolo = null,
+  messageId = null,
+  sender    = null,
+  // Funções de envio — cada canal implementa a sua
+  enviarFn,
+  enviarBotoesFn,
+  enviarListaFn,
+  transferirFn,
+}) {
+  // ── 1. Tenta o motor de fluxo visual ──────────────────────────────────────
+  try {
+    const { executarFluxo, carregarFluxoAtivo } = await import("./services/motor-fluxo.js");
+    const fluxoAtivo = await carregarFluxoAtivo(false, canal);
+
+    // Usa o motor se:
+    //   a) o canal tem fluxo publicado vinculado, OU
+    //   b) a sessão já está em andamento no motor (_fluxo_no indica nó atual)
+    const sessaoNoMotor = sessao._fluxo_no !== undefined;
+    const canalTemFluxo = !!fluxoAtivo?.dados;
+
+    if (canalTemFluxo || sessaoNoMotor) {
+      const resultado = await executarFluxo({
+        telefone,
+        mensagem,
+        sessao,
+        conversationId,
+        canal,
+        accountId,
+        tenantId,
+        enviarFn,
+        enviarBotoesFn,
+        enviarListaFn,
+        transferirFn,
+      });
+
+      if (resultado) {
+        // Salva sessão atualizada pelo motor
+        if (resultado.sessaoAtualizada) {
+          await salvarSessao(telefone, resultado.sessaoAtualizada, tenantId).catch(() => {});
+        }
+
+        // Normaliza retorno do motor para o formato padrão
+        // tipo "ia" significa que o motor delegou para runMaxxi (nó ia_responde sem enviarFn)
+        if (resultado.tipo === "ia" && resultado.reply) {
+          return {
+            handled: true,
+            tipo: "ia",
+            reply: resultado.reply,
+            sessaoAtualizada: resultado.sessaoAtualizada,
+          };
+        }
+
+        return {
+          handled:          true,
+          tipo:             resultado.tipo,        // aguardando|encerrado|transferido|resetado|fim|ia
+          reply:            resultado.reply || null,
+          sessaoAtualizada: resultado.sessaoAtualizada || null,
+          handoff:          resultado.tipo === "transferido",
+          resolve:          resultado.tipo === "encerrado" || resultado.tipo === "fim",
+        };
+      }
+    }
+  } catch(e) {
+    logger.warn(`⚠️ dispatch: motor-fluxo erro em conv #${conversationId}: ${e.message}`);
+    // Fallback para runMaxxi em caso de erro no motor
+  }
+
+  // ── 2. Fallback: máquina de estados (runMaxxi) ─────────────────────────────
+  try {
+    const result = await runMaxxi({
+      tenantId,
+      accountId,
+      conversationId,
+      messageId,
+      content: mensagem,
+      sender,
+      channel: canal,
+      protocolo,
+      memoria,
+      telefone,
+      sessao,
+    });
+
+    return {
+      handled:          true,
+      tipo:             result.handoff  ? "transferido"
+                      : result.resolve  ? "encerrado"
+                      : "aguardando",
+      reply:            result.reply    || null,
+      sessaoAtualizada: result.sessaoAtualizada || null,
+      handoff:          !!result.handoff,
+      resolve:          !!result.resolve,
+      resumo:           result.resumoAtendimento || null,
+      memoriaAtualizada: result.memoriaAtualizada || null,
+    };
+  } catch(e) {
+    logger.error(`❌ dispatch: runMaxxi erro em conv #${conversationId}: ${e.message}`);
+    return { handled: false, tipo: "erro", reply: null };
+  }
+}
+
 export async function handleWebhook(req, res) {
   res.sendStatus(200);
 
@@ -494,13 +599,13 @@ export async function handleWebhook(req, res) {
     } else if (status === "resolved") {
       // Encerrado (por agente ou bot) — limpa TUDO, próxima msg = novo atendimento
       await devolverParaIA(convId);
-      protocolSent.delete(convId);
-      audioPreference.delete(convId);
-      if (followupTimer.has(convId)) { clearTimeout(followupTimer.get(convId)); followupTimer.delete(convId); }
-      if (closeTimer.has(convId))    { clearTimeout(closeTimer.get(convId));    closeTimer.delete(convId); }
+      await cancelarTimers(convId, tenantId);
+      limparPreferenciaAudio(convId);
+      limparPreferenciaAudio(convId);
+      await cancelarTimers(convId, tenantId);
       const telefone = conversation.meta?.sender?.phone_number
                     || conversation.meta?.sender?.identifier;
-      if (telefone) limparSessao(telefone);
+      if (telefone) limparSessao(telefone, tenantId);
       logger.info(`✅ Conv #${convId} encerrada — próxima msg inicia novo atendimento`);
 
     } else if (status === "open" && assigneeId) {
@@ -524,14 +629,14 @@ export async function handleWebhook(req, res) {
     if (cmd === "/reset") {
       // Zera tudo — próxima mensagem do cliente começa do zero
       await devolverParaIA(convId);
-      protocolSent.delete(convId);
-      audioPreference.delete(convId);
+      await cancelarTimers(convId, tenantId);
+      limparPreferenciaAudio(convId);
+      limparPreferenciaAudio(convId);
       messageBuffer.delete(convId);
-      if (followupTimer.has(convId)) { clearTimeout(followupTimer.get(convId)); followupTimer.delete(convId); }
-      if (closeTimer.has(convId))    { clearTimeout(closeTimer.get(convId));    closeTimer.delete(convId); }
+      await cancelarTimers(convId, tenantId);
       const telefone = conversation?.meta?.sender?.phone_number
                     || conversation?.meta?.sender?.identifier;
-      if (telefone) limparSessao(telefone);
+      if (telefone) limparSessao(telefone, tenantId);
 
       await resolveConversation(accId, convId).catch(() => {});
       logger.info(`🔄 /reset | Conv #${convId} zerada por ${sender?.name || "agente"}`);
@@ -573,8 +678,9 @@ export async function handleWebhook(req, res) {
   }
 
   // Primeira mensagem: protocolo + LGPD + define título da conversa no Chatwoot
-  if (!protocolSent.has(conversationId)) {
-    protocolSent.add(conversationId);
+  // Protocolo registrado no status=ativa da conversa (banco)
+  if (!(await conversaEstaAtiva(conversationId, tenantId))) {
+    // Primeira mensagem desta sessão
     // Preenche atributo personalizado "protocolo" — aparece em "Informação da conversa"
     // (requer criar o atributo em Configurações → Atributos Personalizados → Conversa)
     const agora = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -612,7 +718,8 @@ export async function handleWebhook(req, res) {
     if (bufferSize > 1) {
       logger.info(`🌊 Anti-flood: ${bufferSize} msgs agrupadas | Conv #${conversationId}`);
     }
-    await processConversation(accountId, conversationId, messages, sender, conversation.channel, protocolo, payload.id);
+    await resetFollowupTimer(accountId, conversationId, tenantId);
+    await processConversation(accountId, conversationId, messages, sender, conversation.channel, protocolo, payload.id, tenantId);
     return;
   }
 
@@ -625,7 +732,8 @@ export async function handleWebhook(req, res) {
       logger.info(`⏱️ Buffer: ${messages.length} msgs agrupadas | Conv #${conversationId}`);
     }
     const lastMsgId = (messageBuffer.get(conversationId) || [messages[messages.length-1]]).at(-1)?.id;
-    await processConversation(accountId, conversationId, messages, sender, conversation.channel, protocolo, lastMsgId);
+    await resetFollowupTimer(accountId, conversationId, tenantId);
+    await processConversation(accountId, conversationId, messages, sender, conversation.channel, protocolo, lastMsgId, tenantId);
   }, FLOOD_WINDOW_MS);
 
   floodTimer.set(conversationId, timer);

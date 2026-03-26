@@ -3,7 +3,7 @@
  */
 import Anthropic                         from "@anthropic-ai/sdk";
 import { registrarMensagem, registrarRespostaIA, resolverConvId } from "../services/chatInterno.js";
-import { runMaxxi }                      from "../agent.js";
+import { dispatch }                      from "../webhook.js";
 import { dentroDoHorario, getHorarios }  from "../services/crm.js";
 import { getCanal }                      from "../services/canais.js";
 import { buscarMemoria, buscarSessao, salvarSessao } from "../services/memoria.js";
@@ -576,56 +576,7 @@ async function processarMensagem({ tipo, from, nome, conteudo, idInterativo, can
     return;
   }
 
-  // ── MOTOR DE FLUXO VISUAL — prioridade máxima ─────────────────────────────
-  try {
-    const { executarFluxo, carregarFluxoAtivo } = await import("../services/motor-fluxo.js");
-    const fluxoAtivo = await carregarFluxoAtivo(false, tipo);
-    if (fluxoAtivo?.dados) {
-      const sessaoFluxo = await buscarSessao(from);
-      // Só usa o motor se o canal tem fluxo vinculado OU se a sessão já está em andamento no motor
-      const sessaoNoMotor = sessaoFluxo?._fluxo_no !== undefined;
-      const canalTemFluxo = !!fluxoAtivo;
-      if (canalTemFluxo || sessaoNoMotor) {
-        const resultado = await executarFluxo({
-          telefone: from,
-          mensagem: idInterativo || conteudo,
-          sessao: sessaoFluxo || {},
-          conversationId: convId,
-          canal: tipo,
-          accountId: null,
-          enviarFn: async (texto) => {
-            await registrarRespostaIA(convId, texto).catch(() => {});
-            const partes = texto.split("\n---\n").filter(Boolean);
-            for (const p of partes) await enviarResposta(tipo, from, p.trim(), canal);
-          },
-          enviarBotoesFn: async (corpo, botoes) => {
-            await registrarRespostaIA(convId, corpo).catch(() => {});
-            await waSendButtons(from, corpo, botoes.map(b => ({ id: b.id, title: b.title })));
-          },
-          enviarListaFn: async (corpo, label, secoes) => {
-            await registrarRespostaIA(convId, corpo).catch(() => {});
-            await waSendList(from, corpo, label, secoes);
-          },
-          transferirFn: async (motivo) => {
-            await transferirParaHumano(convId, tipo, from, motivo, canal);
-          },
-        });
-
-        if (resultado) {
-          // Salva sessão atualizada do motor
-          if (resultado.sessaoAtualizada) {
-            await salvarSessao(from, resultado.sessaoAtualizada).catch(() => {});
-          }
-          // Motor processou — sempre para aqui, nunca cai nos intercepts/runMaxxi
-          // Tipos: "aguardando", "encerrado", "transferido", "resetado", "fim", "ia"
-          return;
-        }
-      }
-    }
-  } catch(e) {
-    logger.warn("⚠️ Motor de fluxo erro: " + e.message);
-    // Fallback: continua para IA tradicional
-  }
+  // ── MOTOR UNIFICADO (dispatch) — motor-fluxo ou runMaxxi, automaticamente ──
 
   // ── INTERCEPT DE BOLETO — prova de bala, detecta qualquer forma de seleção ──
   const sessaoBot = await buscarSessao(from);
@@ -927,22 +878,46 @@ Já registramos para nossa equipe técnica. Você será contatado em breve! ⏰`
   const inativoHa4h = ultimaAtiv === 0 || (Date.now() - ultimaAtiv > 4 * 3600000);
   const isNovaConversaReal = semCpf && semProtocolo && semEstado && inativoHa4h;
 
-  // Saudação de nova conversa → deixa agent.js processar para mostrar botões (Sou cliente / Quero contratar)
+  // Saudação de nova conversa → deixa agent.js processar para mostrar botões
 
-  // Roda a IA
+  // ── Roda a IA via dispatch() ─────────────────────────────────────────────
   try {
     const memoria   = await buscarMemoria(from);
     const sessao    = await buscarSessao(from);
     const protocolo = `${tipo.toUpperCase().slice(0,2)}-${Date.now().toString(36).toUpperCase()}`;
     const conteudoFinal = idInterativo ? `${conteudo} [id:${idInterativo}]` : conteudo;
 
-    const result = await runMaxxi({
-      accountId: null, conversationId: convId, messageId: msgId,
-      content: conteudoFinal,
-      sender: { name: nome, phone_number: from },
-      channel: tipo, protocolo, memoria, telefone: from, sessao,
+    const result = await dispatch({
+      telefone:       from,
+      mensagem:       conteudoFinal,
+      conversationId: convId,
+      accountId:      null,
+      canal:          tipo,
+      sessao,
+      memoria,
+      protocolo,
+      messageId:      msgId,
+      sender:         { name: nome, phone_number: from },
+      // Funções de envio para o canal Meta (WhatsApp/Instagram/Facebook)
+      enviarFn: async (texto) => {
+        await registrarRespostaIA(convId, texto).catch(() => {});
+        const partes = texto.split("\n---\n").filter(Boolean);
+        for (const p of partes) await enviarResposta(tipo, from, p.trim(), canal);
+      },
+      enviarBotoesFn: async (corpo, botoes) => {
+        await registrarRespostaIA(convId, corpo).catch(() => {});
+        await waSendButtons(from, corpo, botoes.map(b => ({ id: b.id, title: b.title })));
+      },
+      enviarListaFn: async (corpo, label, secoes) => {
+        await registrarRespostaIA(convId, corpo).catch(() => {});
+        await waSendList(from, corpo, label, secoes);
+      },
+      transferirFn: async (motivo) => {
+        await transferirParaHumano(convId, null, motivo);
+      },
     });
 
+    // Motor de fluxo já enviou via enviarFn — só processa reply do runMaxxi
     if (result?.reply) {
       await registrarRespostaIA(convId, result.reply).catch(() => {});
       const partes = result.reply.split("\n---\n").filter(Boolean);
@@ -954,7 +929,7 @@ Já registramos para nossa equipe técnica. Você será contatado em breve! ⏰`
       } catch {}
     }
 
-    if (result?.reply && !result?.handoff && !result?.resolve) {
+    if (!result?.handoff && !result?.resolve) {
       // Inicia reativação após resposta da IA
       iniciarReativacao({
         convId, canal: tipo, telefone: from, accountId: null,
@@ -963,7 +938,8 @@ Já registramos para nossa equipe técnica. Você será contatado em breve! ⏰`
         },
       }).catch(() => {});
     }
-    // IA reage com moderação em mensagens positivas (máx 1 por conversa)
+
+    // Reação em mensagens positivas (máx 1 por conversa)
     if (result?.reply) {
       try {
         const lowerContent = (conteudo || "").toLowerCase();
@@ -974,7 +950,6 @@ Já registramos para nossa equipe técnica. Você será contatado em breve! ⏰`
           const msgs = convCheck?.mensagens || [];
           const jaReagiu = msgs.some(m => m.reacoes?.ia);
           if (!jaReagiu) {
-            // Encontra a última mensagem do cliente para reagir
             const lastClientMsg = [...msgs].reverse().find(m => m.role === 'cliente');
             if (lastClientMsg?.id) {
               const emojisPos = ['👍', '❤️', '🙏'];
@@ -997,10 +972,10 @@ Já registramos para nossa equipe técnica. Você será contatado em breve! ⏰`
         },
       }).catch(()=>{});
     }
+
     if (result?.handoff) {
-      // Envia mensagem de confirmação ao cliente antes de transferir
       const msgTransferencia = result?.reply
-        ? null  // IA já enviou mensagem de aviso
+        ? null
         : "⏳ Transferindo para um atendente humano... Aguarde um momento, em breve alguém irá atendê-lo!";
       if (msgTransferencia) {
         await registrarRespostaIA(convId, msgTransferencia).catch(() => {});
@@ -1008,19 +983,18 @@ Já registramos para nossa equipe técnica. Você será contatado em breve! ⏰`
       }
       await transferirParaHumano(convId, null, "Transferido pela IA");
     }
-    // Salva sessão: prioriza sessaoAtualizada da IA, mas sempre preserva cpfcnpj/contrato existentes
+
+    // Salva sessão com merge — preserva cpfcnpj/contrato existentes
     const sessaoExistente = await buscarSessao(from).catch(() => null);
     const sessaoParaSalvar = {
       ...(sessaoExistente || {}),
       ...(result?.sessaoAtualizada || {}),
     };
-    // Salva sessão: sempre salva quando houve reset, ou quando tem estado relevante
     const temEstado = sessaoParaSalvar.cpfcnpj || sessaoParaSalvar.contrato_ativo
       || sessaoParaSalvar._estado || sessaoParaSalvar._cadastro
       || sessaoParaSalvar._fluxo_no;
     const foiResetado = sessaoParaSalvar._resetado;
     if (foiResetado) {
-      // Reset completo — salva objeto vazio para limpar tudo
       await salvarSessao(from, {}).catch(() => {});
       logger.info(`🔄 Sessão de ${from} resetada completamente`);
     } else if (temEstado) {

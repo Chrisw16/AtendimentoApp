@@ -1,7 +1,7 @@
 /**
  * handoff.js — Controle de transferência IA ↔ Humano
  */
-import { query, kvGet, kvSet } from "./db.js";
+import { query, kvGet, kvSet, withTransaction } from "./db.js";
 import { atualizarStatus, broadcast } from "./chatInterno.js";
 
 const handoffMap = new Map();
@@ -26,8 +26,18 @@ export function estaComHumano(convId) {
 export async function transferirParaHumano(convId, agenteId, motivo) {
   const estado = { modo:"humano", agenteId: agenteId||null, motivo, ts: Date.now() };
   handoffMap.set(String(convId), estado);
-  await kvSet(`handoff:${convId}`, JSON.stringify(estado));
-  await atualizarStatus(convId, "aguardando").catch(() => {});
+  await withTransaction(async (tx) => {
+    await tx.query(
+      `INSERT INTO sistema_kv(tenant_id, chave, valor, atualizado) VALUES($1,$2,$3,NOW())
+       ON CONFLICT(tenant_id,chave) DO UPDATE SET valor=$3, atualizado=NOW()`,
+      [process.env._TENANT_ID_FALLBACK || '00000000-0000-4000-a000-000000000001',
+       `handoff:${convId}`, JSON.stringify(estado)]
+    );
+    await tx.query(
+      `UPDATE conversas SET status='aguardando', atualizado=NOW() WHERE id=$1`,
+      [String(convId)]
+    );
+  });
   broadcast("conversa_assumida", { convId, agenteId: null, status: "aguardando" });
   console.log(`🔀 Conv #${convId} → HUMANO (aguardando)`);
 
@@ -45,16 +55,28 @@ export async function agenteAssumiu(convId, agenteId, agenteNome) {
   estado.agenteNome = agenteNome;
   estado.assumidoTs = Date.now();
   handoffMap.set(String(convId), estado);
-  await kvSet(`handoff:${convId}`, JSON.stringify(estado));
-  await atualizarStatus(convId, "ativa").catch(() => {});
+  await withTransaction(async (tx) => {
+    await tx.query(
+      `INSERT INTO sistema_kv(tenant_id, chave, valor, atualizado) VALUES($1,$2,$3,NOW())
+       ON CONFLICT(tenant_id,chave) DO UPDATE SET valor=$3, atualizado=NOW()`,
+      [process.env._TENANT_ID_FALLBACK || '00000000-0000-4000-a000-000000000001',
+       `handoff:${convId}`, JSON.stringify(estado)]
+    );
+    await tx.query(
+      `UPDATE conversas SET status='ativa', agente_id=$2, agente_nome=$3, atualizado=NOW() WHERE id=$1`,
+      [String(convId), agenteId, agenteNome]
+    );
+  });
   broadcast("conversa_assumida", { convId, agenteId, agenteNome, status: "ativa" });
   console.log(`👨 Conv #${convId} assumida por ${agenteNome||agenteId}`);
 }
 
 export async function devolverParaIA(convId) {
   handoffMap.delete(String(convId));
-  await query(`DELETE FROM sistema_kv WHERE chave=$1`, [`handoff:${convId}`]).catch(()=>{});
-  await atualizarStatus(convId, "ia").catch(() => {});
+  await withTransaction(async (tx) => {
+    await tx.query(`DELETE FROM sistema_kv WHERE chave=$1`, [`handoff:${convId}`]);
+    await tx.query(`UPDATE conversas SET status='ia', atualizado=NOW() WHERE id=$1`, [String(convId)]);
+  }).catch(() => {});
   broadcast("status_alterado", { convId, status: "ia" });
   console.log(`🤖 Conv #${convId} → IA`);
 }

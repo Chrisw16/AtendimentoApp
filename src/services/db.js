@@ -1,8 +1,10 @@
 /**
- * db.js — PostgreSQL pool + auto-migração
+ * db.js — PostgreSQL pool + auto-migração + helpers multi-tenant
  * SEM import do logger.js para evitar circular dependency
  */
 import pg from "pg";
+
+export const CITMAX_TENANT_ID = "00000000-0000-4000-a000-000000000001";
 
 const { Pool } = pg;
 let pool = null;
@@ -32,23 +34,166 @@ export async function query(sql, params = []) {
   }
 }
 
-// ── KV helpers ────────────────────────────────────────────────────────────────
-export async function kvGet(chave) {
-  const r = await query(`SELECT valor FROM sistema_kv WHERE chave=$1`, [chave]);
+// ── withTransaction — executa fn(client) dentro de BEGIN/COMMIT/ROLLBACK ─────
+// USO:
+//   await withTransaction(async (tx) => {
+//     await tx.query(`UPDATE ...`, [...]);
+//     await tx.query(`INSERT ...`, [...]);
+//   });
+// Se qualquer query lançar exceção, tudo é revertido automaticamente.
+export async function withTransaction(fn) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err; // re-lança para o caller tratar
+  } finally {
+    client.release();
+  }
+}
+
+// ── tenantQuery — injeta tenant_id automaticamente em SELECT/UPDATE/DELETE ────
+// USO: await tenantQuery(req, `SELECT * FROM conversas WHERE status=$1`, ["ativa"])
+// Detecta se já tem WHERE → adiciona AND tenant_id=$N
+// Detecta sem WHERE       → adiciona WHERE tenant_id=$N antes de ORDER/LIMIT/etc.
+export async function tenantQuery(reqOrTenantId, sql, params = []) {
+  const tenantId = typeof reqOrTenantId === "string"
+    ? reqOrTenantId
+    : (reqOrTenantId?.tenantId || CITMAX_TENANT_ID);
+
+  // Se tenant_id já está no SQL, executa direto
+  if (sql.includes("tenant_id")) return query(sql, params);
+
+  const nextIdx = params.length + 1;
+  const sqlComTenant = _injetarTenant(sql, nextIdx);
+  return query(sqlComTenant, [...params, tenantId]);
+}
+
+function _injetarTenant(sql, idx) {
+  const upper = sql.toUpperCase().replace(/\s+/g, " ");
+  const isWrite = upper.startsWith("INSERT") || upper.match(/^\s*CREATE|ALTER|DROP/);
+  if (isWrite) return sql; // DDL e INSERT — não modifica
+
+  const afterClauses = /\b(ORDER BY|GROUP BY|HAVING|LIMIT|OFFSET|RETURNING|FOR UPDATE)\b/i;
+  const hasWhere = /\bWHERE\b/i.test(sql);
+
+  if (hasWhere) {
+    return sql.replace(/\bWHERE\b/i, `WHERE tenant_id=$${idx} AND`);
+  }
+  const m = sql.match(afterClauses);
+  if (m) {
+    const pos = sql.indexOf(m[0]);
+    return `${sql.slice(0, pos).trimEnd()} WHERE tenant_id=$${idx} ${sql.slice(pos)}`;
+  }
+  return `${sql.trimEnd()} WHERE tenant_id=$${idx}`;
+}
+
+// ── KV helpers (tenant-aware) ─────────────────────────────────────────────────
+export async function kvGet(chave, tenantId = CITMAX_TENANT_ID) {
+  const r = await query(
+    `SELECT valor FROM sistema_kv WHERE tenant_id=$1 AND chave=$2`,
+    [tenantId, chave]
+  );
   return r.rows[0]?.valor ?? null;
 }
 
-export async function kvSet(chave, valor) {
+export async function kvSet(chave, valor, tenantId = CITMAX_TENANT_ID) {
   await query(
-    `INSERT INTO sistema_kv(chave,valor,atualizado) VALUES($1,$2,NOW())
-     ON CONFLICT(chave) DO UPDATE SET valor=$2, atualizado=NOW()`,
-    [chave, valor]
+    `INSERT INTO sistema_kv(tenant_id,chave,valor,atualizado) VALUES($1,$2,$3,NOW())
+     ON CONFLICT(tenant_id,chave) DO UPDATE SET valor=$3, atualizado=NOW()`,
+    [tenantId, chave, valor]
   );
 }
 
 // ── MIGRAÇÃO ──────────────────────────────────────────────────────────────────
 export async function migrate() {
   console.log("🗄️  Rodando migrações...");
+
+  // ── SAAS: tabela mestra de tenants — deve ser criada ANTES de tudo ──────────
+  await query(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      nome                 TEXT NOT NULL,
+      slug                 TEXT NOT NULL UNIQUE,
+      dominio              TEXT UNIQUE,
+      email                TEXT NOT NULL UNIQUE,
+      telefone             TEXT,
+      cnpj                 TEXT,
+      plano                TEXT NOT NULL DEFAULT 'starter',
+      status               TEXT NOT NULL DEFAULT 'ativo',
+      limite_agentes       INT DEFAULT 3,
+      limite_conversas_mes INT DEFAULT 500,
+      limite_canais        INT DEFAULT 2,
+      fuso_horario         TEXT DEFAULT 'America/Fortaleza',
+      idioma               TEXT DEFAULT 'pt-BR',
+      trial_ate            TIMESTAMPTZ,
+      proximo_pagamento    TIMESTAMPTZ,
+      valor_plano          NUMERIC(10,2) DEFAULT 0,
+      criado_em            TIMESTAMPTZ DEFAULT NOW(),
+      atualizado           TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_slug  ON tenants(slug)`).catch(()=>{});
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_email ON tenants(email)`).catch(()=>{});
+
+  // Colunas extras adicionadas em versões posteriores
+  await query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS dominio TEXT UNIQUE`).catch(()=>{});
+  await query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ate TIMESTAMPTZ`).catch(()=>{});
+  await query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS proximo_pagamento TIMESTAMPTZ`).catch(()=>{});
+  await query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS valor_plano NUMERIC(10,2) DEFAULT 0`).catch(()=>{});
+
+  // Seed: tenant padrão (CITmax) — idempotente
+  await query(`
+    INSERT INTO tenants (id, nome, slug, email, plano, status, limite_agentes, limite_conversas_mes, limite_canais, fuso_horario, idioma)
+    VALUES ('00000000-0000-4000-a000-000000000001', 'CITmax Fibra', 'citmax', 'contato@citmax.com.br',
+            'enterprise', 'ativo', 999, 999999, 99, 'America/Fortaleza', 'pt-BR')
+    ON CONFLICT (id) DO NOTHING
+  `);
+
+  // ── SAAS: configs por tenant ──────────────────────────────────────────────
+  await query(`
+    CREATE TABLE IF NOT EXISTS tenant_configs (
+      tenant_id  UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      chave      TEXT NOT NULL,
+      valor      TEXT,
+      sensivel   BOOLEAN DEFAULT false,
+      atualizado TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (tenant_id, chave)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_tenant_configs_tenant ON tenant_configs(tenant_id)`).catch(()=>{});
+
+  // Seed: chaves de config para o tenant CITmax (só cria se não existir)
+  do {
+    const { rows } = await query(`SELECT COUNT(*) as c FROM tenant_configs WHERE tenant_id='00000000-0000-4000-a000-000000000001'`);
+    if (parseInt(rows[0]?.c) > 0) break;
+    const configsIniciais = [
+      ["sgp_url", null, true], ["sgp_token", null, true], ["sgp_app", null, false],
+      ["sgp_user_agent", null, false], ["chatwoot_url", null, false],
+      ["chatwoot_api_token", null, true], ["chatwoot_account_id", null, false],
+      ["chatwoot_human_team_id", null, false], ["evolution_url", null, false],
+      ["evolution_api_key", null, true], ["evolution_instancia", null, false],
+      ["wa_access_token", null, true], ["wa_phone_number_id", null, false],
+      ["wa_verify_token", null, true], ["telegram_bot_token", null, true],
+      ["anthropic_api_key", null, true], ["openai_api_key", null, true],
+      ["elevenlabs_api_key", null, true], ["elevenlabs_voice_id", null, false],
+      ["sms_gateway_token", null, true], ["sms_gateway_template", null, false],
+      ["acs_user", null, true], ["acs_pass", null, true],
+      ["tr069_sgp_user", null, true], ["tr069_sgp_pass", null, true],
+      ["bot_nome", "Maxxi", false], ["bot_avatar", null, false],
+      ["empresa_nome", "CITmax", false], ["empresa_segmento", "isp", false],
+    ];
+    for (const [chave, valor, sensivel] of configsIniciais) {
+      await query(
+        `INSERT INTO tenant_configs(tenant_id,chave,valor,sensivel) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+        ["00000000-0000-4000-a000-000000000001", chave, valor, sensivel]
+      );
+    }
+  } while (false);
 
   await query(`
     CREATE TABLE IF NOT EXISTS canais (
@@ -840,6 +985,30 @@ NUNCA invente informações. Se não sabe, transfira para humano.`],
   )`);
   await query(`CREATE INDEX IF NOT EXISTS idx_cpe_acoes_servico ON cpe_acoes(id_servico)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_cpe_acoes_ts      ON cpe_acoes(criado_em DESC)`);
+
+  // ── FASE 2: Estado em banco — colunas novas em conversas ────────────────────
+  // processando: substitui o Set `processing` em memória do webhook.js
+  await query(`ALTER TABLE conversas ADD COLUMN IF NOT EXISTS processando BOOLEAN DEFAULT false`).catch(()=>{});
+  // ultima_atividade: atualizada a cada mensagem do cliente para os timers de follow-up
+  await query(`ALTER TABLE conversas ADD COLUMN IF NOT EXISTS ultima_atividade TIMESTAMPTZ DEFAULT NOW()`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_conversas_atividade ON conversas(tenant_id, ultima_atividade) WHERE status='ativa'`).catch(()=>{});
+
+  // ── FASE 2: conv_timers — substitui followupTimer e closeTimer em memória ───
+  await query(`
+    CREATE TABLE IF NOT EXISTS conv_timers (
+      id              SERIAL PRIMARY KEY,
+      tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL,
+      account_id      TEXT NOT NULL,
+      tipo            TEXT NOT NULL,
+      executar_em     TIMESTAMPTZ NOT NULL,
+      executado       BOOLEAN DEFAULT false,
+      criado_em       TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(tenant_id, conversation_id, tipo)
+    )
+  `).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_conv_timers_executar ON conv_timers(executar_em) WHERE executado=false`).catch(()=>{});
+  await query(`CREATE INDEX IF NOT EXISTS idx_conv_timers_tenant   ON conv_timers(tenant_id, conversation_id)`).catch(()=>{});
 
   console.log("✅ Migrações concluídas");
 }

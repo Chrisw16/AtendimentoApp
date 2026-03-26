@@ -9,7 +9,7 @@ import { dirname, join }               from "path";
 import rateLimit                       from "express-rate-limit";
 
 // Services
-import { getStats, getLogBuffer, addSseClient, removeSseClient, logger } from "./services/logger.js";
+import { getStats, getLogBuffer, addSseClient, removeSseClient, logger, logTenant } from "./services/logger.js";
 import { limparSessao, listarSessoes, listarClientes, deletarMemoria } from "./services/memoria.js";
 import { sendMessage, sendOutbound, resolveConversation } from "./services/chatwoot.js";
 import { consultarClientes, verificarConexao, criarChamado, segundaViaBoleto, historicoOcorrencias, listarOcorrencias, fecharOcorrencia, adicionarNota as notaOcorrencia, listarPlanos, buscarCliente } from "./services/erp.js";
@@ -34,13 +34,19 @@ import { getConfig as getReativacaoConfig, salvarConfig as salvarReativacaoConfi
 import { transferirParaHumano, devolverParaIA, encerrarHandoff, estaComHumano, listarComHumano, agenteAssumiu } from "./services/handoff.js";
 import { gerarToken, verificarToken } from "./services/jwt.js";
 import { initAudit, registrarAudit, listarAudit } from "./services/audit.js";
+import { resolveTenantMiddleware, CITMAX_TENANT_ID } from "./services/tenant.js";
+import { withTransaction } from "./services/db.js";
+import { randomUUID } from "crypto";
+import { verificarLimite, LimitError, invalidarCacheLimites } from "./services/limites.js";
 
 const __dirname   = dirname(fileURLToPath(import.meta.url));
 const PROMPT_FILE = join(__dirname, "prompts/maxxi.js");
 
 export const adminRouter = Router();
 
-const ADMIN_TOKEN = process.env.ADMIN_PASSWORD || "citmax2026";
+// ADMIN_TOKEN legado — mantido para compatibilidade com a CITmax.
+// Em produção SaaS use JWT com tenantId. Remover após migração completa dos clientes.
+const ADMIN_TOKEN = process.env.ADMIN_PASSWORD;
 
 // Rate limiter for login (5 attempts per minute)
 const loginLimiter = rateLimit({
@@ -57,17 +63,26 @@ initAudit().catch(() => {});
 // ── Sanitize error for client (never expose stack traces) ──
 function safeError(e) { return typeof e === "string" ? e : (e?.message || "Erro interno").slice(0, 200); }
 
-// Full auth — admin or agent
+// Full auth — admin (token fixo legado) ou agente (JWT com tenantId)
 function auth(req, res, next) {
   const token = req.headers["x-admin-token"] || req.query.token || "";
-  // Admin: token fixo
-  if (token === ADMIN_TOKEN) { req.role = "admin"; req.agenteId = "admin"; req.agenteNome = "Admin"; return next(); }
-  // Agente: JWT
+
+  // Compatibilidade: ADMIN_TOKEN fixo (legado CITmax)
+  if (ADMIN_TOKEN && token === ADMIN_TOKEN) {
+    req.role      = "admin";
+    req.agenteId  = "admin";
+    req.agenteNome = "Admin";
+    req.tenantId  = CITMAX_TENANT_ID;
+    return next();
+  }
+
+  // JWT com tenantId (caminho SaaS)
   const payload = verificarToken(token);
   if (!payload) return res.status(401).json({ error: "unauthorized" });
-  req.role = payload.role || "agente";
-  req.agenteId = payload.id;
+  req.role       = payload.role || "agente";
+  req.agenteId   = payload.id;
   req.agenteNome = payload.nome;
+  req.tenantId   = payload.tenantId || CITMAX_TENANT_ID;
   next();
 }
 
@@ -113,6 +128,15 @@ adminRouter.get("/", serveReact);
 adminRouter.get("/legacy", (req, res) => {
   res.setHeader("Content-Type", "text/html");
   res.send(readFileSync(join(__dirname, "admin.html"), "utf8"));
+});
+
+// ── Logs por tenant (super-admin) ────────────────────────────────────────────
+adminRouter.get("/api/super-admin/logs", auth, superAdminOnly, (req, res) => {
+  const { tenantId, level, limit = 200 } = req.query;
+  let logs = getLogBuffer(tenantId || null);
+  if (level) logs = logs.filter(l => l.level === level);
+  logs = logs.slice(-parseInt(limit)).reverse(); // mais recentes primeiro
+  res.json({ ok: true, total: logs.length, logs });
 });
 
 // ── SSE logs ──────────────────────────────────────────────────────────────────
@@ -689,7 +713,8 @@ adminRouter.get("/api/status", auth, async (req,res) => {
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
 adminRouter.get("/api/logs", auth, (req,res) => {
-  const{level}=req.query; const buf=getLogBuffer();
+  const { level, tenantId } = req.query;
+  const buf = getLogBuffer(tenantId || null);
   res.json((level?buf.filter(l=>l.level===level):buf).slice(-200).reverse());
 });
 
@@ -1051,25 +1076,46 @@ adminRouter.post("/api/conversas/:id/transferir",auth,async(req,res)=>{ try{cons
 // AGENTES
 // ══════════════════════════════════════════════════════════════════════════════
 adminRouter.get("/api/agentes",        auth, adminOnly, async(req,res)=>{ try{res.json(await listarAgentes());}catch(e){res.status(500).json({error:safeError(e)});} });
-adminRouter.post("/api/agentes",       auth, adminOnly, async(req,res)=>{ try{ const ag=await criarAgente(req.body); registrarAudit(req.agenteId,req.agenteNome,"criar_agente",req.body.nome,req.ip); res.json(ag); }catch(e){res.status(400).json({error:safeError(e)});} });
+adminRouter.post("/api/agentes", auth, adminOnly, async (req, res) => {
+  try {
+    await verificarLimite(req.tenantId, "agentes");
+    const ag = await criarAgente(req.body);
+    registrarAudit(req.agenteId, req.agenteNome, "criar_agente", req.body.nome, req.ip);
+    res.json(ag);
+  } catch(e) {
+    if (e instanceof LimitError) return res.status(429).json({ error: e.message, recurso: e.recurso, usado: e.usado, limite: e.limite });
+    res.status(400).json({ error: safeError(e) });
+  }
+});
 adminRouter.put("/api/agentes/:id",    auth, adminOnly, async(req,res)=>{ try{ await atualizarAgente(req.params.id,req.body); registrarAudit(req.agenteId,req.agenteNome,"editar_agente",req.params.id,req.ip); res.json({ok:true}); }catch(e){res.status(400).json({error:safeError(e)});} });
 adminRouter.delete("/api/agentes/:id", auth, adminOnly, async(req,res)=>{ try{ await removerAgente(req.params.id); registrarAudit(req.agenteId,req.agenteNome,"remover_agente",req.params.id,req.ip); res.json({ok:true}); }catch(e){res.status(500).json({error:safeError(e)});} });
 // Login unificado: admin (senha .env) ou agente (login+senha BD)
 adminRouter.post("/api/login", loginLimiter, async (req, res) => {
   try {
-    const { login, senha } = req.body;
+    const { login, senha, tenantSlug } = req.body;
     if (!login || !senha) return res.status(400).json({ error: "login e senha obrigatórios" });
 
-    // Admin?
-    if ((login === "admin" || login === "") && senha === ADMIN_TOKEN) {
-      const token = gerarToken({ id: "admin", nome: "Admin", login: "admin", role: "admin" });
-      import("./services/agente-monitor.js").then(m => m.registrarEvento("admin", "login", { nome: "Admin", ip: req.ip, userAgent: req.headers['user-agent'] })).catch(()=>{});
-      registrarAudit("admin", "Admin", "login", "Login admin", req.ip);
-      return res.json({ ok: true, role: "admin", nome: "Admin", id: "admin", token });
+    // Resolve o tenantId: pelo slug enviado no body, pelo header, ou fallback CITmax
+    let tenantId = CITMAX_TENANT_ID;
+    if (tenantSlug) {
+      const { getTenantBySlug } = await import("./services/tenant.js");
+      const tenant = await getTenantBySlug(tenantSlug);
+      if (!tenant) return res.status(404).json({ error: "Tenant não encontrado." });
+      tenantId = tenant.id;
+    } else if (req.headers["x-tenant-id"]) {
+      tenantId = req.headers["x-tenant-id"];
     }
 
-    // Agente?
-    const ag = await loginAgente(login, senha);
+    // Admin? (token fixo legado — só válido para o tenant CITmax)
+    if (ADMIN_TOKEN && (login === "admin" || login === "") && senha === ADMIN_TOKEN) {
+      const token = gerarToken({ id: "admin", nome: "Admin", login: "admin", role: "admin", tenantId });
+      import("./services/agente-monitor.js").then(m => m.registrarEvento("admin", "login", { nome: "Admin", ip: req.ip, userAgent: req.headers['user-agent'] })).catch(()=>{});
+      registrarAudit("admin", "Admin", "login", "Login admin", req.ip);
+      return res.json({ ok: true, role: "admin", nome: "Admin", id: "admin", tenantId, token });
+    }
+
+    // Agente? (busca pelo login dentro do tenant)
+    const ag = await loginAgente(login, senha, tenantId);
     if (!ag) {
       registrarAudit(login, login, "login_falhou", "Senha incorreta", req.ip);
       return res.status(401).json({ error: "Login ou senha incorretos." });
@@ -1078,12 +1124,23 @@ adminRouter.post("/api/login", loginLimiter, async (req, res) => {
     await setOnline(ag.id, true);
     import("./services/agente-monitor.js").then(m => m.registrarEvento(ag.id, "login", { nome: ag.nome, ip: req.ip, userAgent: req.headers['user-agent'] })).catch(()=>{});
     registrarAudit(ag.id, ag.nome, "login", "Login agente", req.ip);
-    const token = gerarToken({ id: ag.id, nome: ag.nome, login: ag.login, role: ag.role || "agente", avatar: ag.avatar });
-    return res.json({ ok: true, role: ag.role || "agente", nome: ag.nome, id: ag.id, avatar: ag.avatar, token });
+    const token = gerarToken({ id: ag.id, nome: ag.nome, login: ag.login, role: ag.role || "agente", avatar: ag.avatar, tenantId });
+    return res.json({ ok: true, role: ag.role || "agente", nome: ag.nome, id: ag.id, avatar: ag.avatar, tenantId, token });
   } catch (e) { res.status(500).json({ error: safeError(e) }); }
 });
 
-adminRouter.post("/api/agentes/login", async(req,res)=>{ try{ const{login,senha}=req.body; const ag=await loginAgente(login,senha); if(!ag) return res.status(401).json({error:"Login ou senha inválidos"}); await setOnline(ag.id,true); const token=gerarToken({id:ag.id,nome:ag.nome,login:ag.login,role:ag.role||"agente",avatar:ag.avatar}); res.json({...ag,token}); }catch(e){res.status(500).json({error:safeError(e)});} });
+// Alias /api/agentes/login — mantido por compatibilidade
+adminRouter.post("/api/agentes/login", async (req, res) => {
+  try {
+    const { login, senha } = req.body;
+    const tenantId = req.headers["x-tenant-id"] || CITMAX_TENANT_ID;
+    const ag = await loginAgente(login, senha, tenantId);
+    if (!ag) return res.status(401).json({ error: "Login ou senha inválidos" });
+    await setOnline(ag.id, true);
+    const token = gerarToken({ id: ag.id, nome: ag.nome, login: ag.login, role: ag.role || "agente", avatar: ag.avatar, tenantId });
+    res.json({ ...ag, tenantId, token });
+  } catch (e) { res.status(500).json({ error: safeError(e) }); }
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CANAIS
@@ -1091,7 +1148,17 @@ adminRouter.post("/api/agentes/login", async(req,res)=>{ try{ const{login,senha}
 adminRouter.get("/api/canais",               auth, adminOnly,async(req,res)=>{ try{res.json(await listarCanais());}catch(e){res.status(500).json({error:safeError(e)});} });
 adminRouter.get("/api/canais/:tipo",         auth, adminOnly,async(req,res)=>{ try{res.json(await getCanal(req.params.tipo)||{});}catch(e){res.status(500).json({error:safeError(e)});} });
 adminRouter.put("/api/canais/:tipo",         auth, adminOnly,(req,res)=>res.json(salvarCanal(req.params.tipo,req.body)));
-adminRouter.post("/api/canais/:tipo/ativar", auth, adminOnly,async(req,res)=>{ try{await ativarCanal(req.params.tipo,req.body.ativo!==false);res.json({ok:true});}catch(e){res.status(500).json({error:safeError(e)});} });
+adminRouter.post("/api/canais/:tipo/ativar", auth, adminOnly, async (req, res) => {
+  try {
+    const ativando = req.body.ativo !== false; // true = ativar, false = desativar
+    if (ativando) await verificarLimite(req.tenantId, "canais");
+    await ativarCanal(req.params.tipo, ativando);
+    res.json({ ok: true });
+  } catch(e) {
+    if (e instanceof LimitError) return res.status(429).json({ error: e.message, recurso: e.recurso, usado: e.usado, limite: e.limite });
+    res.status(500).json({ error: safeError(e) });
+  }
+});
 
 adminRouter.post("/api/canais/telegram/registrar-webhook", auth, async(req,res)=>{
   const canal = await getCanal("telegram");
@@ -2304,18 +2371,25 @@ adminRouter.post("/api/planos", auth, adminOnly, async (req, res) => {
   try {
     const { sgp_id, nome, velocidade, unidade, valor, beneficios, destaque, ativo, ordem, cidades } = req.body;
     if (!sgp_id || !nome || !velocidade) return res.status(400).json({ error: "ID ERP, nome e velocidade obrigatórios" });
-    const { query: dbQuery } = await import("./services/db.js");
-    const r = await dbQuery(`INSERT INTO planos(sgp_id,nome,velocidade,unidade,valor,beneficios,destaque,ativo,ordem) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9) RETURNING *`,
-      [sgp_id, nome, velocidade, unidade||'Mega', valor||0, JSON.stringify(beneficios||[]), destaque||false, ativo!==false, ordem||0]);
-    const planoId = r.rows[0].id;
-    if (Array.isArray(cidades)) {
-      for (const c of cidades) {
-        if (c.cidade_id) {
-          await dbQuery(`INSERT INTO cidade_planos(cidade_id,plano_id) VALUES($1,$2) ON CONFLICT(cidade_id,plano_id) DO NOTHING`, [c.cidade_id, planoId]);
+    const plano = await withTransaction(async (tx) => {
+      const r = await tx.query(
+        `INSERT INTO planos(sgp_id,nome,velocidade,unidade,valor,beneficios,destaque,ativo,ordem) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9) RETURNING *`,
+        [sgp_id, nome, velocidade, unidade||'Mega', valor||0, JSON.stringify(beneficios||[]), destaque||false, ativo!==false, ordem||0]
+      );
+      const planoId = r.rows[0].id;
+      if (Array.isArray(cidades)) {
+        for (const c of cidades) {
+          if (c.cidade_id) {
+            await tx.query(
+              `INSERT INTO cidade_planos(cidade_id,plano_id) VALUES($1,$2) ON CONFLICT(cidade_id,plano_id) DO NOTHING`,
+              [c.cidade_id, planoId]
+            );
+          }
         }
       }
-    }
-    res.json(r.rows[0]);
+      return r.rows[0];
+    });
+    res.json(plano);
   } catch(e) { res.status(500).json({ error: safeError(e) }); }
 });
 
@@ -2324,23 +2398,28 @@ adminRouter.put("/api/planos/:id", auth, adminOnly, async (req, res) => {
     const { sgp_id, nome, velocidade, unidade, valor, beneficios, destaque, ativo, ordem, cidades } = req.body;
     const sgpNum  = parseInt(String(sgp_id ?? ''), 10);
     const planoId = parseInt(req.params.id, 10);
-    if (!sgpNum || isNaN(sgpNum)) return res.status(400).json({ error: "ID ERP (sgp_id) inv\u00e1lido ou ausente" });
-    if (!nome || !velocidade) return res.status(400).json({ error: "Nome e velocidade s\u00e3o obrigat\u00f3rios" });
-    const { query: dbQuery } = await import("./services/db.js");
-    const upd = await dbQuery(
-      `UPDATE planos SET sgp_id=$2,nome=$3,velocidade=$4,unidade=$5,valor=$6,beneficios=$7::jsonb,destaque=$8,ativo=$9,ordem=$10 WHERE id=$1 RETURNING *`,
-      [planoId, sgpNum, nome, String(velocidade), unidade||'Mega', Number(valor)||0, JSON.stringify(beneficios||[]), !!destaque, ativo!==false, Number(ordem)||0]
-    );
-    if (upd.rowCount === 0) return res.status(404).json({ error: "Plano n\u00e3o encontrado" });
-    if (Array.isArray(cidades)) {
-      await dbQuery(`DELETE FROM cidade_planos WHERE plano_id=$1`, [planoId]);
-      for (const c of cidades) {
-        const cid = parseInt(String(c.cidade_id ?? ''), 10);
-        if (cid) await dbQuery(`INSERT INTO cidade_planos(cidade_id,plano_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, [cid, planoId]);
+    if (!sgpNum || isNaN(sgpNum)) return res.status(400).json({ error: "ID ERP (sgp_id) inválido ou ausente" });
+    if (!nome || !velocidade) return res.status(400).json({ error: "Nome e velocidade são obrigatórios" });
+    const plano = await withTransaction(async (tx) => {
+      const upd = await tx.query(
+        `UPDATE planos SET sgp_id=$2,nome=$3,velocidade=$4,unidade=$5,valor=$6,beneficios=$7::jsonb,destaque=$8,ativo=$9,ordem=$10 WHERE id=$1 RETURNING *`,
+        [planoId, sgpNum, nome, String(velocidade), unidade||'Mega', Number(valor)||0, JSON.stringify(beneficios||[]), !!destaque, ativo!==false, Number(ordem)||0]
+      );
+      if (upd.rowCount === 0) throw Object.assign(new Error("Plano não encontrado"), { status: 404 });
+      if (Array.isArray(cidades)) {
+        await tx.query(`DELETE FROM cidade_planos WHERE plano_id=$1`, [planoId]);
+        for (const c of cidades) {
+          const cid = parseInt(String(c.cidade_id ?? ''), 10);
+          if (cid) await tx.query(`INSERT INTO cidade_planos(cidade_id,plano_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, [cid, planoId]);
+        }
       }
-    }
-    res.json({ ok: true, plano: upd.rows[0] });
-  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+      return upd.rows[0];
+    });
+    res.json({ ok: true, plano });
+  } catch(e) {
+    if (e.status === 404) return res.status(404).json({ error: e.message });
+    res.status(500).json({ error: safeError(e) });
+  }
 });
 
 adminRouter.delete("/api/planos/:id", auth, adminOnly, async (req, res) => {
@@ -2406,18 +2485,19 @@ adminRouter.put("/api/zonas/:id", auth, adminOnly, async (req, res) => {
     const { nome, cidade_id, geojson, cor, tipo, descricao, ativo, planos } = req.body;
     const zonaId = parseInt(req.params.id, 10);
     if (!nome) return res.status(400).json({ error: "Nome obrigatório" });
-    const { query: dbQuery } = await import("./services/db.js");
-    await dbQuery(
-      `UPDATE zonas_cobertura SET nome=$2,cidade_id=$3,geojson=$4::jsonb,cor=$5,tipo=$6,descricao=$7,ativo=$8,atualizado=NOW() WHERE id=$1`,
-      [zonaId, nome, cidade_id||null, JSON.stringify(geojson), cor||'#00c896', tipo||'cobertura', descricao||'', ativo!==false]
-    );
-    if (Array.isArray(planos)) {
-      await dbQuery(`DELETE FROM zona_planos WHERE zona_id=$1`, [zonaId]);
-      for (const pid of planos) {
-        const p = parseInt(pid, 10);
-        if (p) await dbQuery(`INSERT INTO zona_planos(zona_id,plano_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, [zonaId, p]);
+    await withTransaction(async (tx) => {
+      await tx.query(
+        `UPDATE zonas_cobertura SET nome=$2,cidade_id=$3,geojson=$4::jsonb,cor=$5,tipo=$6,descricao=$7,ativo=$8,atualizado=NOW() WHERE id=$1`,
+        [zonaId, nome, cidade_id||null, JSON.stringify(geojson), cor||'#00c896', tipo||'cobertura', descricao||'', ativo!==false]
+      );
+      if (Array.isArray(planos)) {
+        await tx.query(`DELETE FROM zona_planos WHERE zona_id=$1`, [zonaId]);
+        for (const pid of planos) {
+          const p = parseInt(pid, 10);
+          if (p) await tx.query(`INSERT INTO zona_planos(zona_id,plano_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, [zonaId, p]);
+        }
       }
-    }
+    });
     const { invalidarCacheZonas } = await import("./services/cobertura.js");
     invalidarCacheZonas();
     res.json({ ok: true });
@@ -2577,22 +2657,24 @@ adminRouter.post("/api/zonas/import-geojson-url", auth, adminOnly, async (req, r
     const tipo = req.body?.tipo || "cobertura";
     const substituir = req.body?.substituir === true;
 
-    if (substituir) {
-      await dbQuery(`DELETE FROM zonas_cobertura WHERE descricao LIKE '%citmax.com.br/cobertura%'`);
-    }
-
-    const criadas = [];
-    for (const feat of features) {
-      const nome = feat.properties?.name || feat.properties?.Nome || feat.properties?.nome || "Cobertura CITmax";
-      const gj = { type: "FeatureCollection", features: [feat] };
-      const ins = await dbQuery(
-        `INSERT INTO zonas_cobertura(nome, cidade_id, geojson, cor, tipo, descricao, ativo)
-         VALUES($1, $2, $3::jsonb, $4, $5, $6, true) RETURNING id, nome`,
-        [nome, cidade_id, JSON.stringify(gj), cor, tipo,
-         `Importado de ${url} em ${new Date().toLocaleDateString("pt-BR")}`]
-      );
-      criadas.push(ins.rows[0]);
-    }
+    const criadas = await withTransaction(async (tx) => {
+      if (substituir) {
+        await tx.query(`DELETE FROM zonas_cobertura WHERE descricao LIKE '%citmax.com.br/cobertura%'`);
+      }
+      const inseridas = [];
+      for (const feat of features) {
+        const nome = feat.properties?.name || feat.properties?.Nome || feat.properties?.nome || "Cobertura CITmax";
+        const gj = { type: "FeatureCollection", features: [feat] };
+        const ins = await tx.query(
+          `INSERT INTO zonas_cobertura(nome, cidade_id, geojson, cor, tipo, descricao, ativo)
+           VALUES($1, $2, $3::jsonb, $4, $5, $6, true) RETURNING id, nome`,
+          [nome, cidade_id, JSON.stringify(gj), cor, tipo,
+           `Importado de ${url} em ${new Date().toLocaleDateString("pt-BR")}`]
+        );
+        inseridas.push(ins.rows[0]);
+      }
+      return inseridas;
+    });
 
     invalidarCacheZonas();
     res.json({ ok: true, total: criadas.length, criadas });
@@ -4047,6 +4129,803 @@ adminRouter.post("/api/acs/devices/:id/firmware", auth, async (req, res) => {
     res.json({ ok: true, cmdId, mensagem: "Download firmware enfileirado." });
   } catch(e) { res.status(500).json({ error: safeError(e) }); }
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PAINEL DO TENANT — Configurações do contratante SaaS
+// Acessível por qualquer admin autenticado no seu próprio tenant
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Campos sensíveis — nunca retornados via GET (apenas indicador se estão preenchidos)
+const CAMPOS_SENSIVEIS = new Set([
+  "sgp_token", "chatwoot_api_token", "wa_access_token", "wa_verify_token",
+  "telegram_bot_token", "anthropic_api_key", "openai_api_key",
+  "elevenlabs_api_key", "sms_gateway_token", "acs_pass", "tr069_sgp_pass",
+  "evolution_api_key",
+]);
+
+// Campos permitidos para PUT — whitelist explícita (segurança)
+const CAMPOS_PERMITIDOS = new Set([
+  // Identidade
+  "bot_nome", "bot_avatar", "empresa_nome", "empresa_segmento",
+  "fuso_horario", "idioma",
+  // SGP
+  "sgp_url", "sgp_app", "sgp_token", "sgp_user_agent",
+  // Chatwoot
+  "chatwoot_url", "chatwoot_api_token", "chatwoot_account_id", "chatwoot_human_team_id",
+  // Evolution API
+  "evolution_url", "evolution_api_key", "evolution_instancia",
+  // Meta / WhatsApp Business
+  "wa_access_token", "wa_phone_number_id", "wa_verify_token",
+  // Telegram
+  "telegram_bot_token",
+  // IA
+  "anthropic_api_key", "openai_api_key", "elevenlabs_api_key", "elevenlabs_voice_id",
+  // SMS
+  "sms_gateway_token", "sms_gateway_template",
+  // ACS
+  "acs_user", "acs_pass", "tr069_sgp_user", "tr069_sgp_pass",
+]);
+
+// GET /api/tenant/config — retorna configs do tenant (campos sensíveis mascarados)
+adminRouter.get("/api/tenant/config", auth, adminOnly, async (req, res) => {
+  try {
+    const { query: dbQuery } = await import("./services/db.js");
+    const r = await dbQuery(
+      `SELECT chave, valor, sensivel FROM tenant_configs WHERE tenant_id=$1 ORDER BY chave`,
+      [req.tenantId]
+    );
+    const configs = {};
+    for (const row of r.rows) {
+      if (row.sensivel && row.valor) {
+        // Retorna apenas indicador: "••••••" para não expor chaves
+        configs[row.chave] = { preenchido: true, valor: "••••••" };
+      } else {
+        configs[row.chave] = { preenchido: !!row.valor, valor: row.valor || "" };
+      }
+    }
+    // Busca dados do tenant também
+    const t = await dbQuery(`SELECT * FROM tenants WHERE id=$1`, [req.tenantId]);
+    res.json({ ok: true, configs, tenant: t.rows[0] || {} });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// PUT /api/tenant/config — salva configs (apenas campos da whitelist)
+adminRouter.put("/api/tenant/config", auth, adminOnly, async (req, res) => {
+  try {
+    const { query: dbQuery } = await import("./services/db.js");
+    const { invalidarConfigCache } = await import("./services/tenant.js");
+    const body = req.body || {};
+    const salvos = [];
+    const ignorados = [];
+
+    for (const [chave, valor] of Object.entries(body)) {
+      if (!CAMPOS_PERMITIDOS.has(chave)) { ignorados.push(chave); continue; }
+      // Ignora se enviou "••••••" (placeholder de campo sensível sem alteração)
+      if (valor === "••••••") continue;
+      const sensivel = CAMPOS_SENSIVEIS.has(chave);
+      await dbQuery(
+        `INSERT INTO tenant_configs(tenant_id, chave, valor, sensivel, atualizado)
+         VALUES($1,$2,$3,$4,NOW())
+         ON CONFLICT(tenant_id,chave) DO UPDATE SET valor=$3, sensivel=$4, atualizado=NOW()`,
+        [req.tenantId, chave, valor || null, sensivel]
+      );
+      salvos.push(chave);
+    }
+
+    // Invalida cache de configs deste tenant
+    invalidarConfigCache(req.tenantId);
+
+    registrarAudit(req.agenteId, req.agenteNome, "tenant_config", `Campos salvos: ${salvos.join(", ")}`, req.ip);
+    res.json({ ok: true, salvos, ignorados });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// PUT /api/tenant/identidade — atualiza dados do tenant na tabela tenants
+adminRouter.put("/api/tenant/identidade", auth, adminOnly, async (req, res) => {
+  try {
+    const { query: dbQuery } = await import("./services/db.js");
+    const { nome, email, telefone, cnpj, fuso_horario, idioma } = req.body;
+    const sets = [];
+    const vals = [req.tenantId];
+    let i = 2;
+    if (nome)        { sets.push(`nome=$${i++}`);        vals.push(nome); }
+    if (email)       { sets.push(`email=$${i++}`);       vals.push(email); }
+    if (telefone)    { sets.push(`telefone=$${i++}`);    vals.push(telefone); }
+    if (cnpj)        { sets.push(`cnpj=$${i++}`);        vals.push(cnpj); }
+    if (fuso_horario){ sets.push(`fuso_horario=$${i++}`);vals.push(fuso_horario); }
+    if (idioma)      { sets.push(`idioma=$${i++}`);      vals.push(idioma); }
+    if (!sets.length) return res.status(400).json({ error: "Nenhum campo para atualizar." });
+    sets.push(`atualizado=NOW()`);
+    await dbQuery(`UPDATE tenants SET ${sets.join(",")} WHERE id=$1`, vals);
+    registrarAudit(req.agenteId, req.agenteNome, "tenant_identidade", "Identidade atualizada", req.ip);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// POST /api/tenant/config/test — testa conexão real com cada integração
+adminRouter.post("/api/tenant/config/test", auth, adminOnly, async (req, res) => {
+  try {
+    const { getTenantConfig } = await import("./services/tenant.js");
+    const tid = req.tenantId;
+    const resultados = {};
+
+    // Testa SGP
+    try {
+      const sgpUrl = await getTenantConfig(tid, "sgp_url");
+      const sgpToken = await getTenantConfig(tid, "sgp_token");
+      const sgpApp   = await getTenantConfig(tid, "sgp_app") || "n8n";
+      if (sgpUrl && sgpToken) {
+        const r = await fetch(`${sgpUrl}/api/v2/contratos?app=${sgpApp}&token=${sgpToken}&limit=1`, {
+          signal: AbortSignal.timeout(6000),
+        });
+        resultados.sgp = r.ok ? { ok: true, status: r.status } : { ok: false, status: r.status, erro: `HTTP ${r.status}` };
+      } else {
+        resultados.sgp = { ok: false, erro: "URL ou token não configurados" };
+      }
+    } catch(e) { resultados.sgp = { ok: false, erro: e.message }; }
+
+    // Testa Chatwoot
+    try {
+      const cwUrl   = await getTenantConfig(tid, "chatwoot_url");
+      const cwToken = await getTenantConfig(tid, "chatwoot_api_token");
+      const cwAcc   = await getTenantConfig(tid, "chatwoot_account_id");
+      if (cwUrl && cwToken && cwAcc) {
+        const r = await fetch(`${cwUrl}/api/v1/accounts/${cwAcc}/conversations?page=1`, {
+          headers: { "api_access_token": cwToken },
+          signal: AbortSignal.timeout(6000),
+        });
+        resultados.chatwoot = r.ok ? { ok: true, status: r.status } : { ok: false, status: r.status, erro: `HTTP ${r.status}` };
+      } else {
+        resultados.chatwoot = { ok: false, erro: "URL, token ou account_id não configurados" };
+      }
+    } catch(e) { resultados.chatwoot = { ok: false, erro: e.message }; }
+
+    // Testa Evolution API
+    try {
+      const evoUrl    = await getTenantConfig(tid, "evolution_url");
+      const evoKey    = await getTenantConfig(tid, "evolution_api_key");
+      const evoInst   = await getTenantConfig(tid, "evolution_instancia");
+      if (evoUrl && evoKey) {
+        const path = evoInst ? `/instance/connectionState/${evoInst}` : `/instance/fetchInstances`;
+        const r = await fetch(`${evoUrl}${path}`, {
+          headers: { "apikey": evoKey },
+          signal: AbortSignal.timeout(6000),
+        });
+        resultados.evolution = r.ok ? { ok: true, status: r.status } : { ok: false, status: r.status, erro: `HTTP ${r.status}` };
+      } else {
+        resultados.evolution = { ok: false, erro: "URL ou API key não configurados" };
+      }
+    } catch(e) { resultados.evolution = { ok: false, erro: e.message }; }
+
+    // Testa Anthropic
+    try {
+      const anthropicKey = await getTenantConfig(tid, "anthropic_api_key");
+      if (anthropicKey) {
+        const r = await fetch("https://api.anthropic.com/v1/models", {
+          headers: { "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
+          signal: AbortSignal.timeout(6000),
+        });
+        resultados.anthropic = r.ok ? { ok: true } : { ok: false, erro: `HTTP ${r.status}` };
+      } else {
+        resultados.anthropic = { ok: false, erro: "Chave não configurada" };
+      }
+    } catch(e) { resultados.anthropic = { ok: false, erro: e.message }; }
+
+    // Testa OpenAI
+    try {
+      const openaiKey = await getTenantConfig(tid, "openai_api_key");
+      if (openaiKey) {
+        const r = await fetch("https://api.openai.com/v1/models", {
+          headers: { "Authorization": `Bearer ${openaiKey}` },
+          signal: AbortSignal.timeout(6000),
+        });
+        resultados.openai = r.ok ? { ok: true } : { ok: false, erro: `HTTP ${r.status}` };
+      } else {
+        resultados.openai = { ok: false, erro: "Chave não configurada" };
+      }
+    } catch(e) { resultados.openai = { ok: false, erro: e.message }; }
+
+    res.json({ ok: true, resultados });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// GET /api/tenant/limites — uso atual em tempo real (sem cache)
+adminRouter.get("/api/tenant/limites", auth, async (req, res) => {
+  try {
+    const { getUsoAtual } = await import("./services/limites.js");
+    const uso = await getUsoAtual(req.tenantId);
+    if (!uso) return res.status(404).json({ error: "Tenant não encontrado." });
+    res.json({ ok: true, ...uso });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// GET /api/tenant/status — plano, uso e limites
+adminRouter.get("/api/tenant/status", auth, async (req, res) => {
+  try {
+    const { query: dbQuery } = await import("./services/db.js");
+    const [tenantR, statsR, conversasMesR, agentesCntR] = await Promise.all([
+      dbQuery(`SELECT * FROM tenants WHERE id=$1`, [req.tenantId]),
+      dbQuery(`SELECT * FROM stats WHERE tenant_id=$1`, [req.tenantId]),
+      dbQuery(
+        `SELECT COUNT(*) as total FROM conversas
+         WHERE tenant_id=$1 AND criado_em >= date_trunc('month', NOW())`,
+        [req.tenantId]
+      ),
+      dbQuery(`SELECT COUNT(*) as total FROM agentes WHERE tenant_id=$1 AND ativo=true`, [req.tenantId]),
+    ]);
+    const tenant = tenantR.rows[0] || {};
+    const stats  = statsR.rows[0] || {};
+    const conversasMes = parseInt(conversasMesR.rows[0]?.total || 0);
+    const agentesAtivos = parseInt(agentesCntR.rows[0]?.total || 0);
+
+    res.json({
+      ok: true,
+      plano: tenant.plano || "starter",
+      status: tenant.status || "ativo",
+      trial_ate: tenant.trial_ate,
+      limites: {
+        agentes:        { usado: agentesAtivos,  limite: tenant.limite_agentes       || 3 },
+        conversas_mes:  { usado: conversasMes,   limite: tenant.limite_conversas_mes || 500 },
+      },
+      uso_ia: {
+        tokens_input:  stats.total_tokens_input  || 0,
+        tokens_output: stats.total_tokens_output || 0,
+        atendimentos:  stats.total_atendimentos  || 0,
+      },
+    });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SUPER-ADMIN — Gerenciamento de todos os tenants
+// Protegido por role "superadmin" — nunca exposto a admins de tenant
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Middleware: só superadmin passa
+function superAdminOnly(req, res, next) {
+  if (req.role !== "superadmin") {
+    return res.status(403).json({ error: "Acesso restrito ao super-administrador." });
+  }
+  next();
+}
+
+// Planos e seus limites padrão
+const PLANOS_LIMITES = {
+  starter:    { limite_agentes: 3,   limite_conversas_mes: 500,   limite_canais: 2,  valor_plano: 0 },
+  basic:      { limite_agentes: 5,   limite_conversas_mes: 2000,  limite_canais: 3,  valor_plano: 197 },
+  pro:        { limite_agentes: 15,  limite_conversas_mes: 10000, limite_canais: 5,  valor_plano: 497 },
+  enterprise: { limite_agentes: 999, limite_conversas_mes: 999999, limite_canais: 99, valor_plano: 0 },
+};
+
+// ── Login super-admin ─────────────────────────────────────────────────────────
+// O super-admin é um agente especial com role="superadmin" na tabela agentes
+// e tenantId = CITMAX_TENANT_ID. Usa o mesmo /api/login existente.
+// Para criar o primeiro super-admin, rode no banco:
+//   INSERT INTO agentes (id, tenant_id, nome, login, senha_hash, role, ativo)
+//   VALUES (gen_random_uuid(), '00000000-0000-4000-a000-000000000001',
+//           'Super Admin', 'superadmin',
+//           crypt('SENHA_AQUI', gen_salt('bf')), 'superadmin', true);
+// Ou use o endpoint abaixo (apenas em dev / primeiro setup):
+
+adminRouter.post("/api/super-admin/setup", async (req, res) => {
+  // Só funciona se ainda não existe nenhum superadmin
+  try {
+    const { query: dbQ } = await import("./services/db.js");
+    const existe = await dbQ(
+      `SELECT COUNT(*) as c FROM agentes WHERE role='superadmin'`
+    );
+    if (parseInt(existe.rows[0]?.c) > 0) {
+      return res.status(409).json({ error: "Super-admin já existe. Use o login normal." });
+    }
+    const { senha } = req.body;
+    if (!senha || senha.length < 8) {
+      return res.status(400).json({ error: "Senha deve ter pelo menos 8 caracteres." });
+    }
+    const bcrypt = await import("bcryptjs");
+    const hash = await bcrypt.default.hash(senha, 12);
+    await dbQ(
+      `INSERT INTO agentes (id, tenant_id, nome, login, senha_hash, role, ativo)
+       VALUES (gen_random_uuid(), $1, 'Super Admin', 'superadmin', $2, 'superadmin', true)`,
+      [CITMAX_TENANT_ID, hash]
+    );
+    res.json({ ok: true, mensagem: "Super-admin criado. Faça login em /api/login com login=superadmin." });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// ── GET /api/super-admin/tenants — lista todos os tenants com métricas ────────
+adminRouter.get("/api/super-admin/tenants", auth, superAdminOnly, async (req, res) => {
+  try {
+    const { query: dbQ } = await import("./services/db.js");
+    const { page = 1, limit = 20, busca = "", status = "" } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const params = [];
+    let where = "WHERE 1=1";
+    if (busca) {
+      params.push(`%${busca}%`);
+      where += ` AND (t.nome ILIKE $${params.length} OR t.email ILIKE $${params.length} OR t.slug ILIKE $${params.length})`;
+    }
+    if (status) {
+      params.push(status);
+      where += ` AND t.status = $${params.length}`;
+    }
+
+    const [tenantsR, totalR] = await Promise.all([
+      dbQ(`
+        SELECT
+          t.*,
+          (SELECT COUNT(*) FROM agentes a WHERE a.tenant_id = t.id AND a.ativo = true)  AS agentes_ativos,
+          (SELECT COUNT(*) FROM conversas c WHERE c.tenant_id = t.id
+            AND c.criado_em >= date_trunc('month', NOW()))                                AS conversas_mes,
+          (SELECT COUNT(*) FROM conversas c WHERE c.tenant_id = t.id)                   AS conversas_total
+        FROM tenants t
+        ${where}
+        ORDER BY t.criado_em DESC
+        LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `, [...params, parseInt(limit), offset]),
+      dbQ(`SELECT COUNT(*) as total FROM tenants t ${where}`, params),
+    ]);
+
+    res.json({
+      ok: true,
+      tenants: tenantsR.rows,
+      total: parseInt(totalR.rows[0]?.total || 0),
+      page: parseInt(page),
+      limit: parseInt(limit),
+    });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// ── GET /api/super-admin/tenants/:id — detalhe de um tenant ──────────────────
+adminRouter.get("/api/super-admin/tenants/:id", auth, superAdminOnly, async (req, res) => {
+  try {
+    const { query: dbQ } = await import("./services/db.js");
+    const [tenantR, configsR, statsR] = await Promise.all([
+      dbQ(`SELECT * FROM tenants WHERE id=$1`, [req.params.id]),
+      dbQ(`SELECT chave, valor, sensivel FROM tenant_configs WHERE tenant_id=$1 ORDER BY chave`, [req.params.id]),
+      dbQ(`
+        SELECT
+          (SELECT COUNT(*) FROM agentes WHERE tenant_id=$1 AND ativo=true)        AS agentes,
+          (SELECT COUNT(*) FROM conversas WHERE tenant_id=$1)                     AS conversas_total,
+          (SELECT COUNT(*) FROM conversas WHERE tenant_id=$1
+            AND criado_em >= date_trunc('month', NOW()))                           AS conversas_mes,
+          (SELECT COUNT(*) FROM conversas WHERE tenant_id=$1
+            AND status='ativa')                                                    AS conversas_ativas,
+          (SELECT total_tokens_input  FROM stats WHERE tenant_id=$1 LIMIT 1)      AS tokens_input,
+          (SELECT total_tokens_output FROM stats WHERE tenant_id=$1 LIMIT 1)      AS tokens_output
+      `, [req.params.id]),
+    ]);
+
+    if (!tenantR.rows[0]) return res.status(404).json({ error: "Tenant não encontrado." });
+
+    // Mascara valores sensíveis
+    const configs = {};
+    for (const row of configsR.rows) {
+      configs[row.chave] = row.sensivel && row.valor
+        ? { preenchido: true, valor: "••••••" }
+        : { preenchido: !!row.valor, valor: row.valor || "" };
+    }
+
+    res.json({
+      ok: true,
+      tenant: tenantR.rows[0],
+      configs,
+      stats: statsR.rows[0] || {},
+    });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// ── POST /api/super-admin/tenants — cria novo tenant ─────────────────────────
+adminRouter.post("/api/super-admin/tenants", auth, superAdminOnly, async (req, res) => {
+  try {
+    const { query: dbQ } = await import("./services/db.js");
+    const { nome, slug, email, telefone, cnpj, plano = "starter", senha_admin } = req.body;
+
+    if (!nome || !slug || !email) {
+      return res.status(400).json({ error: "nome, slug e email são obrigatórios." });
+    }
+    if (!senha_admin || senha_admin.length < 8) {
+      return res.status(400).json({ error: "senha_admin deve ter pelo menos 8 caracteres." });
+    }
+
+    // Valida slug (apenas letras, números e hífen)
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      return res.status(400).json({ error: "slug deve conter apenas letras minúsculas, números e hífen." });
+    }
+
+    const limites = PLANOS_LIMITES[plano] || PLANOS_LIMITES.starter;
+    const tenantId = randomUUID();
+
+    await withTransaction(async (tx) => {
+      // 1. Cria o tenant
+      await tx.query(`
+        INSERT INTO tenants (id, nome, slug, email, telefone, cnpj, plano, status,
+          limite_agentes, limite_conversas_mes, limite_canais, valor_plano)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,'ativo',$8,$9,$10,$11)
+      `, [tenantId, nome, slug, email, telefone||null, cnpj||null, plano,
+          limites.limite_agentes, limites.limite_conversas_mes,
+          limites.limite_canais, limites.valor_plano]);
+
+      // 2. Cria configs padrão (chaves vazias para o admin preencher)
+      const configsIniciais = [
+        "sgp_url","sgp_token","sgp_app","chatwoot_url","chatwoot_api_token",
+        "chatwoot_account_id","chatwoot_human_team_id","evolution_url",
+        "evolution_api_key","evolution_instancia","wa_access_token",
+        "wa_phone_number_id","wa_verify_token","telegram_bot_token",
+        "anthropic_api_key","openai_api_key","elevenlabs_api_key",
+        "sms_gateway_token",
+      ];
+      const sensíveis = new Set(["sgp_token","chatwoot_api_token","wa_access_token",
+        "wa_verify_token","telegram_bot_token","anthropic_api_key","openai_api_key",
+        "elevenlabs_api_key","sms_gateway_token","evolution_api_key"]);
+      for (const chave of configsIniciais) {
+        await tx.query(
+          `INSERT INTO tenant_configs(tenant_id,chave,valor,sensivel) VALUES($1,$2,NULL,$3) ON CONFLICT DO NOTHING`,
+          [tenantId, chave, sensíveis.has(chave)]
+        );
+      }
+      // Identidade do bot
+      await tx.query(
+        `INSERT INTO tenant_configs(tenant_id,chave,valor,sensivel) VALUES($1,'bot_nome',$2,false) ON CONFLICT DO NOTHING`,
+        [tenantId, nome]
+      );
+      await tx.query(
+        `INSERT INTO tenant_configs(tenant_id,chave,valor,sensivel) VALUES($1,'empresa_nome',$2,false) ON CONFLICT DO NOTHING`,
+        [tenantId, nome]
+      );
+      await tx.query(
+        `INSERT INTO tenant_configs(tenant_id,chave,valor,sensivel) VALUES($1,'empresa_segmento','isp',false) ON CONFLICT DO NOTHING`,
+        [tenantId]
+      );
+
+      // 3. Cria o admin padrão do tenant
+      const bcrypt = await import("bcryptjs");
+      const hash = await bcrypt.default.hash(senha_admin, 10);
+      await tx.query(`
+        INSERT INTO agentes (id, tenant_id, nome, login, senha_hash, role, ativo)
+        VALUES (gen_random_uuid(), $1, $2, 'admin', $3, 'admin', true)
+      `, [tenantId, `Admin ${nome}`, hash]);
+
+      // 4. Cria registro de stats para o tenant (usa próximo id serial)
+      await tx.query(
+        `INSERT INTO stats(id, tenant_id)
+         SELECT COALESCE(MAX(id),0)+1, $1 FROM stats
+         ON CONFLICT DO NOTHING`,
+        [tenantId]
+      ).catch(async () => {
+        // Se ON CONFLICT falhar, tenta sem id (auto-increment futuro)
+        await tx.query(
+          `INSERT INTO stats(tenant_id) SELECT $1 WHERE NOT EXISTS (SELECT 1 FROM stats WHERE tenant_id=$1)`,
+          [tenantId]
+        ).catch(() => {});
+      });
+    });
+
+    registrarAudit(req.agenteId, req.agenteNome, "criar_tenant", `${nome} (${slug})`, req.ip);
+    res.status(201).json({ ok: true, tenantId, mensagem: `Tenant "${nome}" criado. Login: admin / ${senha_admin}` });
+  } catch(e) {
+    if (e.message?.includes("unique") || e.message?.includes("duplicate")) {
+      return res.status(409).json({ error: "Slug ou email já em uso." });
+    }
+    res.status(500).json({ error: safeError(e) });
+  }
+});
+
+// ── PUT /api/super-admin/tenants/:id — edita plano, limites, status ───────────
+adminRouter.put("/api/super-admin/tenants/:id", auth, superAdminOnly, async (req, res) => {
+  try {
+    const { query: dbQ } = await import("./services/db.js");
+    const { invalidarConfigCache } = await import("./services/tenant.js");
+    const {
+      nome, email, telefone, cnpj, plano, status,
+      limite_agentes, limite_conversas_mes, limite_canais,
+      valor_plano, trial_ate,
+    } = req.body;
+
+    const sets = [];
+    const vals = [req.params.id];
+    let i = 2;
+
+    const addSet = (col, val) => {
+      if (val !== undefined) { sets.push(`${col}=$${i++}`); vals.push(val); }
+    };
+
+    addSet("nome", nome);
+    addSet("email", email);
+    addSet("telefone", telefone);
+    addSet("cnpj", cnpj);
+    addSet("status", status);
+    addSet("trial_ate", trial_ate);
+    addSet("valor_plano", valor_plano);
+
+    // Se mudou o plano, aplica os limites padrão (a menos que sejam sobrescritos)
+    if (plano) {
+      addSet("plano", plano);
+      const limites = PLANOS_LIMITES[plano] || {};
+      addSet("limite_agentes",       limite_agentes       ?? limites.limite_agentes);
+      addSet("limite_conversas_mes", limite_conversas_mes ?? limites.limite_conversas_mes);
+      addSet("limite_canais",        limite_canais        ?? limites.limite_canais);
+      addSet("valor_plano",          valor_plano          ?? limites.valor_plano);
+    } else {
+      addSet("limite_agentes",       limite_agentes);
+      addSet("limite_conversas_mes", limite_conversas_mes);
+      addSet("limite_canais",        limite_canais);
+    }
+
+    if (!sets.length) return res.status(400).json({ error: "Nenhum campo para atualizar." });
+    sets.push("atualizado=NOW()");
+
+    await dbQ(`UPDATE tenants SET ${sets.join(",")} WHERE id=$1`, vals);
+    invalidarConfigCache(req.params.id);
+    invalidarCacheLimites(req.params.id);
+    registrarAudit(req.agenteId, req.agenteNome, "editar_tenant", req.params.id, req.ip);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// ── DELETE /api/super-admin/tenants/:id — suspende tenant (soft) ──────────────
+adminRouter.delete("/api/super-admin/tenants/:id", auth, superAdminOnly, async (req, res) => {
+  try {
+    const { query: dbQ } = await import("./services/db.js");
+    const { invalidarConfigCache } = await import("./services/tenant.js");
+
+    // Não permite suspender o tenant CITmax (segurança)
+    if (req.params.id === CITMAX_TENANT_ID) {
+      return res.status(403).json({ error: "Não é possível suspender o tenant principal." });
+    }
+
+    // Soft delete: muda status para "cancelado", não apaga dados
+    await dbQ(
+      `UPDATE tenants SET status='cancelado', atualizado=NOW() WHERE id=$1`,
+      [req.params.id]
+    );
+    invalidarConfigCache(req.params.id);
+    registrarAudit(req.agenteId, req.agenteNome, "cancelar_tenant", req.params.id, req.ip);
+    res.json({ ok: true, mensagem: "Tenant cancelado. Dados preservados." });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// ── GET /api/super-admin/health — status do sistema ─────────────────────────────
+adminRouter.get("/api/super-admin/health", auth, superAdminOnly, async (req, res) => {
+  try {
+    const checks = {};
+    const t0 = Date.now();
+
+    // Banco
+    try {
+      const { getPool } = await import("./services/db.js");
+      const client = await getPool().connect();
+      const r = await client.query("SELECT COUNT(*) as tenants FROM tenants");
+      client.release();
+      checks.db = { status: "ok", tenants: parseInt(r.rows[0]?.tenants || 0), latencia_ms: Date.now() - t0 };
+    } catch(e) {
+      checks.db = { status: "down", erro: e.message };
+    }
+
+    // Memória
+    const mem = process.memoryUsage();
+    const rssMB = Math.round(mem.rss / 1024 / 1024);
+    checks.memoria = {
+      status: rssMB < 400 ? "ok" : rssMB < 600 ? "aviso" : "critico",
+      rss_mb: rssMB,
+      heap_mb: Math.round(mem.heapUsed / 1024 / 1024),
+    };
+
+    // Ambiente
+    checks.env = {
+      database_url:  !!process.env.DATABASE_URL,
+      jwt_secret:    !!process.env.JWT_SECRET,
+      anthropic_key: !!process.env.ANTHROPIC_API_KEY,
+      node_env:      process.env.NODE_ENV || "development",
+    };
+
+    // Processo
+    checks.processo = {
+      uptime_seg:   Math.round(process.uptime()),
+      pid:          process.pid,
+      node_version: process.version,
+    };
+
+    const allOk = checks.db?.status === "ok" && checks.memoria?.status !== "critico";
+    res.json({
+      ok: true,
+      status: allOk ? "ok" : checks.db?.status !== "ok" ? "degraded" : "aviso",
+      checks,
+      duracao_ms: Date.now() - t0,
+      ts: Date.now(),
+    });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+// ── GET /api/super-admin/stats — métricas globais do SaaS ────────────────────
+adminRouter.get("/api/super-admin/stats", auth, superAdminOnly, async (req, res) => {
+  try {
+    const { query: dbQ } = await import("./services/db.js");
+    const r = await dbQ(`
+      SELECT
+        (SELECT COUNT(*) FROM tenants)                                          AS total_tenants,
+        (SELECT COUNT(*) FROM tenants WHERE status='ativo')                    AS tenants_ativos,
+        (SELECT COUNT(*) FROM tenants WHERE status='trial')                    AS tenants_trial,
+        (SELECT COUNT(*) FROM tenants WHERE status='cancelado')                AS tenants_cancelados,
+        (SELECT COUNT(*) FROM agentes  WHERE ativo=true)                       AS total_agentes,
+        (SELECT COUNT(*) FROM conversas
+          WHERE criado_em >= date_trunc('month', NOW()))                       AS conversas_mes,
+        (SELECT COALESCE(SUM(total_tokens_input),0)  FROM stats)               AS tokens_input_total,
+        (SELECT COALESCE(SUM(total_tokens_output),0) FROM stats)               AS tokens_output_total,
+        (SELECT COALESCE(SUM(valor_plano),0) FROM tenants WHERE status='ativo') AS mrr
+    `);
+    res.json({ ok: true, stats: r.rows[0] });
+  } catch(e) { res.status(500).json({ error: safeError(e) }); }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ONBOARDING SELF-SERVICE — Cadastro público de novo tenant
+// Sem autenticação — qualquer pessoa pode se cadastrar
+// Rate limiting: máx 3 cadastros por hora por IP
+// ══════════════════════════════════════════════════════════════════════════════
+
+const onboardingLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hora
+  max: 3,
+  message: { error: "Muitas tentativas de cadastro. Tente novamente em 1 hora." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// GET /api/onboarding/planos — retorna os planos disponíveis (público)
+adminRouter.get("/api/onboarding/planos", (_req, res) => {
+  res.json({
+    ok: true,
+    planos: [
+      {
+        id: "starter",
+        nome: "Starter",
+        descricao: "Para começar",
+        valor: 0,
+        trial_dias: 14,
+        limites: { agentes: 3, conversas_mes: 500, canais: 2 },
+        features: ["3 agentes", "500 conversas/mês", "2 canais", "WhatsApp + 1 canal", "Suporte por email"],
+        destaque: false,
+      },
+      {
+        id: "basic",
+        nome: "Basic",
+        descricao: "Para pequenas equipes",
+        valor: 197,
+        trial_dias: 0,
+        limites: { agentes: 5, conversas_mes: 2000, canais: 3 },
+        features: ["5 agentes", "2.000 conversas/mês", "3 canais", "WhatsApp + Instagram + Telegram", "Editor de fluxos visuais", "Suporte prioritário"],
+        destaque: false,
+      },
+      {
+        id: "pro",
+        nome: "Pro",
+        descricao: "Para operações em crescimento",
+        valor: 497,
+        trial_dias: 0,
+        limites: { agentes: 15, conversas_mes: 10000, canais: 5 },
+        features: ["15 agentes", "10.000 conversas/mês", "5 canais", "Todos os canais", "Monitor de rede", "ACS/TR-069", "Relatórios avançados", "Suporte via WhatsApp"],
+        destaque: true,
+      },
+    ],
+  });
+});
+
+// POST /api/onboarding/cadastrar — cria tenant via self-service
+adminRouter.post("/api/onboarding/cadastrar", onboardingLimiter, async (req, res) => {
+  try {
+    const { nome, slug, email, telefone, cnpj, plano = "starter", senha_admin } = req.body;
+
+    // Validações
+    if (!nome?.trim())  return res.status(400).json({ error: "Nome da empresa é obrigatório." });
+    if (!slug?.trim())  return res.status(400).json({ error: "Slug é obrigatório." });
+    if (!email?.trim()) return res.status(400).json({ error: "E-mail é obrigatório." });
+    if (!senha_admin || senha_admin.length < 8) {
+      return res.status(400).json({ error: "Senha deve ter pelo menos 8 caracteres." });
+    }
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      return res.status(400).json({ error: "Slug deve conter apenas letras minúsculas, números e hífen." });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "E-mail inválido." });
+    }
+    if (!['starter', 'basic', 'pro'].includes(plano)) {
+      return res.status(400).json({ error: "Plano inválido." });
+    }
+
+    const limites = PLANOS_LIMITES[plano] || PLANOS_LIMITES.starter;
+    const tenantId = randomUUID();
+    const trialAte = plano === 'starter'
+      ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+
+    await withTransaction(async (tx) => {
+      // 1. Cria o tenant
+      await tx.query(`
+        INSERT INTO tenants (id, nome, slug, email, telefone, cnpj, plano, status,
+          limite_agentes, limite_conversas_mes, limite_canais, valor_plano, trial_ate)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      `, [
+        tenantId, nome.trim(), slug.trim(), email.trim().toLowerCase(),
+        telefone||null, cnpj||null, plano,
+        plano === 'starter' ? 'trial' : 'ativo',
+        limites.limite_agentes, limites.limite_conversas_mes,
+        limites.limite_canais, limites.valor_plano,
+        trialAte,
+      ]);
+
+      // 2. Configs padrão
+      const configsDefault = [
+        ["bot_nome",        nome.trim(), false],
+        ["empresa_nome",    nome.trim(), false],
+        ["empresa_segmento","isp",       false],
+      ];
+      for (const [chave, valor, sensivel] of configsDefault) {
+        await tx.query(
+          `INSERT INTO tenant_configs(tenant_id,chave,valor,sensivel) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+          [tenantId, chave, valor, sensivel]
+        );
+      }
+
+      // 3. Admin inicial do tenant
+      const bcrypt = await import("bcryptjs");
+      const hash = await bcrypt.default.hash(senha_admin, 10);
+      await tx.query(`
+        INSERT INTO agentes (id, tenant_id, nome, login, senha_hash, role, ativo)
+        VALUES (gen_random_uuid(), $1, $2, 'admin', $3, 'admin', true)
+      `, [tenantId, `Admin ${nome.trim()}`, hash]);
+
+      // 4. Stats inicial
+      await tx.query(
+        `INSERT INTO stats(id, tenant_id) SELECT COALESCE(MAX(id),0)+1, $1 FROM stats ON CONFLICT DO NOTHING`,
+        [tenantId]
+      ).catch(() => {});
+    });
+
+    console.log(`✅ Onboarding: novo tenant "${nome}" (${slug}) criado — plano ${plano}`);
+
+    res.status(201).json({
+      ok: true,
+      tenantId,
+      slug,
+      plano,
+      trial_ate: trialAte,
+      mensagem: `Conta criada com sucesso! Acesse o painel com login "admin".`,
+      acesso: `/admin?tenant=${slug}`,
+    });
+  } catch(e) {
+    if (e.message?.includes("unique") || e.message?.includes("duplicate") ||
+        e.message?.includes("já existe") || e.code === '23505') {
+      // Identifica qual campo duplicou
+      if (e.message?.includes("slug")) {
+        return res.status(409).json({ error: "Este slug já está em uso. Tente outro nome." });
+      }
+      if (e.message?.includes("email")) {
+        return res.status(409).json({ error: "Este e-mail já está cadastrado." });
+      }
+      return res.status(409).json({ error: "Slug ou e-mail já em uso." });
+    }
+    console.error("❌ Onboarding erro:", e.message);
+    res.status(500).json({ error: "Erro ao criar conta. Tente novamente." });
+  }
+});
+
+// GET /api/onboarding/verificar-slug/:slug — verifica disponibilidade do slug (público)
+adminRouter.get("/api/onboarding/verificar-slug/:slug", async (req, res) => {
+  try {
+    const slug = req.params.slug.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (!slug || slug.length < 3) {
+      return res.json({ disponivel: false, motivo: "Slug deve ter pelo menos 3 caracteres." });
+    }
+    const { query: dbQ } = await import("./services/db.js");
+    const r = await dbQ(`SELECT id FROM tenants WHERE slug=$1`, [slug]);
+    res.json({ disponivel: r.rows.length === 0, slug });
+  } catch(e) {
+    res.json({ disponivel: false, motivo: "Erro ao verificar." });
+  }
+});
+
 if (hasReact) {
   adminRouter.get("*", (req, res) => {
     // Skip API/asset paths

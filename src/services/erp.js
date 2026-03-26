@@ -1,41 +1,57 @@
 /**
- * Serviço de integração com o SGP da CITmax
- * Extraído do workflow n8n: 01. Secretária v2
- * Token SGP: 05ffb2b9-8d63-406d-8467-d471b82e0c35
+ * Serviço de integração com o ERP/SGP — multi-tenant
+ *
+ * Cada tenant tem sua própria URL, app e token do SGP configurados
+ * em tenant_configs. Fallback para variáveis de ambiente (compatibilidade CITmax).
  */
+import { getTenantConfig, CITMAX_TENANT_ID } from "./tenant.js";
 
-const SGP_URL = "https://citrn.sgp.net.br";
-const SGP_APP = "n8n";
-const SGP_TOKEN = "05ffb2b9-8d63-406d-8467-d471b82e0c35";
-const UA = "CITmax-Atendimento/1.0 (contato@citmax.com.br)";
-
-function formBody(params = {}) {
-  return new URLSearchParams({ app: SGP_APP, token: SGP_TOKEN, ...params }).toString();
+// ── Configs por tenant (cache interno via getTenantConfig) ─────────────────
+async function getSgpConfig(tenantId = CITMAX_TENANT_ID) {
+  const [url, app, token, ua] = await Promise.all([
+    getTenantConfig(tenantId, "sgp_url"),
+    getTenantConfig(tenantId, "sgp_app"),
+    getTenantConfig(tenantId, "sgp_token"),
+    getTenantConfig(tenantId, "sgp_user_agent"),
+  ]);
+  return {
+    url:   url   || process.env.SGP_URL   || "https://citrn.sgp.net.br",
+    app:   app   || process.env.SGP_APP   || "n8n",
+    token: token || process.env.SGP_TOKEN || "05ffb2b9-8d63-406d-8467-d471b82e0c35",
+    ua:    ua    || `Maxxi-Atendimento/1.0`,
+  };
 }
 
-export async function sgpPostRaw(path, params = {}) {
-  const res = await fetch(`${SGP_URL}${path}`, {
+function formBody(cfg, params = {}) {
+  return new URLSearchParams({ app: cfg.app, token: cfg.token, ...params }).toString();
+}
+
+export async function sgpPostRaw(path, params = {}, tenantId = CITMAX_TENANT_ID) {
+  const cfg = await getSgpConfig(tenantId);
+  const res = await fetch(`${cfg.url}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formBody(params),
+    body: formBody(cfg, params),
   });
   if (!res.ok) throw new Error(`SGP ${res.status} em ${path}`);
   return res.json();
 }
 
-async function sgpPost(path, params = {}) {
-  const res = await fetch(`${SGP_URL}${path}`, {
+async function sgpPost(path, params = {}, tenantId = CITMAX_TENANT_ID) {
+  const cfg = await getSgpConfig(tenantId);
+  const res = await fetch(`${cfg.url}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formBody(params),
+    body: formBody(cfg, params),
   });
   if (!res.ok) throw new Error(`SGP ${res.status} em ${path}`);
   return res.json();
 }
 
-async function sgpGet(path, params = {}) {
-  const qs = new URLSearchParams({ app: SGP_APP, token: SGP_TOKEN, ...params }).toString();
-  const res = await fetch(`${SGP_URL}${path}?${qs}`, {
+async function sgpGet(path, params = {}, tenantId = CITMAX_TENANT_ID) {
+  const cfg = await getSgpConfig(tenantId);
+  const qs = new URLSearchParams({ app: cfg.app, token: cfg.token, ...params }).toString();
+  const res = await fetch(`${cfg.url}${path}?${qs}`, {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`SGP ${res.status} em ${path}`);

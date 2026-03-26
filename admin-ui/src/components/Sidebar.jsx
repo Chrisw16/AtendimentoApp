@@ -5,7 +5,7 @@ import {
   LayoutDashboard, FileText, MessageSquare, Users,
   Zap, Radio, Bell, RefreshCcw, Edit3, Star, Clock, ClipboardList,
   Plug, Key, Ticket, ChevronLeft, ChevronRight, Home, UserPlus, MapPin, Brain, Map, GitBranch, Activity, Router, Send,
-} from 'lucide-react';
+, Settings , Shield } from 'lucide-react';
 
 const ADMIN_NAV = [
   { group: 'Visão geral', items: [
@@ -20,6 +20,8 @@ const ADMIN_NAV = [
     { to: '/gateway-sms', Icon: Send, label: 'Gateway SMS' },
     { to: '/wa-templates', Icon: FileText, label: 'WA Templates' },
     { to: '/wa-flows',     Icon: FileText, label: 'WA Flows' },
+    { to: '/configuracoes', Icon: Settings,  label: 'Configurações' },
+    { to: '/super-admin',   Icon: Shield,    label: 'Super Admin',    superadminOnly: true },
     { to: '/agentes', Icon: Users, label: 'Agentes' },
     { to: '/respostas', Icon: Zap, label: 'Resp. Rápidas' },
   ]},
@@ -59,7 +61,11 @@ const AGENTE_NAV = [
 
 export default function Sidebar() {
   const { chatUnread, role, sidebarCollapsed, toggleSidebar } = useStore();
-  const nav = role === 'admin' ? ADMIN_NAV : AGENTE_NAV;
+  // superadmin usa ADMIN_NAV completo; admin usa ADMIN_NAV sem itens superadminOnly
+  const navBase = role === 'admin' || role === 'superadmin' ? ADMIN_NAV : AGENTE_NAV;
+  const nav = role === 'superadmin'
+    ? navBase
+    : navBase.map(g => ({ ...g, items: g.items.filter(i => !i.superadminOnly) }));
 
   return (
     <aside className={`sidebar${sidebarCollapsed ? ' sidebar--collapsed' : ''}`}>

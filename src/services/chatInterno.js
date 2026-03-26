@@ -4,6 +4,7 @@
  * Status: "ia" (IA respondendo), "aguardando" (sem resposta), "ativa" (com agente), "encerrada"
  */
 import { query, kvGet, kvSet } from "./db.js";
+import { verificarLimite, LimitError } from "./limites.js";
 
 // Tabela de mídias temporárias (imagens/docs do WhatsApp — TTL 7 dias)
 query(`CREATE TABLE IF NOT EXISTS chat_midias (
@@ -97,7 +98,7 @@ export async function resolverConvId(baseConvId, telefone, canal) {
   logger.info('Novo protocolo para ' + telefone + ': ' + novoId);
   return novoId;
 }
-export async function registrarMensagem({ convId, telefone, nome, conteudo, canal, accountId, statusInicial = "ia", sentimento }) {
+export async function registrarMensagem({ convId, telefone, nome, conteudo, canal, accountId, statusInicial = "ia", sentimento, tenantId }) {
   const existing = await getConversa(convId);
   // Ignora mensagens de reação que chegaram como texto
   if (!conteudo || conteudo === "[reaction]" || conteudo === null) return;
@@ -118,6 +119,18 @@ export async function registrarMensagem({ convId, telefone, nome, conteudo, cana
       [convId, JSON.stringify(mensagens), Date.now(), naoLidas]
     );
   } else {
+    // Verifica limite mensal de conversas apenas ao criar nova conversa
+    if (tenantId) {
+      try {
+        await verificarLimite(tenantId, "conversas_mes");
+      } catch(e) {
+        if (e instanceof LimitError) {
+          // Log para visibilidade, mas não derruba o atendimento — silencia para o cliente
+          console.warn(`⚠️ Limite conversas_mes tenant ${tenantId}: ${e.message}`);
+          // Ainda cria a conversa para não perder o cliente — apenas registra
+        }
+      }
+    }
     await query(
       `INSERT INTO conversas(id,telefone,nome,canal,status,account_id,mensagens,ultima_msg,nao_lidas)
        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,0)`,
@@ -324,8 +337,10 @@ export async function atualizarAgente(id, dados) {
   await query(`UPDATE agentes SET ${fields.join(",")} WHERE id=$1`, params);
 }
 export async function removerAgente(id) { await query(`DELETE FROM agentes WHERE id=$1`, [id]); }
-export async function loginAgente(login, senha) {
-  const r = await query(`SELECT * FROM agentes WHERE login=$1 AND ativo=true`, [login]);
+export async function loginAgente(login, senha, tenantId = null) {
+  const { CITMAX_TENANT_ID } = await import("./db.js");
+  const tid = tenantId || CITMAX_TENANT_ID;
+  const r = await query(`SELECT * FROM agentes WHERE tenant_id=$1 AND login=$2 AND ativo=true`, [tid, login]);
   const ag = r.rows[0];
   if (!ag) return null;
   // Tenta bcrypt primeiro

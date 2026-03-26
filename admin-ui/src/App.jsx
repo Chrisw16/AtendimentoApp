@@ -118,6 +118,8 @@ function AppLayout() {
                 <Route path="/gateway-sms" element={<AdminOnly><GatewaySMS /></AdminOnly>} />
                 <Route path="/wa-templates" element={<AdminOnly><WaTemplates /></AdminOnly>} />
                 <Route path="/wa-flows"     element={<AdminOnly><WaFlows /></AdminOnly>} />
+                <Route path="/configuracoes" element={<AdminOnly><Configuracoes /></AdminOnly>} />
+                <Route path="/super-admin"   element={<SuperAdmin />} />
                 <Route path="*" element={<Navigate to={defaultRoute} replace />} />
               </Routes>
             </Suspense>
@@ -132,6 +134,17 @@ function AppLayout() {
 
 export default function App() {
   const isLoggedIn = useStore(s => s.isLoggedIn);
+
+  // Rota pública — acessível sem login
+  if (window.location.pathname === '/admin/onboarding' ||
+      window.location.pathname === '/onboarding') {
+    return (
+      <Suspense fallback={<Loading />}>
+        <Onboarding />
+      </Suspense>
+    );
+  }
+
   return (
     <Suspense fallback={<Loading />}>
       {isLoggedIn ? <AppLayout /> : <Login />}

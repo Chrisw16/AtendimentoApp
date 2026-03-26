@@ -4,7 +4,7 @@
 import { registrarMensagem, registrarRespostaIA, resolverConvId } from "../services/chatInterno.js";
 import { iniciarReativacao, cancelarReativacao } from "../services/reativacao.js";
 import { verificarAlerta } from "../services/alertas.js";
-import { runMaxxi }                         from "../agent.js";
+import { dispatch }                         from "../webhook.js";
 import { dentroDoHorario, getHorarios }     from "../services/crm.js";
 import { getCanal }                         from "../services/canais.js";
 import { buscarMemoria, buscarSessao }      from "../services/memoria.js";
@@ -129,51 +129,65 @@ export async function handleTelegramWebhook(req, res) {
       body: JSON.stringify({ chat_id: chatId, action: "typing" }),
     }).catch(() => {});
 
-    // Roda a IA
+    // Roda a IA via dispatch() — roteador único (motor-fluxo ou runMaxxi)
     const memoria   = await buscarMemoria(chatId);
     const sessao    = await buscarSessao(chatId);
     const protocolo = `TG-${Date.now().toString(36).toUpperCase()}`;
 
-    const result = await runMaxxi({
-      accountId: null,
+    const result = await dispatch({
+      telefone:       chatId,
+      mensagem:       conteudo,
       conversationId: convId,
-      messageId: message.message_id,
-      content: conteudo,
-      sender: { name: nome, phone_number: chatId },
-      channel: "telegram",
-      protocolo, memoria, telefone: chatId, sessao,
+      accountId:      null,
+      canal:          "telegram",
+      sessao,
+      memoria,
+      protocolo,
+      messageId:      message.message_id,
+      sender:         { name: nome, phone_number: chatId },
+      enviarFn: async (texto) => {
+        await registrarRespostaIA(convId, texto).catch(() => {});
+        await sendTelegram(chatId, texto, token);
+      },
+      enviarBotoesFn: async (corpo, _botoes) => {
+        await registrarRespostaIA(convId, corpo).catch(() => {});
+        await sendTelegram(chatId, corpo, token);
+      },
+      enviarListaFn: async (corpo, _label, _secoes) => {
+        await registrarRespostaIA(convId, corpo).catch(() => {});
+        await sendTelegram(chatId, corpo, token);
+      },
+      transferirFn: async (motivo) => {
+        const { transferirParaHumano } = await import("../services/handoff.js");
+        await transferirParaHumano(convId, null, motivo);
+      },
     });
 
+    // Motor de fluxo já enviou via enviarFn — só trata reply do runMaxxi
     if (result?.reply) {
       await registrarRespostaIA(convId, result.reply);
       await sendTelegram(chatId, result.reply, token);
-      // Inicia reativação
-      if (!result?.handoff && !result?.resolve) {
-        iniciarReativacao({
-          convId, canal: "telegram", telefone: chatId, accountId: null,
-          enviarFn: async (_cId, _canal, tel, _accId, msg) => {
-            await sendTelegram(tel, msg, token);
-          },
-        }).catch(() => {});
-      }
     }
 
-    // Handoff → envia aviso ao cliente e coloca na fila aguardando
+    // Inicia reativação se conversa continua
+    if (!result?.handoff && !result?.resolve) {
+      iniciarReativacao({
+        convId, canal: "telegram", telefone: chatId, accountId: null,
+        enviarFn: async (_cId, _canal, tel, _accId, msg) => {
+          await sendTelegram(tel, msg, token);
+        },
+      }).catch(() => {});
+    }
+
+    // Handoff → envia aviso ao cliente se runMaxxi não enviou
     if (result?.handoff) {
       const { transferirParaHumano } = await import("../services/handoff.js");
-      // Envia mensagem de confirmação se IA não enviou ainda
       if (!result?.reply) {
         const msgAviso = "⏳ Transferindo para um atendente humano... Aguarde um momento, em breve você será atendido!";
         await registrarRespostaIA(convId, msgAviso).catch(() => {});
         await sendTelegram(chatId, msgAviso, token).catch(() => {});
       }
       await transferirParaHumano(convId, null, "Transferido pela IA");
-    }
-
-    // Salva sessão
-    if (result?.sessaoAtualizada) {
-      const { salvarSessao } = await import("../services/memoria.js");
-      await salvarSessao(chatId, result.sessaoAtualizada);
     }
 
   } catch (e) {

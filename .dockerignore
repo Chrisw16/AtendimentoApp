@@ -1,7 +1,0 @@
-node_modules
-admin-ui/node_modules
-admin-ui/dist
-admin-dist
-.git
-.claude
-*.zip
