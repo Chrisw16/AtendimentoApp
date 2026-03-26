@@ -42,7 +42,7 @@ RUN apk add --no-cache iputils curl
 
 # Instala deps do backend primeiro (layer cache)
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev --prefer-offline
+RUN npm install --omit=dev
 
 # Copia o código do backend
 COPY src/ ./src/
