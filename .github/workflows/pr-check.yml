@@ -1,0 +1,105 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# PR Check — Verificações rápidas em Pull Requests
+# Roda em paralelo com o ci-cd.yml, focado em feedback rápido
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  # Verifica arquivos críticos do SaaS
+  saas-integrity:
+    name: Integridade do SaaS
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verificar arquivos obrigatórios do SaaS
+        run: |
+          echo "Verificando arquivos obrigatórios da Fase 1-4..."
+          MISSING=0
+          FILES=(
+            "src/services/tenant.js"
+            "src/services/limites.js"
+            "src/services/conv-state.js"
+            "src/admin.js"
+            "migrate-saas-tenancy.js"
+            "admin-ui/src/pages/SuperAdmin.jsx"
+            "admin-ui/src/pages/Configuracoes.jsx"
+            "admin-ui/src/pages/Onboarding.jsx"
+            ".github/workflows/ci-cd.yml"
+          )
+          for f in "${FILES[@]}"; do
+            if [ -f "$f" ]; then
+              echo "  ✅ $f"
+            else
+              echo "  ❌ MISSING: $f"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          if [ $MISSING -gt 0 ]; then
+            echo "❌ $MISSING arquivo(s) obrigatório(s) ausente(s)"
+            exit 1
+          fi
+          echo "✅ Todos os arquivos obrigatórios presentes"
+
+      - name: Verificar que tenant_id está nas queries críticas
+        run: |
+          echo "Verificando isolamento multi-tenant..."
+          # Garante que memoria.js usa tenant_id
+          grep -q "tenant_id" src/services/memoria.js && echo "✅ memoria.js" || (echo "❌ memoria.js sem tenant_id" && exit 1)
+          # Garante que erp.js usa getTenantConfig
+          grep -q "getTenantConfig" src/services/erp.js && echo "✅ erp.js" || (echo "❌ erp.js sem getTenantConfig" && exit 1)
+          # Garante que dispatch() está em webhook.js
+          grep -q "export async function dispatch" src/webhook.js && echo "✅ webhook.js dispatch" || (echo "❌ dispatch() não encontrado" && exit 1)
+          echo "✅ Isolamento multi-tenant verificado"
+
+      - name: Verificar que withTransaction é usado nas operações críticas
+        run: |
+          echo "Verificando transações..."
+          COUNT=$(grep -c "withTransaction" src/admin.js || echo 0)
+          echo "  withTransaction em admin.js: $COUNT ocorrências"
+          if [ "$COUNT" -lt 5 ]; then
+            echo "❌ Número insuficiente de withTransaction em admin.js (esperado >= 5, encontrado $COUNT)"
+            exit 1
+          fi
+          echo "✅ Transações OK"
+
+  # Build rápido para PRs (sem push de imagem)
+  build-check:
+    name: Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: admin-ui/package-lock.json
+
+      - name: Instalar e build frontend
+        working-directory: admin-ui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Verificar tamanho do bundle
+        working-directory: admin-ui
+        run: |
+          BUNDLE_SIZE=$(du -sh dist/ | cut -f1)
+          echo "📦 Tamanho do bundle: $BUNDLE_SIZE"
+          # Avisa se bundle > 5MB (não falha o PR, só avisa)
+          BUNDLE_BYTES=$(du -sb dist/ | cut -f1)
+          if [ "$BUNDLE_BYTES" -gt 5242880 ]; then
+            echo "⚠️ Bundle grande (${BUNDLE_SIZE}). Considere otimizar."
+          else
+            echo "✅ Tamanho OK"
+          fi

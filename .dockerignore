@@ -1,0 +1,32 @@
+# Deps (instaladas no build)
+node_modules
+admin-ui/node_modules
+
+# Builds (gerados nos stages)
+admin-ui/dist
+admin-dist
+
+# Git
+.git
+.gitignore
+
+# Dev
+.env
+*.local
+.claude
+
+# Logs
+logs/
+*.log
+
+# Arquivos temporários
+*.zip
+*.tar.gz
+tmp/
+
+# CI/CD (não precisa na imagem)
+.github/
+
+# Docs
+*.md
+!README-SAAS.md

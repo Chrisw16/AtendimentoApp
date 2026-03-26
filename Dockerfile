@@ -47,8 +47,6 @@ RUN npm ci --omit=dev --prefer-offline
 # Copia o código do backend
 COPY src/ ./src/
 COPY server.js ecosystem.config.cjs migrate-saas-tenancy.js ./
-COPY .env.example ./
-
 # Copia o build do React do stage 1
 COPY --from=frontend /build/dist ./admin-dist
 
