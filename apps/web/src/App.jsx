@@ -23,6 +23,7 @@ const OrdensServico = lazy(() => import('./pages/OrdensServico'));
 const Cobertura   = lazy(() => import('./pages/Cobertura'));
 const MonitorRede = lazy(() => import('./pages/MonitorRede'));
 const Configuracoes = lazy(() => import('./pages/Configuracoes'));
+const Analytics     = lazy(() => import('./pages/stubs.jsx').then(m => ({ default: m.Analytics })));
 
 
 const Loading = () => (
