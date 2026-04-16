@@ -40,7 +40,11 @@ function PrivateRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  const role = useStore(s => s.role);
+  const { role, token } = useStore(s => ({ role: s.role, token: s.token }));
+  // Se não tem token, PrivateRoute já cuida do redirect
+  if (!token) return null;
+  // role pode ainda não ter sido hidratado do localStorage — aguarda
+  if (role === null || role === undefined) return <div className={styles.loading}><span className="spinner spinner-lg" /></div>;
   if (role !== 'admin') return <Navigate to="/chat" replace />;
   return children;
 }

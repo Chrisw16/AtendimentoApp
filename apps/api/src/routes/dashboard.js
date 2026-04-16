@@ -1,53 +1,99 @@
 import { Router } from 'express';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler } from '../middlewares/errorHandler.js';
-import { getDb }        from '../config/db.js';
+import { getDb } from '../config/db.js';
 
-// ── DASHBOARD ────────────────────────────────────────────────────
 export const dashboardRouter = Router();
 dashboardRouter.use(authMiddleware, adminMiddleware);
 
-// GET /api/dashboard/kpis
+// GET /api/dashboard/kpis?range=30d
 dashboardRouter.get('/kpis', asyncHandler(async (req, res) => {
-  const db = getDb();
+  const db   = getDb();
+  const days = req.query.range === '7d' ? 7 : req.query.range === '90d' ? 90 : 30;
 
-  const [total, abertas, emAtendimento, encerradas, mediaNps] = await Promise.all([
-    db('conversas').count('id as n').first(),
-    db('conversas').whereIn('status', ['ia','aguardando']).count('id as n').first(),
-    db('conversas').where('status', 'ativa').count('id as n').first(),
-    db('conversas').where('status', 'encerrada')
-      .whereRaw(`DATE(atualizado) = CURRENT_DATE`).count('id as n').first(),
-    db('avaliacoes').avg('nota as media').first(),
+  const since = `NOW() - INTERVAL '${days} days'`;
+
+  const [total, porStatus, nps, satisfacao, canais] = await Promise.all([
+    // Total e breakdown de status
+    db('conversas').whereRaw(`criado_em >= ${since}`)
+      .select(db.raw(`
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status = 'encerrada') as encerradas,
+        COUNT(*) FILTER (WHERE status IN ('ia','aguardando','ativa')) as ativas,
+        COUNT(*) FILTER (WHERE agente_id IS NOT NULL) as com_humano,
+        COUNT(*) FILTER (WHERE status = 'aguardando') as aguardando
+      `)).first(),
+
+    // Resolvidas só pela IA (encerradas sem agente humano)
+    db('conversas').whereRaw(`criado_em >= ${since}`)
+      .where('status', 'encerrada')
+      .whereNull('agente_id')
+      .count('id as n').first(),
+
+    // NPS
+    db('satisfacao').whereRaw(`criado_em >= ${since}`)
+      .select(db.raw(`
+        ROUND(AVG(nota), 1) as media,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE nota >= 9) as promotores,
+        COUNT(*) FILTER (WHERE nota BETWEEN 7 AND 8) as neutros,
+        COUNT(*) FILTER (WHERE nota <= 6) as detratores
+      `)).first(),
+
+    // Avaliações (tabela alternativa)
+    db('avaliacoes').whereRaw(`criado_em >= ${since}`)
+      .avg('nota as media').count('id as total').first(),
+
+    // Por canal
+    db('conversas').whereRaw(`criado_em >= ${since}`)
+      .select('canal').count('id as n').groupBy('canal'),
   ]);
 
-  // Tempo médio de primeira resposta (em minutos)
-  const tmo = await db('conversas')
-    .whereNotNull('aguardando_desde')
-    .whereRaw(`DATE(criado_em) = CURRENT_DATE`)
-    .avg(db.raw(`EXTRACT(EPOCH FROM (atualizado - aguardando_desde))/60 as tmo`))
-    .first();
+  const totalN      = Number(total?.total || 0);
+  const encerradas  = Number(total?.encerradas || 0);
+  const comHumano   = Number(total?.com_humano || 0);
+  const soIA        = Number(porStatus?.n || 0);
+  const pctIA       = totalN > 0 ? Math.round((soIA / totalN) * 100) : 0;
+
+  // NPS Score (promotores - detratores) / total * 100
+  const npsTotal = Number(nps?.total || 0);
+  const promotores  = Number(nps?.promotores || 0);
+  const detratores  = Number(nps?.detratores || 0);
+  const npsScore    = npsTotal > 0 ? Math.round(((promotores - detratores) / npsTotal) * 100) : null;
+  const npsLabel    = npsScore === null ? null : npsScore >= 75 ? 'Excelente' : npsScore >= 50 ? 'Ótimo' : npsScore >= 25 ? 'Bom' : npsScore >= 0 ? 'Regular' : 'Crítico';
 
   res.json({
-    total_conversas:  Number(total?.n  || 0),
-    abertas:          Number(abertas?.n || 0),
-    em_atendimento:   Number(emAtendimento?.n || 0),
-    encerradas_hoje:  Number(encerradas?.n || 0),
-    nps_medio:        Number(mediaNps?.media || 0).toFixed(1),
-    tmo_minutos:      Number(tmo?.tmo || 0).toFixed(1),
+    periodo_dias:     days,
+    total:            totalN,
+    encerradas,
+    ativas:           Number(total?.ativas || 0),
+    aguardando:       Number(total?.aguardando || 0),
+    com_humano:       comHumano,
+    so_ia:            soIA,
+    pct_ia:           pctIA,
+    nps_score:        npsScore,
+    nps_label:        npsLabel,
+    nps_total_respostas: npsTotal,
+    nps_promotores:   promotores,
+    nps_neutros:      Number(nps?.neutros || 0),
+    nps_detratores:   detratores,
+    canais: canais.map(r => ({ canal: r.canal || 'desconhecido', total: Number(r.n) })),
   });
 }));
 
-// GET /api/dashboard/atendimentos
-dashboardRouter.get('/atendimentos', asyncHandler(async (req, res) => {
-  const { range = '7d' } = req.query;
-  const db    = getDb();
-  const days  = range === '30d' ? 30 : range === '90d' ? 90 : 7;
+// GET /api/dashboard/serie?range=30d — série temporal
+dashboardRouter.get('/serie', asyncHandler(async (req, res) => {
+  const db   = getDb();
+  const days = req.query.range === '7d' ? 7 : req.query.range === '90d' ? 90 : 30;
 
   const rows = await db('conversas')
     .whereRaw(`criado_em >= NOW() - INTERVAL '${days} days'`)
-    .select(db.raw(`DATE(criado_em) as data`))
-    .count('id as total')
-    .where('status', 'encerrada')
+    .select(db.raw(`
+      DATE(criado_em) as data,
+      COUNT(*) as total,
+      COUNT(*) FILTER (WHERE agente_id IS NOT NULL) as com_humano,
+      COUNT(*) FILTER (WHERE status = 'encerrada' AND agente_id IS NULL) as so_ia
+    `))
     .groupByRaw('DATE(criado_em)')
     .orderBy('data');
 
@@ -59,8 +105,7 @@ dashboardRouter.get('/agentes', asyncHandler(async (req, res) => {
   const db = getDb();
   const rows = await db('agentes')
     .leftJoin('conversas', q =>
-      q.on('conversas.agente_id', 'agentes.id')
-       .andOnVal('conversas.status', 'ativa')
+      q.on('conversas.agente_id', 'agentes.id').andOnVal('conversas.status', 'ativa')
     )
     .select([
       'agentes.id', 'agentes.nome', 'agentes.avatar',
@@ -69,40 +114,7 @@ dashboardRouter.get('/agentes', asyncHandler(async (req, res) => {
     ])
     .where('agentes.ativo', true)
     .groupBy('agentes.id')
-    .orderBy('agentes.online', 'desc');
+    .orderByRaw('agentes.online DESC, conversas_ativas DESC');
 
   res.json(rows);
-}));
-
-// ── WEBHOOKS ─────────────────────────────────────────────────────
-export const webhookRouter = Router();
-
-// Webhook genérico — cada canal tem seu handler
-webhookRouter.post('/meta', asyncHandler(async (req, res) => {
-  const { handleMeta } = await import('../services/webhooks/meta.js');
-  await handleMeta(req.body);
-  res.json({ ok: true });
-}));
-
-webhookRouter.get('/meta', (req, res) => {
-  // Verificação do webhook Meta
-  const mode      = req.query['hub.mode'];
-  const token     = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-  if (mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN) {
-    return res.send(challenge);
-  }
-  res.status(403).send('Forbidden');
-});
-
-webhookRouter.post('/evolution', asyncHandler(async (req, res) => {
-  const { handleEvolution } = await import('../services/webhooks/evolution.js');
-  await handleEvolution(req.body);
-  res.json({ ok: true });
-}));
-
-webhookRouter.post('/telegram', asyncHandler(async (req, res) => {
-  const { handleTelegram } = await import('../services/webhooks/telegram.js');
-  await handleTelegram(req.body);
-  res.json({ ok: true });
 }));
