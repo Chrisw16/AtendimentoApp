@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.env.local
+.vapid.json
+*.log
+.DS_Store

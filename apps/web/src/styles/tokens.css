@@ -1,0 +1,100 @@
+/* ═══════════════════════════════════════════════════════════════
+   MAXXI — Design Tokens
+   Industrial Refined — dark-first, high-density, single accent
+   ═══════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+
+:root {
+  /* ── ACCENT ─────────────────────────────────────────────── */
+  --accent:         #00E5A0;   /* electric mint — único acento */
+  --accent-dim:     #00C98A;
+  --accent-muted:   rgba(0, 229, 160, 0.12);
+  --accent-border:  rgba(0, 229, 160, 0.25);
+
+  /* ── SUPERFÍCIES ────────────────────────────────────────── */
+  --bg-base:        #0A0B0D;   /* fundo raiz */
+  --bg-surface:     #111316;   /* cards, painéis */
+  --bg-elevated:    #181B1F;   /* modais, dropdowns */
+  --bg-overlay:     #1E2127;   /* hover states, inputs */
+  --bg-subtle:      #232830;   /* bordas visuais suaves */
+
+  /* ── TEXTO ──────────────────────────────────────────────── */
+  --text-primary:   #F0F2F5;
+  --text-secondary: #8B909A;
+  --text-tertiary:  #555B66;
+  --text-inverse:   #0A0B0D;
+
+  /* ── BORDAS ─────────────────────────────────────────────── */
+  --border:         rgba(255,255,255,0.07);
+  --border-strong:  rgba(255,255,255,0.14);
+  --border-focus:   var(--accent-border);
+
+  /* ── STATUS ─────────────────────────────────────────────── */
+  --success:        #00E5A0;
+  --success-bg:     rgba(0, 229, 160, 0.10);
+  --warning:        #F5A623;
+  --warning-bg:     rgba(245, 166, 35, 0.10);
+  --danger:         #FF4D4D;
+  --danger-bg:      rgba(255, 77, 77, 0.10);
+  --info:           #3B9EFF;
+  --info-bg:        rgba(59, 158, 255, 0.10);
+
+  /* ── CHAT STATUS ────────────────────────────────────────── */
+  --status-ia:        #00E5A0;
+  --status-waiting:   #F5A623;
+  --status-active:    #3B9EFF;
+  --status-closed:    #555B66;
+
+  /* ── TIPOGRAFIA ─────────────────────────────────────────── */
+  --font-display:  'Syne', sans-serif;
+  --font-body:     'DM Sans', sans-serif;
+  --font-mono:     'Geist Mono', monospace;
+
+  --text-xs:    11px;
+  --text-sm:    12px;
+  --text-base:  13px;
+  --text-md:    14px;
+  --text-lg:    16px;
+  --text-xl:    18px;
+  --text-2xl:   22px;
+  --text-3xl:   28px;
+
+  /* ── ESPAÇAMENTO ────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── RAIOS ──────────────────────────────────────────────── */
+  --radius-sm:  4px;
+  --radius-md:  6px;
+  --radius-lg:  10px;
+  --radius-xl:  14px;
+  --radius-full: 999px;
+
+  /* ── SOMBRAS ────────────────────────────────────────────── */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.5);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,0.6);
+  --shadow-accent: 0 0 20px rgba(0, 229, 160, 0.15);
+
+  /* ── TRANSIÇÕES ─────────────────────────────────────────── */
+  --ease:       cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:    cubic-bezier(0.4, 0, 1, 1);
+  --ease-out:   cubic-bezier(0, 0, 0.2, 1);
+  --duration-fast:   120ms;
+  --duration-base:   200ms;
+  --duration-slow:   350ms;
+
+  /* ── LAYOUT ─────────────────────────────────────────────── */
+  --sidebar-width:         220px;
+  --sidebar-collapsed:     56px;
+  --topbar-height:         52px;
+  --panel-width:           320px;
+}

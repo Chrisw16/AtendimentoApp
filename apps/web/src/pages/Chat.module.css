@@ -1,0 +1,6 @@
+.root {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+}
