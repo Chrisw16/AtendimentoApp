@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fluxosApi } from '../lib/api';
 import { useStore }  from '../store';
@@ -71,7 +72,7 @@ function FluxoModal({ fluxo, onClose, onSave }) {
 }
 
 // ── FLUXO CARD ────────────────────────────────────────────────────
-function FluxoCard({ fluxo, onEdit, onAtivar, onDelete }) {
+function FluxoCard({ fluxo, onEdit, onAtivar, onDelete, onOpenEditor }) {
   const nosCount = Array.isArray(fluxo.nos) ? fluxo.nos.length : (fluxo.nos?.length || 0);
 
   return (
@@ -111,7 +112,8 @@ function FluxoCard({ fluxo, onEdit, onAtivar, onDelete }) {
           {fluxo.ativo ? 'Desativar' : 'Ativar'}
         </Button>
         <div className={styles.cardActionsRight}>
-          <Button variant="ghost" size="sm" icon={Pencil} onClick={() => onEdit(fluxo)} aria-label="Editar" />
+          <Button variant="ghost" size="sm" icon={Play} onClick={() => onOpenEditor(fluxo)} aria-label="Abrir editor" />
+          <Button variant="ghost" size="sm" icon={Pencil} onClick={() => onEdit(fluxo)} aria-label="Editar nome" />
           <Button variant="ghost" size="sm" icon={Trash2} onClick={() => onDelete(fluxo)} aria-label="Excluir" />
         </div>
       </div>
@@ -121,8 +123,9 @@ function FluxoCard({ fluxo, onEdit, onAtivar, onDelete }) {
 
 // ── FLUXOS PAGE ───────────────────────────────────────────────────
 export default function Fluxos() {
-  const toast = useStore(s => s.toast);
-  const qc    = useQueryClient();
+  const toast    = useStore(s => s.toast);
+  const qc       = useQueryClient();
+  const navigate = useNavigate();
   const [modal, setModal] = useState(null);
 
   const { data: fluxos = [], isLoading } = useQuery({
@@ -132,7 +135,7 @@ export default function Fluxos() {
 
   const createMut = useMutation({
     mutationFn: fluxosApi.create,
-    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['fluxos'] }); toast('Fluxo criado', 'success'); },
+    onSuccess:  (f) => { qc.invalidateQueries({ queryKey: ['fluxos'] }); toast('Fluxo criado', 'success'); navigate(`/fluxos/${f.id}`); },
     onError:    err => toast(err.message, 'error'),
   });
 

@@ -1,17 +1,7 @@
 /**
- * sseManager.js — Server-Sent Events com Redis Pub/Sub
- *
- * Arquitetura:
- *  - Cada processo mantém suas conexões SSE em memória (Map local)
- *  - Redis pub/sub distribui eventos entre processos
- *  - Escala horizontalmente sem perda de eventos
- *
- * Fallback: se Redis não estiver disponível, funciona apenas em memória
- * (adequado para desenvolvimento e instância única)
+ * sseManager.js — Server-Sent Events
+ * Redis é opcional — se não estiver disponível, funciona em modo single-process
  */
-import { createClient } from 'redis';
-
-const CHANNEL = 'maxxi:sse';
 
 // Mapa local: agenteId → Set<res>
 const localClients = new Map();
@@ -20,12 +10,14 @@ let publisher  = null;
 let subscriber = null;
 let redisOk    = false;
 
+const CHANNEL = 'maxxi:sse';
+
 async function initRedis() {
-  if (!process.env.REDIS_URL) {
-    console.log('⚠️  REDIS_URL não definida — SSE em modo single-process');
-    return;
-  }
+  if (!process.env.REDIS_URL) return;
   try {
+    // Import dinâmico para não quebrar se redis não estiver instalado
+    const { createClient } = await import('redis');
+
     publisher  = createClient({ url: process.env.REDIS_URL });
     subscriber = publisher.duplicate();
 
@@ -41,7 +33,7 @@ async function initRedis() {
     redisOk = true;
     console.log('✅ Redis SSE conectado');
   } catch (err) {
-    console.warn('⚠️  Redis SSE falhou, usando modo local:', err.message);
+    console.warn('⚠️  Redis SSE não disponível, usando modo local:', err.message);
     redisOk = false;
   }
 }
@@ -64,19 +56,17 @@ function _deliverLocal(event, data, target = null) {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 
   if (target) {
-    // Entrega para agente específico
     localClients.get(target)?.forEach(res => {
       try { res.write(msg); } catch {}
     });
   } else {
-    // Broadcast para todos
     localClients.forEach(set => {
       set.forEach(res => { try { res.write(msg); } catch {} });
     });
   }
 }
 
-// ── BROADCAST (todos os processos via Redis) ──────────────────────
+// ── BROADCAST ────────────────────────────────────────────────────
 export async function broadcast(event, data) {
   _deliverLocal(event, data);
 

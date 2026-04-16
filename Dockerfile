@@ -3,33 +3,33 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /build/web
 COPY apps/web/package*.json ./
-RUN npm install
-COPY apps/web/ ./
+RUN npm install --legacy-peer-deps
+
+# Copia TODO o conteúdo do frontend (incluindo index.html)
+COPY apps/web/index.html ./
+COPY apps/web/vite.config.js ./
+COPY apps/web/src ./src
+
 RUN npm run build
 
-# ── STAGE 2: Runtime da API + frontend estático ───────────────────
+# ── STAGE 2: Runtime da API ───────────────────────────────────────
 FROM node:20-alpine AS runtime
 
 WORKDIR /app
 
-# Instala dependências da API
 COPY apps/api/package*.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev --legacy-peer-deps
 
-# Copia código da API
 COPY apps/api/ ./
 
-# Copia o frontend buildado para onde o server.js espera encontrá-lo
+# Copia o frontend buildado
 COPY --from=frontend-builder /build/web/dist ./apps/web/dist
 
-# Porta exposta (deve bater com PORT no Coolify)
 EXPOSE 4000
 
-# Variáveis de ambiente com valores padrão seguros
 ENV NODE_ENV=production
 ENV PORT=4000
 
-# Healthcheck para o Coolify saber quando o container está pronto
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD wget -qO- http://localhost:4000/health || exit 1
 

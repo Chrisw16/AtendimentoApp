@@ -16,6 +16,7 @@ const Tarefas     = lazy(() => import('./pages/Tarefas'));
 const Satisfacao  = lazy(() => import('./pages/Satisfacao'));
 const Agentes     = lazy(() => import('./pages/Agentes'));
 const Fluxos      = lazy(() => import('./pages/Fluxos'));
+const FluxoEditor = lazy(() => import('./pages/FluxoEditor'));
 const Canais      = lazy(() => import('./pages/Canais'));
 const Clientes    = lazy(() => import('./pages/Clientes'));
 const Ocorrencias = lazy(() => import('./pages/Ocorrencias'));
@@ -81,6 +82,7 @@ function AppLayout() {
               <Route path="/satisfacao"   element={<Satisfacao />} />
               <Route path="/agentes"      element={<AdminRoute><Agentes /></AdminRoute>} />
               <Route path="/fluxos"       element={<AdminRoute><Fluxos /></AdminRoute>} />
+              <Route path="/fluxos/:id"   element={<AdminRoute><FluxoEditor /></AdminRoute>} />
               <Route path="/canais"       element={<AdminRoute><Canais /></AdminRoute>} />
               <Route path="/analytics"    element={<AdminRoute><Analytics /></AdminRoute>} />
               <Route path="/clientes"     element={<Clientes />} />
