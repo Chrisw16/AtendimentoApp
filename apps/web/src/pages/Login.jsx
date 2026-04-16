@@ -20,7 +20,7 @@ export default function Login() {
     try {
       const data = await api.post('/auth/login', form);
       if (data.token) {
-        setAuth(data.token, data.agente);
+        setAuth({ token: data.token, user: data.user, role: data.role, permissoes: data.permissoes });
         navigate('/', { replace: true });
       } else {
         setError(data.error || 'Credenciais inválidas');

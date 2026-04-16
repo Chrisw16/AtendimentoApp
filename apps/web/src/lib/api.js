@@ -23,8 +23,8 @@ async function request(method, path, body = null, opts = {}) {
     signal: opts.signal,
   });
 
-  // Token expirado → logout automático
-  if (res.status === 401) {
+  // Token expirado → logout automático (só se já estiver autenticado)
+  if (res.status === 401 && useStore.getState().token) {
     useStore.getState().logout();
     throw new Error('Sessão expirada');
   }
