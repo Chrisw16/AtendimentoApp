@@ -1,8 +1,3 @@
-/**
- * Sistema de migrations versionadas
- * Cada migration é um arquivo com up() e down()
- * Nunca mais ALTER TABLE inline no startup
- */
 import { getDb } from '../config/db.js';
 import { readdirSync } from 'fs';
 import { resolve, dirname } from 'path';
@@ -11,11 +6,22 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 async function ensureMigrationsTable(db) {
-  await db.schema.createTableIfNotExists('_migrations', (t) => {
-    t.increments('id');
-    t.string('name').notNullable().unique();
-    t.timestamp('executed_at').defaultTo(db.fn.now());
-  });
+  // Usa raw SQL para evitar o bug do knex com createTableIfNotExists
+  await db.raw(`
+    CREATE TABLE IF NOT EXISTS _migrations (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      executed_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  // Adiciona unique só se não existir (evita erro de constraint duplicada)
+  await db.raw(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '_migrations_name_unique') THEN
+        ALTER TABLE _migrations ADD CONSTRAINT _migrations_name_unique UNIQUE (name);
+      END IF;
+    END $$;
+  `).catch(() => {});
 }
 
 async function getExecuted(db) {
@@ -28,19 +34,14 @@ export async function runMigrations() {
   await ensureMigrationsTable(db);
 
   const executed = await getExecuted(db);
-  const dir      = resolve(__dirname, 'versions');
-
-  const files = readdirSync(dir)
-    .filter(f => f.endsWith('.js'))
-    .sort();
+  const dir = resolve(__dirname, 'versions');
+  const files = readdirSync(dir).filter(f => f.endsWith('.js')).sort();
 
   let ran = 0;
   for (const file of files) {
     if (executed.has(file)) continue;
-
-    console.log(`  ▶ Running migration: ${file}`);
+    console.log(`  ▶ ${file}`);
     const mod = await import(resolve(dir, file));
-
     const trx = await db.transaction();
     try {
       await mod.up(trx);
@@ -54,17 +55,11 @@ export async function runMigrations() {
       throw err;
     }
   }
-
-  if (ran === 0) {
-    console.log('  ✓ Nenhuma migration pendente');
-  } else {
-    console.log(`  ✓ ${ran} migration(s) executada(s)`);
-  }
+  console.log(ran === 0 ? '  ✓ Nenhuma migration pendente' : `  ✓ ${ran} migration(s)`);
 }
 
-// Execução direta: node src/migrations/run.js
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   runMigrations()
-    .then(() => { console.log('✅ Migrations concluídas'); process.exit(0); })
-    .catch(err => { console.error('❌ Erro:', err); process.exit(1); });
+    .then(() => { console.log('✅ OK'); process.exit(0); })
+    .catch(err => { console.error('❌', err.message); process.exit(1); });
 }
