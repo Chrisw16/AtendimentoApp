@@ -8,6 +8,13 @@ import express from 'express';
 import helmet  from 'helmet';
 import cors    from 'cors';
 import { rateLimit } from 'express-rate-limit';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync } from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = dirname(__filename);
+const frontendDist = join(__dirname, '..', 'apps', 'web', 'dist');
 
 import { runMigrations }  from './migrations/run.js';
 import { authRouter }     from './routes/auth.js';
@@ -82,6 +89,18 @@ app.use('/api/cobertura',  coberturaRouter);
 app.use('/api/ordens',     ordensRouter);
 app.use('/api/financeiro', financeiroRouter);
 app.use('/api/sysconfig',  sysconfigRouter);
+
+
+// ── SERVE FRONTEND (dist buildado pelo Vite) ─────────────────────
+if (existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/health')) {
+      res.sendFile(join(frontendDist, 'index.html'));
+    }
+  });
+  console.log('✅ Frontend estático servido de:', frontendDist);
+}
 
 // ── ERROR HANDLER GLOBAL ──────────────────────────────────────────
 app.use(errorHandler);
