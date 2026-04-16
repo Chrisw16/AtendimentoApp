@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   MessageSquare, LayoutDashboard, Users, GitBranch,
-  BarChart2, Clock, Star, Bell, FileText, Settings,
-  ChevronLeft, Zap, Truck, Network, Wallet, Map,
-  Mail, Phone, Shield, Building, ChevronDown, Wrench,
+  BarChart2, Clock, Star, Bell, Settings,
+  ChevronLeft, Zap, Network, Map,
+  Building, ChevronDown, Wrench,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import styles from './Sidebar.module.css';
@@ -15,7 +15,6 @@ const NAV = [
     items: [
       { to: '/chat',       icon: MessageSquare, label: 'Chat' },
       { to: '/historico',  icon: Clock,         label: 'Histórico' },
-      { to: '/tarefas',    icon: FileText,      label: 'Tarefas' },
       { to: '/satisfacao', icon: Star,          label: 'Satisfação' },
     ],
   },
@@ -35,7 +34,6 @@ const NAV = [
       { to: '/clientes',   icon: Building, label: 'Clientes' },
       { to: '/ocorrencias',icon: Bell,     label: 'Ocorrências' },
       { to: '/ordens',     icon: Wrench,   label: 'Ordens de Serviço' },
-      { to: '/frota',      icon: Truck,    label: 'Frota' },
       { to: '/cobertura',  icon: Map,      label: 'Cobertura' },
     ],
   },
@@ -43,10 +41,6 @@ const NAV = [
     group: 'Infraestrutura',
     items: [
       { to: '/rede',        icon: Network,  label: 'Monitor de Rede',  adminOnly: true },
-      { to: '/dispositivos',icon: Shield,   label: 'Dispositivos CPE', adminOnly: true },
-      { to: '/financeiro',  icon: Wallet,   label: 'Financeiro',       adminOnly: true },
-      { to: '/email',       icon: Mail,     label: 'E-mail' },
-      { to: '/voip',        icon: Phone,    label: 'VoIP',             adminOnly: true },
     ],
   },
 ];

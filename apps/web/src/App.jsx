@@ -12,7 +12,6 @@ const Login       = lazy(() => import('./pages/Login'));
 const Dashboard   = lazy(() => import('./pages/Dashboard'));
 const Chat        = lazy(() => import('./pages/Chat'));
 const Historico   = lazy(() => import('./pages/Historico'));
-const Tarefas     = lazy(() => import('./pages/Tarefas'));
 const Satisfacao  = lazy(() => import('./pages/Satisfacao'));
 const Agentes     = lazy(() => import('./pages/Agentes'));
 const Fluxos      = lazy(() => import('./pages/Fluxos'));
@@ -21,17 +20,10 @@ const Canais      = lazy(() => import('./pages/Canais'));
 const Clientes    = lazy(() => import('./pages/Clientes'));
 const Ocorrencias = lazy(() => import('./pages/Ocorrencias'));
 const OrdensServico = lazy(() => import('./pages/OrdensServico'));
-const Financeiro  = lazy(() => import('./pages/Financeiro'));
 const Cobertura   = lazy(() => import('./pages/Cobertura'));
 const MonitorRede = lazy(() => import('./pages/MonitorRede'));
 const Configuracoes = lazy(() => import('./pages/Configuracoes'));
 
-// Stubs — cada um exportado individualmente para evitar top-level await
-const Analytics   = lazy(() => import('./pages/stubs.jsx').then(m => ({ default: m.Analytics })));
-const Dispositivos= lazy(() => import('./pages/stubs.jsx').then(m => ({ default: m.Dispositivos })));
-const Email       = lazy(() => import('./pages/stubs.jsx').then(m => ({ default: m.Email })));
-const VoIP        = lazy(() => import('./pages/stubs.jsx').then(m => ({ default: m.VoIP })));
-const Frota       = lazy(() => import('./pages/stubs.jsx').then(m => ({ default: m.Frota })));
 
 const Loading = () => (
   <div className={styles.loading}>
@@ -78,7 +70,6 @@ function AppLayout() {
               <Route path="/"             element={<AdminRoute><Dashboard /></AdminRoute>} />
               <Route path="/chat"         element={<Chat />} />
               <Route path="/historico"    element={<Historico />} />
-              <Route path="/tarefas"      element={<Tarefas />} />
               <Route path="/satisfacao"   element={<Satisfacao />} />
               <Route path="/agentes"      element={<AdminRoute><Agentes /></AdminRoute>} />
               <Route path="/fluxos"       element={<AdminRoute><Fluxos /></AdminRoute>} />
@@ -88,13 +79,8 @@ function AppLayout() {
               <Route path="/clientes"     element={<Clientes />} />
               <Route path="/ocorrencias"  element={<Ocorrencias />} />
               <Route path="/ordens"       element={<OrdensServico />} />
-              <Route path="/frota/*"      element={<Frota />} />
               <Route path="/cobertura"    element={<Cobertura />} />
               <Route path="/rede"         element={<AdminRoute><MonitorRede /></AdminRoute>} />
-              <Route path="/dispositivos" element={<AdminRoute><Dispositivos /></AdminRoute>} />
-              <Route path="/financeiro"   element={<AdminRoute><Financeiro /></AdminRoute>} />
-              <Route path="/email"        element={<Email />} />
-              <Route path="/voip"         element={<AdminRoute><VoIP /></AdminRoute>} />
               <Route path="/configuracoes" element={<AdminRoute><Configuracoes /></AdminRoute>} />
               <Route path="*"             element={<Navigate to="/chat" replace />} />
             </Routes>
