@@ -12,37 +12,72 @@ import { NODE_TYPES, NODE_GROUPS, PORTA_META } from '../lib/nodeTypes';
 
 // ── CSS OVERRIDE — força handles a receberem eventos ─────────────
 const RF_STYLE = `
+  /* Handles sempre clicáveis e visíveis */
   .react-flow__handle {
     pointer-events: all !important;
     cursor: crosshair !important;
+    z-index: 10 !important;
+    transition: transform 0.12s ease, box-shadow 0.12s ease !important;
   }
   .react-flow__handle:hover {
-    transform: scale(1.4) !important;
+    transform: scale(1.5) !important;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.2) !important;
   }
+  /* Handle de conexão sendo arrastado */
+  .react-flow__handle.connecting {
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.35) !important;
+    transform: scale(1.3) !important;
+  }
+  /* Handles de múltiplas portas — alinhados ao texto da linha */
+  .react-flow__handle-right {
+    right: -5.5px !important;
+  }
+  .react-flow__handle-left {
+    left: -5.5px !important;
+  }
+  /* Cursor no nó */
   .react-flow__node {
+    cursor: default !important;
+  }
+  .react-flow__node-fluxo:hover {
     cursor: grab !important;
   }
-  .react-flow__node:active {
-    cursor: grabbing !important;
+  /* Linha de conexão arrastando */
+  .react-flow__connection-line {
+    stroke: rgba(255,255,255,0.7) !important;
+    stroke-width: 2 !important;
+  }
+  /* Edge selecionada */
+  .react-flow__edge.selected .react-flow__edge-path {
+    stroke: #f5c518 !important;
+    stroke-width: 2.5 !important;
   }
   .react-flow__edge-path {
     cursor: pointer !important;
   }
-  .react-flow__pane {
-    cursor: default !important;
+  /* Controles */
+  .react-flow__controls {
+    box-shadow: none !important;
   }
   .react-flow__controls button {
     background: rgba(8,14,22,.95) !important;
-    border-color: rgba(255,255,255,.1) !important;
-    color: rgba(255,255,255,.7) !important;
-    fill: rgba(255,255,255,.7) !important;
+    border: 1px solid rgba(255,255,255,.1) !important;
+    color: rgba(255,255,255,.6) !important;
+    fill: rgba(255,255,255,.6) !important;
   }
   .react-flow__controls button:hover {
     background: rgba(255,255,255,.1) !important;
+    color: rgba(255,255,255,.9) !important;
+    fill: rgba(255,255,255,.9) !important;
   }
   .react-flow__minimap {
     border-radius: 8px !important;
     overflow: hidden !important;
+    border: 1px solid rgba(255,255,255,.1) !important;
+  }
+  /* Background dots */
+  .react-flow__background {
+    background: #080C14 !important;
   }
 `;
 
@@ -107,11 +142,35 @@ function NodePreview({ tipo, cfg = {} }) {
     case 'encerrar':        return <span style={{fontSize:10,fontStyle:'italic',color:'rgba(255,255,255,.5)'}}>{cfg.mensagem?.slice(0,45)||'Atendimento encerrado.'}</span>;
     case 'enviar_botoes': {
       const bts = Array.isArray(cfg.botoes)?cfg.botoes:[];
-      return <div><div style={{fontSize:10,color:'rgba(255,255,255,.5)',marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cfg.corpo?.slice(0,40)||'mensagem...'}</div>{bts.slice(0,3).map((b,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:2,paddingRight:16}}><span style={{fontSize:9.5,background:'rgba(62,207,255,.08)',border:'1px solid rgba(62,207,255,.15)',borderRadius:4,padding:'1px 6px',color:'rgba(255,255,255,.6)'}}>{(typeof b==='object'?(b.label||''):(b||'')).slice(0,18)||`Botão ${i+1}`}</span><div style={{width:5,height:5,borderRadius:'50%',background:'#3ecfff',flexShrink:0}}/></div>)}{cfg.ia_menu_ativo&&<div style={{fontSize:9,color:'#f472b6',fontWeight:700}}>🤖 IA ativa</div>}</div>;
+      return (
+        <div>
+          <div style={{fontSize:10,color:'rgba(255,255,255,.5)',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cfg.corpo?.slice(0,40)||'mensagem...'}</div>
+          {bts.slice(0,3).map((b,i)=>(
+            <div key={i} style={{marginBottom:3,paddingRight:14}}>
+              <span style={{display:'block',fontSize:9.5,background:'rgba(62,207,255,.08)',border:'1px solid rgba(62,207,255,.2)',borderRadius:4,padding:'2px 7px',color:'rgba(255,255,255,.65)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {(typeof b==='object'?(b.label||''):(b||'')).slice(0,22)||`Botão ${i+1}`}
+              </span>
+            </div>
+          ))}
+          {cfg.ia_menu_ativo&&<div style={{fontSize:9,color:'#f472b6',fontWeight:700,marginTop:3}}>🤖 IA ativa</div>}
+        </div>
+      );
     }
     case 'enviar_lista': {
       const itens = Array.isArray(cfg.itens)?cfg.itens:[];
-      return <div><div style={{fontSize:10,color:'rgba(255,255,255,.5)',marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cfg.corpo?.slice(0,40)||'mensagem...'}</div>{itens.slice(0,3).map((it,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:2,paddingRight:16}}><span style={{fontSize:9.5,background:'rgba(62,207,255,.08)',border:'1px solid rgba(62,207,255,.15)',borderRadius:4,padding:'1px 6px',color:'rgba(255,255,255,.6)'}}>{(it.titulo||it.id||'item').slice(0,20)}</span><div style={{width:5,height:5,borderRadius:'50%',background:'#3ecfff',flexShrink:0}}/></div>)}{cfg.ia_menu_ativo&&<div style={{fontSize:9,color:'#f472b6',fontWeight:700}}>🤖 IA ativa</div>}</div>;
+      return (
+        <div>
+          <div style={{fontSize:10,color:'rgba(255,255,255,.5)',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cfg.corpo?.slice(0,40)||'mensagem...'}</div>
+          {itens.slice(0,3).map((it,i)=>(
+            <div key={i} style={{marginBottom:3,paddingRight:14}}>
+              <span style={{display:'block',fontSize:9.5,background:'rgba(62,207,255,.08)',border:'1px solid rgba(62,207,255,.2)',borderRadius:4,padding:'2px 7px',color:'rgba(255,255,255,.65)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {(it.titulo||it.id||'item').slice(0,22)}
+              </span>
+            </div>
+          ))}
+          {cfg.ia_menu_ativo&&<div style={{fontSize:9,color:'#f472b6',fontWeight:700,marginTop:3}}>🤖 IA ativa</div>}
+        </div>
+      );
     }
     default: return null;
   }
@@ -127,86 +186,126 @@ function getPortas(tipo, cfg = {}) {
   return def.portas.map(p=>({id:p,color:PORTA_META[p]?.color||def.color,label:PORTA_META[p]?.label||p}));
 }
 
-// ── FLOW NODE (memo para estabilidade) ────────────────────────────
+// ── FLOW NODE ────────────────────────────────────────────────────
+// Regra crítica: Handle é o único elemento visual na borda direita.
+// Nunca colocar div decorativa + Handle no mesmo row — causa duplo ponto.
 const FlowNode = memo(({ data, selected }) => {
   const def    = NODE_TYPES[data.tipo] || { label:data.tipo, color:'#888', group:'logica', portas:['saida'] };
   const portas = getPortas(data.tipo, data.config||{});
-  const isSingle = portas.length===1 && portas[0].id==='saida';
+  const isSingle = portas.length === 1 && portas[0].id === 'saida';
+
+  // Handle style factory
+  const srcHandle = (color) => ({
+    width: 11, height: 11,
+    background: color,
+    border: '2px solid #080C14',
+    borderRadius: '50%',
+    cursor: 'crosshair',
+  });
+
+  const tgtHandle = {
+    width: 11, height: 11,
+    background: '#111827',
+    border: '2px solid rgba(255,255,255,.4)',
+    borderRadius: '50%',
+    cursor: 'crosshair',
+  };
 
   return (
     <div style={{
-      background:'rgba(8,14,22,.97)',
-      border:`1.5px solid ${selected?def.color:'rgba(255,255,255,.12)'}`,
-      borderRadius:10, minWidth:165, maxWidth:230,
-      boxShadow:selected?`0 0 0 2px ${def.color}33,0 4px 20px rgba(0,0,0,.6)`:'0 4px 16px rgba(0,0,0,.5)',
-      fontFamily:'DM Sans,sans-serif', fontSize:12, color:'rgba(255,255,255,.85)',
-      transition:'border-color .15s, box-shadow .15s',
-      position:'relative',
+      background: 'rgba(8,14,22,.97)',
+      border: `1.5px solid ${selected ? def.color : 'rgba(255,255,255,.12)'}`,
+      borderRadius: 10,
+      minWidth: 180,
+      maxWidth: 240,
+      boxShadow: selected
+        ? `0 0 0 2px ${def.color}44, 0 8px 24px rgba(0,0,0,.7)`
+        : '0 4px 16px rgba(0,0,0,.5)',
+      fontFamily: 'Plus Jakarta Sans, DM Sans, sans-serif',
+      fontSize: 12,
+      color: 'rgba(255,255,255,.85)',
+      transition: 'border-color .15s, box-shadow .15s',
     }}>
-      {/* Header */}
-      <div style={{padding:'7px 10px 6px',borderBottom:'1px solid rgba(255,255,255,.07)',display:'flex',alignItems:'center',gap:6}}>
-        <div style={{width:7,height:7,borderRadius:'50%',background:def.color,flexShrink:0}}/>
-        <span style={{fontSize:10,fontWeight:700,color:def.color,textTransform:'uppercase',letterSpacing:'.06em'}}>{def.label}</span>
+
+      {/* ── HEADER ── */}
+      <div style={{
+        padding: '7px 10px 6px',
+        borderBottom: '1px solid rgba(255,255,255,.07)',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <div style={{ width:7, height:7, borderRadius:'50%', background:def.color, flexShrink:0 }}/>
+        <span style={{ fontSize:10, fontWeight:700, color:def.color, textTransform:'uppercase', letterSpacing:'.06em' }}>
+          {def.label}
+        </span>
       </div>
-      {/* Preview */}
-      <div style={{padding:'6px 10px 8px',minHeight:24}}>
+
+      {/* ── PREVIEW ── */}
+      <div style={{ padding: '6px 10px 8px', minHeight: 24 }}>
         <NodePreview tipo={data.tipo} cfg={data.config||{}}/>
       </div>
 
-      {/* Handle ENTRADA (esquerda) — todos exceto início */}
+      {/* ── HANDLE ENTRADA — âncora única no meio-esquerdo ── */}
       {data.tipo !== 'inicio' && (
         <Handle
           type="target"
           position={Position.Left}
           id="entrada"
-          style={{
-            width:12, height:12,
-            background:'rgba(20,30,40,.9)',
-            border:'2px solid rgba(255,255,255,.35)',
-            borderRadius:'50%',
-            left:-6, top:'50%',
-            cursor:'crosshair',
-          }}
+          style={tgtHandle}
         />
       )}
 
-      {/* Handles SAÍDA */}
+      {/* ── HANDLES SAÍDA ── */}
       {isSingle ? (
+        // Saída única: Handle no meio-direito, sem seção extra
         <Handle
           type="source"
           position={Position.Right}
           id="saida"
-          style={{
-            width:12, height:12,
-            background:def.color,
-            border:'2px solid rgba(8,14,22,.95)',
-            borderRadius:'50%',
-            right:-6, top:'50%',
-            cursor:'crosshair',
-          }}
+          style={srcHandle(def.color)}
         />
       ) : portas.length > 0 ? (
-        <div style={{borderTop:'1px solid rgba(255,255,255,.07)',paddingTop:2,paddingBottom:4}}>
-          {portas.map((p) => (
-            <div key={p.id} style={{display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'3px 20px 3px 10px',position:'relative',minHeight:22}}>
-              <span style={{fontSize:9.5,color:'rgba(255,255,255,.4)',marginRight:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:130,textAlign:'right'}}>{p.label}</span>
-              <div style={{width:7,height:7,borderRadius:'50%',background:p.color,flexShrink:0}}/>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={p.id}
-                style={{
-                  width:12, height:12,
-                  background:p.color,
-                  border:'2px solid rgba(8,14,22,.95)',
-                  borderRadius:'50%',
-                  position:'absolute', right:-6, top:'50%',
-                  transform:'translateY(-50%)',
-                  cursor:'crosshair',
-                }}
-              />
-            </div>
-          ))}
+        // Múltiplas saídas: cada linha TEM O HANDLE COMO ÚNICO PONTO VISUAL
+        // paddingRight deixa espaço para o handle que fica na borda do nó
+        <div style={{ borderTop:'1px solid rgba(255,255,255,.08)', paddingTop:3, paddingBottom:4 }}>
+          {portas.map((p, i) => {
+            // Calcula top% proporcional para distribuir handles igualmente
+            const pct = portas.length === 1
+              ? 50
+              : 15 + (i / (portas.length - 1)) * 70;
+            return (
+              <div key={p.id} style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                // paddingRight deixa 14px livres para o Handle na borda
+                padding: '3px 18px 3px 10px',
+                minHeight: 22,
+              }}>
+                <span style={{
+                  fontSize: 9.5,
+                  color: 'rgba(255,255,255,.45)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: 145,
+                  textAlign: 'right',
+                }}>
+                  {p.label}
+                </span>
+                {/* Handle é o único ponto — sem div decorativa ao lado */}
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={p.id}
+                  style={{
+                    ...srcHandle(p.color),
+                    // posição absoluta calculada por React Flow via top em %
+                    // Não usar top manual aqui — deixar o RF alinhar pelo DOM
+                  }}
+                />
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>
@@ -562,16 +661,20 @@ function FluxoCanvas({ id }) {
             onPaneClick={onPaneClick}
             nodeTypes={NODE_TYPES_MAP}
             deleteKeyCode={null}
-            connectionLineStyle={{ stroke:'#00E5A0', strokeWidth:2 }}
+            connectionRadius={30}
+            snapToGrid={false}
+            connectionLineStyle={{ stroke:'rgba(255,255,255,0.7)', strokeWidth:2, strokeDasharray:'5 3' }}
             connectionLineType="smoothstep"
             defaultEdgeOptions={{
               type: 'smoothstep',
-              markerEnd: { type:MarkerType.ArrowClosed, width:12, height:12, color:'rgba(255,255,255,.35)' },
-              style: { stroke:'rgba(255,255,255,.25)', strokeWidth:1.5 },
+              markerEnd: { type:MarkerType.ArrowClosed, width:14, height:14, color:'rgba(255,255,255,.4)' },
+              style: { stroke:'rgba(255,255,255,.3)', strokeWidth:1.8 },
             }}
-            style={{ background:'#060a10' }}
+            style={{ background:'#080C14' }}
+            minZoom={0.2}
+            maxZoom={2}
             fitView
-            fitViewOptions={{ padding:0.2 }}
+            fitViewOptions={{ padding:0.25 }}
           >
             {/* Barra de ação de edge selecionado */}
             {selectedEdge && (

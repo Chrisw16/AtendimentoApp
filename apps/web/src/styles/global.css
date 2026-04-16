@@ -1,20 +1,11 @@
-/* ═══════════════════════════════════════════════════════════════
-   GOCHAT — Global Styles
-   ═══════════════════════════════════════════════════════════════ */
-
 @import './tokens.css';
 
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -27,94 +18,50 @@ body {
   overflow: hidden;
 }
 
-#root {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
+#root { height: 100vh; display: flex; flex-direction: column; }
 
-/* ── SCROLLBARS ──────────────────────────────────────────── */
+/* ── SCROLLBARS ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.12);
-  border-radius: var(--radius-full);
-}
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
-/* ── SELEÇÃO ─────────────────────────────────────────────── */
-::selection {
-  background: rgba(255,255,255,0.18);
-  color: #fff;
-}
+/* ── SELEÇÃO ── */
+::selection { background: var(--brand-blue-pale); color: var(--brand-blue); }
 
-/* ── LINKS ───────────────────────────────────────────────── */
 a { color: inherit; text-decoration: none; }
-
-/* ── INPUTS GLOBAIS ──────────────────────────────────────── */
-input, textarea, select, button {
-  font-family: var(--font-body);
-  font-size: inherit;
-}
+input, textarea, select, button { font-family: var(--font-body); font-size: inherit; }
 input[type='search']::-webkit-search-cancel-button { display: none; }
 
-/* ── SPINNER ─────────────────────────────────────────────── */
+/* ── SPINNER ── */
 .spinner {
-  display: inline-block;
-  width: 16px; height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.15);
-  border-top-color: #fff;
-  animation: spin 0.7s linear infinite;
-  flex-shrink: 0;
+  display: inline-block; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--border-strong); border-top-color: var(--brand-blue);
+  animation: spin 0.7s linear infinite; flex-shrink: 0;
 }
 .spinner-lg { width: 28px; height: 28px; border-width: 3px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── SKELETON ────────────────────────────────────────────── */
+/* ── SKELETON ── */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--bg-elevated) 25%,
-    var(--bg-overlay)  50%,
-    var(--bg-elevated) 75%
-  );
+  background: linear-gradient(90deg, var(--bg-overlay) 25%, var(--border) 50%, var(--bg-overlay) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: var(--radius-md);
 }
-@keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-/* ── TOOLTIP ─────────────────────────────────────────────── */
+/* ── TOOLTIP ── */
 [data-tooltip] { position: relative; }
 [data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  color: var(--text-primary);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease);
-  z-index: 100;
-  box-shadow: var(--shadow-sm);
+  content: attr(data-tooltip); position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%); background: var(--text-primary); color: #fff;
+  font-size: 11px; white-space: nowrap; padding: 4px 8px; border-radius: var(--radius-sm);
+  pointer-events: none; opacity: 0; transition: opacity 120ms; z-index: 200;
+  box-shadow: var(--shadow-md);
 }
 [data-tooltip]:hover::after { opacity: 1; }
 
-/* ── FOCUS VISIBLE ───────────────────────────────────────── */
-:focus-visible {
-  outline: 2px solid rgba(255,255,255,0.5);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
+/* ── FOCUS ── */
+:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; border-radius: var(--radius-sm); }
 :focus:not(:focus-visible) { outline: none; }

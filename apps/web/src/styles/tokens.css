@@ -1,68 +1,68 @@
 /* ═══════════════════════════════════════════════════════════════
-   GOCHAT — Design System NetGo
-   White-primary · Navy + Orange brand colors
+   GOCHAT — Design System NetGo  •  Light Theme
+   Branco predominante · Azul navy + Laranja como acentos
    ═══════════════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap');
 
 :root {
-  /* ── BRAND ──────────────────────────────────────────────── */
+  /* ── BRAND NetGo ────────────────────────────────────────── */
   --brand-navy:       #1B3A8C;
   --brand-blue:       #2050B8;
   --brand-blue-light: #3B6FD4;
+  --brand-blue-pale:  #EEF3FC;
   --brand-orange:     #E8572A;
-  --brand-orange-dim: #C44820;
+  --brand-orange-dim: #F07B52;
+  --brand-orange-pale:#FDF0EB;
   --brand-green:      #3DB845;
 
-  /* ── ACCENT PRINCIPAL — branco ──────────────────────────── */
-  --accent:         #FFFFFF;
-  --accent-dim:     #D4DCF0;
-  --accent-muted:   rgba(255, 255, 255, 0.10);
-  --accent-border:  rgba(255, 255, 255, 0.30);
+  /* ── SUPERFÍCIES — light ────────────────────────────────── */
+  --bg-base:        #F4F6FA;   /* fundo raiz — cinza levíssimo */
+  --bg-surface:     #FFFFFF;   /* cards, painéis */
+  --bg-elevated:    #FFFFFF;   /* modais */
+  --bg-overlay:     #F0F2F8;   /* hover states */
+  --bg-subtle:      #E8ECF5;   /* divisores, bordas visuais */
 
-  /* ── ACCENT SECUNDÁRIO — azul da marca ──────────────────── */
-  --accent2:        var(--brand-blue);
-  --accent2-muted:  rgba(32, 80, 184, 0.15);
-  --accent2-border: rgba(32, 80, 184, 0.35);
-
-  /* ── ACCENT TERCIÁRIO — laranja da marca ────────────────── */
-  --accent3:        var(--brand-orange);
-  --accent3-muted:  rgba(232, 87, 42, 0.12);
-  --accent3-border: rgba(232, 87, 42, 0.30);
-
-  /* ── SUPERFÍCIES — dark refinado ────────────────────────── */
-  --bg-base:        #080C14;   /* fundo raiz — quase preto azulado */
-  --bg-surface:     #0E1420;   /* cards, painéis */
-  --bg-elevated:    #141C2E;   /* modais, dropdowns */
-  --bg-overlay:     #1A2438;   /* hover states, inputs */
-  --bg-subtle:      #1F2B40;   /* bordas visuais */
+  /* ── SIDEBAR (dark contrast) ────────────────────────────── */
+  --sidebar-bg:     #0F1828;
+  --sidebar-hover:  rgba(255,255,255,0.07);
+  --sidebar-active: rgba(255,255,255,0.12);
+  --sidebar-border: rgba(255,255,255,0.08);
+  --sidebar-text:   rgba(255,255,255,0.55);
+  --sidebar-text-active: #FFFFFF;
 
   /* ── TEXTO ──────────────────────────────────────────────── */
-  --text-primary:   #F0F4FF;
-  --text-secondary: #8896B0;
-  --text-tertiary:  #4A5568;
-  --text-inverse:   #080C14;
+  --text-primary:   #111827;
+  --text-secondary: #4B5563;
+  --text-tertiary:  #9CA3AF;
+  --text-inverse:   #FFFFFF;
+
+  /* ── ACCENT — azul da marca ─────────────────────────────── */
+  --accent:         var(--brand-blue);
+  --accent-dim:     var(--brand-blue-light);
+  --accent-muted:   var(--brand-blue-pale);
+  --accent-border:  rgba(32, 80, 184, 0.25);
 
   /* ── BORDAS ─────────────────────────────────────────────── */
-  --border:         rgba(255,255,255,0.07);
-  --border-strong:  rgba(255,255,255,0.13);
-  --border-focus:   rgba(255,255,255,0.35);
+  --border:         #E5E9F2;
+  --border-strong:  #CBD2E0;
+  --border-focus:   var(--brand-blue);
 
   /* ── STATUS ─────────────────────────────────────────────── */
-  --success:        #3DB845;
-  --success-bg:     rgba(61, 184, 69, 0.10);
-  --warning:        #F5A623;
-  --warning-bg:     rgba(245, 166, 35, 0.10);
-  --danger:         #FF4D4D;
-  --danger-bg:      rgba(255, 77, 77, 0.10);
-  --info:           #3B6FD4;
-  --info-bg:        rgba(59, 111, 212, 0.10);
+  --success:        #16A34A;
+  --success-bg:     #F0FDF4;
+  --warning:        #D97706;
+  --warning-bg:     #FFFBEB;
+  --danger:         #DC2626;
+  --danger-bg:      #FEF2F2;
+  --info:           var(--brand-blue);
+  --info-bg:        var(--brand-blue-pale);
 
   /* ── CHAT STATUS ────────────────────────────────────────── */
-  --status-ia:        #A78BFA;
-  --status-waiting:   #F5A623;
-  --status-active:    #3B6FD4;
-  --status-closed:    #4A5568;
+  --status-ia:        #7C3AED;
+  --status-waiting:   #D97706;
+  --status-active:    var(--brand-blue);
+  --status-closed:    #9CA3AF;
 
   /* ── TIPOGRAFIA ─────────────────────────────────────────── */
   --font-display:  'Syne', sans-serif;
@@ -96,11 +96,11 @@
   --radius-xl:   16px;
   --radius-full: 999px;
 
-  /* ── SOMBRAS ────────────────────────────────────────────── */
-  --shadow-sm:  0 1px 3px rgba(0,0,0,0.5);
-  --shadow-md:  0 4px 16px rgba(0,0,0,0.6);
-  --shadow-lg:  0 8px 32px rgba(0,0,0,0.7);
-  --shadow-brand: 0 0 24px rgba(32, 80, 184, 0.18);
+  /* ── SOMBRAS ─────────────────────────────────────────────── */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg:  0 10px 32px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.04);
+  --shadow-brand: 0 4px 16px rgba(32, 80, 184, 0.20);
 
   /* ── TRANSIÇÕES ─────────────────────────────────────────── */
   --ease:       cubic-bezier(0.16, 1, 0.3, 1);

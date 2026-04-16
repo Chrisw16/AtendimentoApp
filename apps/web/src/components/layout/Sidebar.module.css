@@ -1,217 +1,109 @@
-/* ── SIDEBAR ─────────────────────────────────────────────── */
+/* Sidebar permanece escura para contraste com o conteúdo branco */
 .sidebar {
-  display: flex;
-  flex-direction: column;
-  width: var(--sidebar-width);
-  height: 100vh;
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  width: var(--sidebar-width); height: 100vh;
+  background: var(--sidebar-bg);
+  border-right: 1px solid rgba(255,255,255,0.06);
   flex-shrink: 0;
   transition: width 0.25s var(--ease);
   overflow: hidden;
-  position: relative;
-  /* Subtle vertical gradient */
-  background: linear-gradient(180deg, #0F1520 0%, #0A0E18 100%);
 }
-
 .sidebar.collapsed { width: var(--sidebar-collapsed); }
 
-/* ── BRAND ───────────────────────────────────────────────── */
+/* BRAND */
 .brand {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  height: var(--topbar-height);
-  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; height: var(--topbar-height);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   flex-shrink: 0;
 }
-
-/* Logo GoCHAT */
 .logoMark { display: flex; align-items: center; overflow: hidden; }
-
 .logoIcon {
-  width: 28px; height: 28px;
-  border-radius: 7px;
+  width: 30px; height: 30px; border-radius: 8px;
   background: linear-gradient(135deg, var(--brand-blue), var(--brand-orange));
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-display);
-  font-size: 14px; font-weight: 800;
-  color: #fff;
+  font-family: var(--font-display); font-size: 15px; font-weight: 800; color: #fff;
   flex-shrink: 0;
 }
-
-.logoFull {
-  display: flex;
-  align-items: baseline;
-  gap: 1px;
-}
-
+.logoFull { display: flex; align-items: baseline; gap: 2px; }
 .logoGo {
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 800;
-  /* Gradient azul-laranja como a logo NetGo */
-  background: linear-gradient(135deg, #FFFFFF 0%, #D4DCF0 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: -0.5px;
+  font-family: var(--font-display); font-size: 21px; font-weight: 800;
+  color: #FFFFFF; letter-spacing: -0.5px;
 }
-
 .logoChat {
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--brand-orange);
-  letter-spacing: 0.08em;
-  margin-left: 2px;
+  font-family: var(--font-display); font-size: 12px; font-weight: 700;
+  color: var(--brand-orange); letter-spacing: 0.1em; margin-left: 1px;
 }
-
 .collapseBtn {
-  width: 24px; height: 24px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-overlay);
-  color: var(--text-tertiary);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
+  width: 24px; height: 24px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.35); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   transition: all var(--duration-fast);
 }
-.collapseBtn:hover {
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
-  border-color: var(--border-strong);
-}
+.collapseBtn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
 
-/* ── NAV ─────────────────────────────────────────────────── */
-.nav {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 8px 0;
-}
-
-.section { margin-bottom: 4px; }
-
+/* NAV */
+.nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 0; }
+.section { margin-bottom: 2px; }
 .groupHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 4px 14px;
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-  transition: color var(--duration-fast);
-  margin-top: 8px;
-  margin-bottom: 2px;
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 5px 14px;
+  background: none; border: none;
+  color: rgba(255,255,255,0.25); font-size: 9.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer;
+  transition: color var(--duration-fast); margin-top: 8px; margin-bottom: 1px;
 }
-.groupHeader:hover { color: var(--text-secondary); }
-
-.groupChevron {
-  transition: transform 0.2s var(--ease);
-  transform: rotate(-90deg);
-}
+.groupHeader:hover { color: rgba(255,255,255,0.45); }
+.groupChevron { transition: transform 0.2s var(--ease); transform: rotate(-90deg); }
 .groupOpen { transform: rotate(0deg) !important; }
-
 .items { display: flex; flex-direction: column; gap: 1px; padding: 0 8px; }
-
 .navItem {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 10px;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  transition: all var(--duration-fast);
-  white-space: nowrap;
-  overflow: hidden;
-  border: 1px solid transparent;
-  text-decoration: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--radius-md);
+  color: var(--sidebar-text); font-size: var(--text-sm); font-weight: 500;
+  transition: all var(--duration-fast); white-space: nowrap; overflow: hidden;
+  border: 1px solid transparent; text-decoration: none;
 }
-.navItem:hover {
-  background: rgba(255,255,255,0.06);
-  color: var(--text-primary);
-}
+.navItem:hover { background: var(--sidebar-hover); color: rgba(255,255,255,0.85); }
 .navItem.active {
-  background: rgba(255,255,255,0.10);
-  color: #FFFFFF;
-  border-color: rgba(255,255,255,0.15);
-  font-weight: 600;
+  background: var(--sidebar-active); color: var(--sidebar-text-active);
+  border-color: rgba(255,255,255,0.12); font-weight: 600;
 }
-
-/* Indicador azul na esquerda para item ativo */
-.navItem.active::before {
-  content: '';
-  position: absolute;
-  left: 8px;
-  width: 3px;
-  height: 16px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, var(--brand-blue-light), var(--brand-orange));
-}
-.items { position: relative; }
-
-.navIcon { flex-shrink: 0; opacity: 0.7; }
+.navIcon { flex-shrink: 0; opacity: 0.6; }
 .navItem.active .navIcon { opacity: 1; }
-
+.navItem:hover .navIcon { opacity: 0.85; }
 .navLabel { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 
-/* ── USER AREA ───────────────────────────────────────────── */
-.userArea {
-  padding: 8px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
+/* Linha de destaque no item ativo */
+.navItem.active {
+  position: relative;
+}
+.navItem.active::before {
+  content: '';
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 16px; border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--brand-blue-light), var(--brand-orange));
 }
 
+/* USER */
+.userArea { padding: 8px; border-top: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; }
 .userRow {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  transition: all var(--duration-fast);
-  cursor: pointer;
-  text-decoration: none;
-  border: 1px solid transparent;
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; border-radius: var(--radius-md);
+  color: var(--sidebar-text); transition: all var(--duration-fast);
+  cursor: pointer; text-decoration: none; border: 1px solid transparent;
 }
-.userRow:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
-.userRow.active { background: rgba(255,255,255,0.08); color: var(--text-primary); border-color: rgba(255,255,255,0.12); }
-
+.userRow:hover { background: var(--sidebar-hover); color: rgba(255,255,255,0.85); }
+.userRow.active { background: var(--sidebar-active); color: #fff; }
 .avatar {
-  width: 28px; height: 28px;
-  border-radius: var(--radius-md);
+  width: 28px; height: 28px; border-radius: 8px;
   background: linear-gradient(135deg, var(--brand-blue), var(--brand-blue-light));
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-display);
-  font-size: 12px; font-weight: 700;
-  color: #fff;
+  font-family: var(--font-display); font-size: 12px; font-weight: 700; color: #fff;
   flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.15);
 }
-
 .userInfo { flex: 1; min-width: 0; }
-.userName {
-  display: block;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.userRole {
-  display: block;
-  font-size: 10px;
-  color: var(--text-tertiary);
-  margin-top: 1px;
-}
-.settingsIcon { color: var(--text-tertiary); flex-shrink: 0; }
+.userName { display: block; font-size: var(--text-sm); font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.userRole { display: block; font-size: 10px; color: rgba(255,255,255,0.35); margin-top: 1px; }
+.settingsIcon { color: rgba(255,255,255,0.3); flex-shrink: 0; }

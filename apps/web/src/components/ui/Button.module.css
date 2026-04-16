@@ -1,101 +1,71 @@
 .btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: none;
-  border-radius: var(--radius-md);
-  font-family: var(--font-body);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease);
-  white-space: nowrap;
-  flex-shrink: 0;
-  letter-spacing: 0.01em;
-  position: relative;
-  overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: none; border-radius: var(--radius-md); font-family: var(--font-body);
+  font-weight: 600; cursor: pointer; transition: all var(--duration-fast) var(--ease);
+  white-space: nowrap; flex-shrink: 0; letter-spacing: 0.01em; position: relative;
 }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 
-/* ── SIZES ───────────────────────────────────────────────── */
-.btn-sm  { height: 28px; padding: 0 10px; font-size: var(--text-xs); gap: 5px; }
+.btn-sm  { height: 28px; padding: 0 10px; font-size: var(--text-xs); gap: 4px; }
 .btn-md  { height: 34px; padding: 0 14px; font-size: var(--text-sm); }
 .btn-lg  { height: 42px; padding: 0 20px; font-size: var(--text-md); gap: 8px; }
 .btn-icon-only.btn-sm  { width: 28px; padding: 0; }
 .btn-icon-only.btn-md  { width: 34px; padding: 0; }
 .btn-icon-only.btn-lg  { width: 42px; padding: 0; }
 
-/* ── VARIANTS ────────────────────────────────────────────── */
-
-/* PRIMARY — branco */
+/* PRIMARY — azul da marca */
 .btn-primary {
-  background: #FFFFFF;
-  color: #080C14;
-  border: 1px solid rgba(255,255,255,0.9);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  background: var(--brand-blue); color: #FFFFFF;
+  border: 1px solid var(--brand-blue);
+  box-shadow: 0 1px 4px rgba(32,80,184,0.25);
 }
 .btn-primary:hover:not(:disabled) {
-  background: #F0F4FF;
-  box-shadow: 0 2px 8px rgba(255,255,255,0.15);
-  transform: translateY(-1px);
+  background: var(--brand-blue-light); border-color: var(--brand-blue-light);
+  box-shadow: 0 4px 12px rgba(32,80,184,0.35); transform: translateY(-1px);
 }
 .btn-primary:active { transform: translateY(0); }
 
-/* ACCENT — azul da marca */
+/* ACCENT — laranja da marca */
 .btn-accent {
-  background: var(--brand-blue);
-  color: #fff;
-  border: 1px solid var(--brand-blue-light);
-  box-shadow: 0 2px 8px rgba(32,80,184,0.3);
+  background: var(--brand-orange); color: #FFFFFF;
+  border: 1px solid var(--brand-orange);
+  box-shadow: 0 1px 4px rgba(232,87,42,0.25);
 }
 .btn-accent:hover:not(:disabled) {
-  background: var(--brand-blue-light);
-  box-shadow: 0 4px 16px rgba(32,80,184,0.4);
-  transform: translateY(-1px);
+  background: var(--brand-orange-dim);
+  box-shadow: 0 4px 12px rgba(232,87,42,0.35); transform: translateY(-1px);
 }
 
-/* SECONDARY — laranja da marca */
+/* SECONDARY */
 .btn-secondary {
-  background: var(--bg-overlay);
-  color: var(--text-primary);
+  background: #FFFFFF; color: var(--text-primary);
   border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
 }
 .btn-secondary:hover:not(:disabled) {
-  background: var(--bg-subtle);
-  border-color: rgba(255,255,255,0.2);
-  color: #fff;
+  background: var(--bg-overlay); border-color: var(--brand-blue);
+  color: var(--brand-blue);
 }
 
 /* GHOST */
 .btn-ghost {
-  background: transparent;
-  color: var(--text-secondary);
+  background: transparent; color: var(--text-secondary);
   border: 1px solid transparent;
 }
 .btn-ghost:hover:not(:disabled) {
-  background: rgba(255,255,255,0.06);
-  color: var(--text-primary);
-  border-color: var(--border);
+  background: var(--bg-overlay); color: var(--text-primary); border-color: var(--border);
 }
 
 /* DANGER */
 .btn-danger {
-  background: var(--danger-bg);
-  color: var(--danger);
-  border: 1px solid rgba(255,77,77,0.3);
+  background: var(--danger-bg); color: var(--danger);
+  border: 1px solid rgba(220,38,38,0.25);
 }
-.btn-danger:hover:not(:disabled) {
-  background: rgba(255,77,77,0.2);
-  border-color: rgba(255,77,77,0.5);
-}
+.btn-danger:hover:not(:disabled) { background: #FEE2E2; border-color: rgba(220,38,38,0.45); }
 
-/* ── LOADING ─────────────────────────────────────────────── */
 .spinner {
-  width: 13px; height: 13px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,0.25);
-  border-top-color: currentColor;
-  animation: spin 0.6s linear infinite;
-  flex-shrink: 0;
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.3); border-top-color: currentColor;
+  animation: spin 0.6s linear infinite; flex-shrink: 0;
 }
 @keyframes spin { to { transform: rotate(360deg); } }

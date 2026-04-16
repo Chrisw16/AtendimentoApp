@@ -31,7 +31,7 @@
   gap: var(--space-3);
   transition: border-color var(--duration-fast);
 }
-.kpiCard:hover { border-color: var(--border-strong); }
+.kpiCard:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
 
 .kpiCard-accent  { border-color: var(--accent-border); }
 .kpiCard-success { border-color: rgba(0,229,160,0.2); }
@@ -157,14 +157,14 @@
   width: 100%;
   display: flex;
   align-items: flex-end;
-  background: var(--bg-elevated);
+  background: var(--border);
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   overflow: hidden;
 }
 
 .bar {
   width: 100%;
-  background: var(--accent);
+  background: var(--brand-blue);
   opacity: 0.7;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   transition: opacity var(--duration-fast);
