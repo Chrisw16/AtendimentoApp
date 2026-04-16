@@ -210,6 +210,7 @@ export default function Fluxos() {
               onEdit={setModal}
               onAtivar={(f) => ativarMut.mutate(f.id)}
               onDelete={handleDelete}
+              onOpenEditor={f => navigate(`/fluxos/${f.id}`)}
             />
           ))}
         </div>

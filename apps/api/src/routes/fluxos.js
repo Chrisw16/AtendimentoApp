@@ -7,7 +7,8 @@ export const fluxosRouter = Router();
 fluxosRouter.use(authMiddleware, adminMiddleware);
 
 fluxosRouter.get('/', asyncHandler(async (req, res) => {
-  res.json(await getDb()('fluxos').orderBy('nome'));
+  const fluxos = await getDb()('fluxos').orderBy('criado_em', 'desc');
+  res.json(fluxos);
 }));
 
 fluxosRouter.get('/:id', asyncHandler(async (req, res) => {
@@ -17,28 +18,44 @@ fluxosRouter.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 fluxosRouter.post('/', asyncHandler(async (req, res) => {
-  const { nome, nos = [], conexoes = [], gatilho } = req.body;
+  const { nome, gatilho = 'nova_conversa', dados, nos = [], conexoes = [] } = req.body;
   if (!nome) throw new HttpError(400, 'nome obrigatório');
-  const [f] = await getDb()('fluxos').insert({ nome, nos, conexoes, gatilho }).returning('*');
+
+  const dadosStr = dados ? (typeof dados === 'string' ? dados : JSON.stringify(dados)) : JSON.stringify({ nodes: [], edges: [] });
+
+  const [f] = await getDb()('fluxos')
+    .insert({ nome, gatilho, dados: dadosStr, nos: JSON.stringify(nos), conexoes: JSON.stringify(conexoes) })
+    .returning('*');
   res.status(201).json(f);
 }));
 
 fluxosRouter.put('/:id', asyncHandler(async (req, res) => {
-  const { nome, nos, conexoes, gatilho } = req.body;
+  const { nome, gatilho, dados, nos, conexoes, ativo } = req.body;
   const db = getDb();
-  const [f] = await db('fluxos')
-    .where({ id: req.params.id })
-    .update({ nome, nos, conexoes, gatilho, atualizado: db.fn.now() })
-    .returning('*');
+
+  const patch = { atualizado: db.fn.now() };
+  if (nome    !== undefined) patch.nome     = nome;
+  if (gatilho !== undefined) patch.gatilho  = gatilho;
+  if (ativo   !== undefined) patch.ativo    = ativo;
+  if (dados   !== undefined) patch.dados    = typeof dados === 'string' ? dados : JSON.stringify(dados);
+  if (nos     !== undefined) patch.nos      = typeof nos === 'string' ? nos : JSON.stringify(nos);
+  if (conexoes!== undefined) patch.conexoes = typeof conexoes === 'string' ? conexoes : JSON.stringify(conexoes);
+
+  const [f] = await db('fluxos').where({ id: req.params.id }).update(patch).returning('*');
   if (!f) throw new HttpError(404, 'Fluxo não encontrado');
   res.json(f);
 }));
 
 fluxosRouter.post('/:id/ativar', asyncHandler(async (req, res) => {
   const db = getDb();
-  // Desativa todos os outros primeiro
   await db('fluxos').update({ ativo: false });
   const [f] = await db('fluxos').where({ id: req.params.id }).update({ ativo: true }).returning('*');
+  if (!f) throw new HttpError(404, 'Fluxo não encontrado');
+  res.json(f);
+}));
+
+fluxosRouter.post('/:id/despublicar', asyncHandler(async (req, res) => {
+  const [f] = await getDb()('fluxos').where({ id: req.params.id }).update({ ativo: false }).returning('*');
   if (!f) throw new HttpError(404, 'Fluxo não encontrado');
   res.json(f);
 }));
