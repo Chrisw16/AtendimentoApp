@@ -1,36 +1,32 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Zap } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { api } from '../lib/api';
 import { useStore } from '../store';
 import styles from './Login.module.css';
 
 export default function Login() {
   const navigate = useNavigate();
   const setAuth  = useStore(s => s.setAuth);
-  const toast    = useStore(s => s.toast);
-
-  const [form, setForm]       = useState({ login: '', senha: '' });
-  const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading]  = useState(false);
-  const [error, setError]      = useState('');
+  const [form,    setForm]    = useState({ login: '', senha: '' });
+  const [error,   setError]   = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showPass,setShowPass]= useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.login || !form.senha) { setError('Preencha login e senha.'); return; }
-    setError('');
-    setLoading(true);
+    if (!form.login || !form.senha) { setError('Preencha login e senha'); return; }
+    setError(''); setLoading(true);
     try {
-      const res  = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Credenciais inválidas');
-      setAuth(data);
-      navigate(data.role === 'admin' ? '/' : '/chat', { replace: true });
+      const data = await api.post('/auth/login', form);
+      if (data.token) {
+        setAuth(data.token, data.agente);
+        navigate('/', { replace: true });
+      } else {
+        setError(data.error || 'Credenciais inválidas');
+      }
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Erro ao conectar');
     } finally {
       setLoading(false);
     }
@@ -38,71 +34,56 @@ export default function Login() {
 
   return (
     <div className={styles.root}>
-      {/* ── GRID BACKGROUND ── */}
-      <div className={styles.grid} aria-hidden />
-
-      {/* ── CARD ── */}
       <div className={styles.card}>
-        {/* Logo */}
-        <div className={styles.brand}>
-          <div className={styles.logoMark}>
-            <Zap size={18} strokeWidth={2.5} />
-          </div>
-          <div className={styles.brandText}>
-            <span className={styles.brandName}>MAXXI</span>
-            <span className={styles.brandSub}>Painel de Atendimento</span>
-          </div>
+        {/* Logo GoCHAT */}
+        <div className={styles.logoWrap}>
+          <span className={styles.logoGo}>Go</span>
+          <span className={styles.logoChat}>CHAT</span>
+          <p className={styles.logoSub}>Painel de Atendimento</p>
         </div>
 
         <div className={styles.divider} />
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className={styles.form} noValidate>
-          <div className={styles.field}>
-            <label htmlFor="login" className={styles.label}>Login</label>
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <div>
+            <label className={styles.label}>Login</label>
             <input
-              id="login"
-              type="text"
-              autoComplete="username"
-              autoFocus
               className={styles.input}
+              type="text"
               placeholder="seu.login"
               value={form.login}
               onChange={e => setForm(f => ({ ...f, login: e.target.value }))}
-              disabled={loading}
-              aria-invalid={!!error}
+              autoFocus
+              autoComplete="username"
+              required
             />
           </div>
 
-          <div className={styles.field}>
-            <label htmlFor="senha" className={styles.label}>Senha</label>
-            <div className={styles.passWrap}>
+          <div>
+            <label className={styles.label}>Senha</label>
+            <div className={styles.inputWrap}>
               <input
-                id="senha"
-                type={showPass ? 'text' : 'password'}
-                autoComplete="current-password"
                 className={styles.input}
+                type={showPass ? 'text' : 'password'}
                 placeholder="••••••••"
                 value={form.senha}
                 onChange={e => setForm(f => ({ ...f, senha: e.target.value }))}
-                disabled={loading}
-                aria-invalid={!!error}
+                autoComplete="current-password"
+                required
+                style={{ paddingRight: 36 }}
               />
               <button
                 type="button"
-                className={styles.passToggle}
+                className={styles.togglePass}
                 onClick={() => setShowPass(v => !v)}
                 aria-label={showPass ? 'Ocultar senha' : 'Mostrar senha'}
-                tabIndex={-1}
               >
                 {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
           </div>
 
-          {error && (
-            <p className={styles.error} role="alert">{error}</p>
-          )}
+          {error && <p className={styles.error} role="alert">{error}</p>}
 
           <button
             type="submit"
@@ -110,14 +91,18 @@ export default function Login() {
             disabled={loading}
           >
             {loading ? (
-              <span className={styles.spinner} aria-hidden />
-            ) : null}
-            {loading ? 'Entrando...' : 'Entrar'}
+              <span className="spinner" style={{ borderTopColor: '#fff' }} />
+            ) : (
+              <>
+                Entrar
+                <ArrowRight size={15} />
+              </>
+            )}
           </button>
         </form>
 
         <p className={styles.footer}>
-          Maxxi CITmax &mdash; Acesso restrito
+          Powered by <span className={styles.footerBrand}>NetGo Internet</span>
         </p>
       </div>
     </div>

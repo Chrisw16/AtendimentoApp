@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   MessageSquare, LayoutDashboard, Users, GitBranch,
   BarChart2, Clock, Star, Bell, FileText, Settings,
@@ -13,40 +13,40 @@ const NAV = [
   {
     group: 'Atendimento',
     items: [
-      { to: '/chat',      icon: MessageSquare, label: 'Chat' },
-      { to: '/historico', icon: Clock,         label: 'Histórico' },
-      { to: '/tarefas',   icon: FileText,      label: 'Tarefas' },
-      { to: '/satisfacao',icon: Star,          label: 'Satisfação' },
+      { to: '/chat',       icon: MessageSquare, label: 'Chat' },
+      { to: '/historico',  icon: Clock,         label: 'Histórico' },
+      { to: '/tarefas',    icon: FileText,      label: 'Tarefas' },
+      { to: '/satisfacao', icon: Star,          label: 'Satisfação' },
     ],
   },
   {
     group: 'Configuração',
     items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard',  adminOnly: true },
-      { to: '/agentes',   icon: Users,           label: 'Agentes',    adminOnly: true },
-      { to: '/fluxos',    icon: GitBranch,       label: 'Fluxos',     adminOnly: true },
-      { to: '/canais',    icon: Zap,             label: 'Canais',     adminOnly: true },
-      { to: '/analytics', icon: BarChart2,       label: 'Analytics',  adminOnly: true },
+      { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard',  adminOnly: true },
+      { to: '/agentes',    icon: Users,           label: 'Agentes',    adminOnly: true },
+      { to: '/fluxos',     icon: GitBranch,       label: 'Fluxos',     adminOnly: true },
+      { to: '/canais',     icon: Zap,             label: 'Canais',     adminOnly: true },
+      { to: '/analytics',  icon: BarChart2,       label: 'Analytics',  adminOnly: true },
     ],
   },
   {
     group: 'Operações',
     items: [
-      { to: '/clientes',  icon: Building, label: 'Clientes' },
-      { to: '/ocorrencias',icon: Bell,    label: 'Ocorrências' },
-      { to: '/ordens',    icon: Wrench,   label: 'Ordens de Serviço' },
-      { to: '/frota',     icon: Truck,    label: 'Frota' },
-      { to: '/cobertura', icon: Map,      label: 'Cobertura' },
+      { to: '/clientes',   icon: Building, label: 'Clientes' },
+      { to: '/ocorrencias',icon: Bell,     label: 'Ocorrências' },
+      { to: '/ordens',     icon: Wrench,   label: 'Ordens de Serviço' },
+      { to: '/frota',      icon: Truck,    label: 'Frota' },
+      { to: '/cobertura',  icon: Map,      label: 'Cobertura' },
     ],
   },
   {
     group: 'Infraestrutura',
     items: [
-      { to: '/rede',      icon: Network,  label: 'Monitor de Rede',  adminOnly: true },
-      { to: '/dispositivos',icon: Shield, label: 'Dispositivos CPE', adminOnly: true },
-      { to: '/financeiro',icon: Wallet,   label: 'Financeiro',       adminOnly: true },
-      { to: '/email',     icon: Mail,     label: 'E-mail' },
-      { to: '/voip',      icon: Phone,    label: 'VoIP',             adminOnly: true },
+      { to: '/rede',        icon: Network,  label: 'Monitor de Rede',  adminOnly: true },
+      { to: '/dispositivos',icon: Shield,   label: 'Dispositivos CPE', adminOnly: true },
+      { to: '/financeiro',  icon: Wallet,   label: 'Financeiro',       adminOnly: true },
+      { to: '/email',       icon: Mail,     label: 'E-mail' },
+      { to: '/voip',        icon: Phone,    label: 'VoIP',             adminOnly: true },
     ],
   },
 ];
@@ -67,10 +67,28 @@ function NavItem({ item, collapsed }) {
   );
 }
 
+// Logo GoCHAT com cores da NetGo
+function GoLogo({ collapsed }) {
+  return (
+    <div className={styles.logoMark}>
+      {collapsed ? (
+        <span className={styles.logoIcon}>G</span>
+      ) : (
+        <div className={styles.logoFull}>
+          <span className={styles.logoGo}>Go</span>
+          <span className={styles.logoChat}>CHAT</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Sidebar() {
   const { role, user } = useStore(s => ({ role: s.role, user: s.user }));
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState(new Set(['Atendimento', 'Configuração', 'Operações', 'Infraestrutura']));
+  const [expandedGroups, setExpandedGroups] = useState(
+    new Set(['Atendimento', 'Configuração', 'Operações', 'Infraestrutura'])
+  );
 
   const toggleGroup = (group) => {
     if (collapsed) return;
@@ -86,28 +104,25 @@ export default function Sidebar() {
     items: section.items.filter(item => !item.adminOnly || role === 'admin'),
   })).filter(s => s.items.length > 0);
 
-  const initial = (user?.nome || user?.login || 'M').charAt(0).toUpperCase();
+  const initial = (user?.nome || user?.login || 'G').charAt(0).toUpperCase();
 
   return (
     <aside
       className={[styles.sidebar, collapsed && styles.collapsed].filter(Boolean).join(' ')}
       aria-label="Navegação principal"
     >
-      {/* ── LOGO ── */}
+      {/* ── BRAND ── */}
       <div className={styles.brand}>
-        <div className={styles.logo}>
-          <span className={styles.logoMark}>M</span>
-          {!collapsed && <span className={styles.logoText}>AXXI</span>}
-        </div>
+        <GoLogo collapsed={collapsed} />
         <button
           className={styles.collapseBtn}
           onClick={() => setCollapsed(v => !v)}
-          aria-label={collapsed ? 'Expandir sidebar' : 'Recolher sidebar'}
+          aria-label={collapsed ? 'Expandir' : 'Recolher'}
           data-tooltip={collapsed ? 'Expandir' : undefined}
         >
           <ChevronLeft
             size={14}
-            style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
+            style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s' }}
           />
         </button>
       </div>
@@ -151,10 +166,7 @@ export default function Sidebar() {
           }
           data-tooltip={collapsed ? 'Configurações' : undefined}
         >
-          <div
-            className={styles.avatar}
-            style={{ background: `hsl(${(initial.charCodeAt(0) * 37) % 360}deg 40% 25%)` }}
-          >
+          <div className={styles.avatar}>
             {initial}
           </div>
           {!collapsed && (

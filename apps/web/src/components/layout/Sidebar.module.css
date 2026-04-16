@@ -1,3 +1,4 @@
+/* ── SIDEBAR ─────────────────────────────────────────────── */
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -6,77 +7,85 @@
   background: var(--bg-surface);
   border-right: 1px solid var(--border);
   flex-shrink: 0;
-  transition: width var(--duration-slow) var(--ease);
+  transition: width 0.25s var(--ease);
   overflow: hidden;
+  position: relative;
+  /* Subtle vertical gradient */
+  background: linear-gradient(180deg, #0F1520 0%, #0A0E18 100%);
 }
 
-.collapsed {
-  width: var(--sidebar-collapsed);
-}
+.sidebar.collapsed { width: var(--sidebar-collapsed); }
 
-/* ── BRAND ───────────────────────────────────────────────────── */
+/* ── BRAND ───────────────────────────────────────────────── */
 .brand {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 14px;
   height: var(--topbar-height);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
+/* Logo GoCHAT */
+.logoMark { display: flex; align-items: center; overflow: hidden; }
+
+.logoIcon {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--brand-blue), var(--brand-orange));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-size: 14px; font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
 }
 
-.logoMark {
+.logoFull {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: var(--accent);
-  color: var(--text-inverse);
-  border-radius: var(--radius-sm);
+  align-items: baseline;
+  gap: 1px;
+}
+
+.logoGo {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 20px;
   font-weight: 800;
-  flex-shrink: 0;
+  /* Gradient azul-laranja como a logo NetGo */
+  background: linear-gradient(135deg, #FFFFFF 0%, #D4DCF0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   letter-spacing: -0.5px;
 }
 
-.logoText {
+.logoChat {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--brand-orange);
   letter-spacing: 0.08em;
-  white-space: nowrap;
+  margin-left: 2px;
 }
 
 .collapseBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px; height: 24px;
   border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
+  border: 1px solid var(--border);
+  background: var(--bg-overlay);
   color: var(--text-tertiary);
   cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  transition: background var(--duration-fast), color var(--duration-fast);
+  transition: all var(--duration-fast);
 }
 .collapseBtn:hover {
-  background: var(--bg-overlay);
-  color: var(--text-primary);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
 }
 
-/* ── NAV ─────────────────────────────────────────────────────── */
+/* ── NAV ─────────────────────────────────────────────────── */
 .nav {
   flex: 1;
   overflow-y: auto;
@@ -84,76 +93,83 @@
   padding: 8px 0;
 }
 
-.section {
-  margin-bottom: 2px;
-}
+.section { margin-bottom: 4px; }
 
 .groupHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 6px 14px 4px;
+  padding: 4px 14px;
   background: none;
   border: none;
-  cursor: pointer;
   color: var(--text-tertiary);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-size: 9.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  text-align: left;
+  letter-spacing: 0.1em;
+  cursor: pointer;
   transition: color var(--duration-fast);
+  margin-top: 8px;
+  margin-bottom: 2px;
 }
 .groupHeader:hover { color: var(--text-secondary); }
 
 .groupChevron {
-  transition: transform var(--duration-base) var(--ease);
-  flex-shrink: 0;
+  transition: transform 0.2s var(--ease);
+  transform: rotate(-90deg);
 }
-.groupOpen { transform: rotate(180deg); }
+.groupOpen { transform: rotate(0deg) !important; }
 
-.items {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 0 6px;
-}
+.items { display: flex; flex-direction: column; gap: 1px; padding: 0 8px; }
 
-/* ── NAV ITEM ────────────────────────────────────────────────── */
 .navItem {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 0 8px;
-  height: 32px;
+  padding: 7px 10px;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-size: var(--text-sm);
-  transition:
-    background var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
+  font-weight: 500;
+  transition: all var(--duration-fast);
   white-space: nowrap;
   overflow: hidden;
+  border: 1px solid transparent;
+  text-decoration: none;
 }
-
 .navItem:hover {
-  background: var(--bg-elevated);
+  background: rgba(255,255,255,0.06);
   color: var(--text-primary);
 }
-
 .navItem.active {
-  background: var(--accent-muted);
-  color: var(--accent);
+  background: rgba(255,255,255,0.10);
+  color: #FFFFFF;
+  border-color: rgba(255,255,255,0.15);
+  font-weight: 600;
 }
 
-.navIcon { flex-shrink: 0; }
-.navLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Indicador azul na esquerda para item ativo */
+.navItem.active::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--brand-blue-light), var(--brand-orange));
+}
+.items { position: relative; }
 
-/* ── USER AREA ───────────────────────────────────────────────── */
+.navIcon { flex-shrink: 0; opacity: 0.7; }
+.navItem.active .navIcon { opacity: 1; }
+
+.navLabel { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── USER AREA ───────────────────────────────────────────── */
 .userArea {
+  padding: 8px;
   border-top: 1px solid var(--border);
-  padding: 8px 6px;
   flex-shrink: 0;
 }
 
@@ -161,59 +177,41 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
-  transition: background var(--duration-fast), color var(--duration-fast);
-  overflow: hidden;
+  transition: all var(--duration-fast);
   cursor: pointer;
+  text-decoration: none;
+  border: 1px solid transparent;
 }
-.userRow:hover {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-}
-.userRow.active { background: var(--accent-muted); color: var(--accent); }
+.userRow:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+.userRow.active { background: rgba(255,255,255,0.08); color: var(--text-primary); border-color: rgba(255,255,255,0.12); }
 
 .avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--brand-blue), var(--brand-blue-light));
+  display: flex; align-items: center; justify-content: center;
   font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: 12px; font-weight: 700;
+  color: #fff;
   flex-shrink: 0;
-  border: 1px solid var(--border-strong);
+  border: 1px solid rgba(255,255,255,0.15);
 }
 
-.userInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  flex: 1;
-  min-width: 0;
-}
-
+.userInfo { flex: 1; min-width: 0; }
 .userName {
+  display: block;
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-
 .userRole {
-  font-size: var(--text-xs);
+  display: block;
+  font-size: 10px;
   color: var(--text-tertiary);
+  margin-top: 1px;
 }
-
-.settingsIcon {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-  transition: color var(--duration-fast);
-}
-.userRow:hover .settingsIcon { color: var(--text-secondary); }
+.settingsIcon { color: var(--text-tertiary); flex-shrink: 0; }
