@@ -26,6 +26,7 @@ const NAV = [
       { to: '/fluxos',     icon: GitBranch,       label: 'Fluxos',     adminOnly: true },
       { to: '/canais',     icon: Zap,             label: 'Canais',     adminOnly: true },
       { to: '/analytics',  icon: BarChart2,       label: 'Analytics',  adminOnly: true },
+      { to: '/configuracoes',icon: Settings,         label: 'Configurações', adminOnly: true },
     ],
   },
   {

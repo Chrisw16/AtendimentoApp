@@ -3,96 +3,111 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useStore } from '../store';
 import {
-  MessageSquare, Clock, Bell, Shield, Save, Check,
-  Eye, EyeOff, Globe, Zap, Building, ChevronDown,
+  Bot, Clock, Bell, Shield, Save, Check,
+  Eye, EyeOff, Globe, Zap, Building, Database,
+  Key, AlertCircle,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import styles from './Configuracoes.module.css';
 
-// ── TOGGLE ────────────────────────────────────────────────────────
-function Toggle({ checked, onChange, label }) {
+// ── TABS ──────────────────────────────────────────────────────────
+const TABS = [
+  { id: 'geral',      label: 'Geral',         icon: Building },
+  { id: 'ia',         label: 'IA & Bot',       icon: Bot      },
+  { id: 'horario',    label: 'Horário',        icon: Clock    },
+  { id: 'notifs',     label: 'Notificações',   icon: Bell     },
+  { id: 'integracoes',label: 'Integrações',    icon: Key      },
+];
+
+// ── CAMPO TOGGLE ──────────────────────────────────────────────────
+function Toggle({ checked, onChange, label, desc }) {
   return (
     <label className={styles.toggleRow}>
-      {label && <span className={styles.toggleLabel}>{label}</span>}
+      <div>
+        <p className={styles.toggleLabel}>{label}</p>
+        {desc && <p className={styles.toggleDesc}>{desc}</p>}
+      </div>
       <span className={styles.toggleWrap}>
-        <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className={styles.toggleInput} />
-        <span className={styles.toggleTrack}>
-          <span className={styles.toggleThumb} />
-        </span>
+        <input type="checkbox" checked={checked}
+          onChange={e => onChange(e.target.checked)}
+          className={styles.toggleInput}/>
+        <span className={styles.toggleTrack}><span className={styles.toggleThumb}/></span>
       </span>
     </label>
   );
 }
 
-// ── API KEY FIELD ─────────────────────────────────────────────────
-function ApiKeyField({ label, value, onChange, placeholder, hint, badge }) {
+// ── CAMPO API KEY ─────────────────────────────────────────────────
+function ApiKeyField({ label, value, onChange, placeholder, hint, badge, mono = true }) {
   const [show, setShow] = useState(false);
-  const masked = value ? (show ? value : value.slice(0, 8) + '••••••••••••••••') : '';
-
+  const filled = !!(value && value.length > 3);
   return (
-    <div className={styles.apiField}>
-      <div className={styles.apiFieldHeader}>
-        <span className={styles.fieldLabel}>{label}</span>
-        {badge && <span className={styles.apiBadge}>{badge}</span>}
-      </div>
-      <div className={[styles.apiInput, value && styles.apiInputFilled].join(' ')}>
-        <input
-          type={show ? 'text' : 'password'}
-          value={show ? value : masked}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          autoComplete="off"
-          spellCheck={false}
-          className={styles.apiInputText}
-        />
-        <button type="button" onClick={() => setShow(v => !v)} className={styles.apiInputToggle}>
-          {show ? <EyeOff size={13} /> : <Eye size={13} />}
-        </button>
-        {value && (
-          <span className={styles.apiStatus}>
-            <span className={styles.apiStatusDot} /> Configurada
+    <div className={styles.field}>
+      <div className={styles.fieldHeader}>
+        <label className={styles.fieldLabel}>{label}</label>
+        {badge && <span className={[styles.badge, styles[`badge-${badge}`]].join(' ')}>{badge}</span>}
+        {filled && (
+          <span className={styles.configuredBadge}>
+            <span className={styles.configuredDot}/>Configurada
           </span>
         )}
       </div>
-      {hint && <span className={styles.fieldHint}>{hint}</span>}
+      <div className={[styles.secretInput, filled && styles.secretInputFilled].join(' ')}>
+        <input
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          autoComplete="off" spellCheck={false}
+          className={styles.secretInputText}
+          style={mono ? { fontFamily: 'var(--font-mono)', fontSize: 12 } : {}}
+        />
+        <button type="button" onClick={() => setShow(v => !v)}
+          className={styles.secretInputEye}>
+          {show ? <EyeOff size={14}/> : <Eye size={14}/>}
+        </button>
+      </div>
+      {hint && <p className={styles.fieldHint}>{hint}</p>}
     </div>
   );
 }
 
-// ── SECTION ───────────────────────────────────────────────────────
-function Section({ icon: Icon, color = 'blue', title, description, children, defaultOpen = true }) {
-  const [open, setOpen] = useState(defaultOpen);
+// ── CARD DE INTEGRAÇÃO ────────────────────────────────────────────
+function IntegrationCard({ title, color, logo, status, children }) {
+  const statusColor = { ok: '#16A34A', error: '#DC2626', pending: '#D97706', off: '#9CA3AF' };
+  const statusLabel = { ok: 'Conectado', error: 'Erro', pending: 'Aguardando', off: 'Não configurado' };
   return (
-    <div className={styles.section}>
-      <button className={styles.sectionHeader} onClick={() => setOpen(v => !v)}>
-        <div className={[styles.sectionIcon, styles[`icon-${color}`]].join(' ')}>
-          <Icon size={15} />
+    <div className={styles.integCard}>
+      <div className={styles.integCardHeader}>
+        <div className={styles.integLogo} style={{ background: color }}>
+          {logo}
         </div>
-        <div className={styles.sectionMeta}>
-          <span className={styles.sectionTitle}>{title}</span>
-          <span className={styles.sectionDesc}>{description}</span>
+        <div className={styles.integMeta}>
+          <span className={styles.integTitle}>{title}</span>
+          <span className={styles.integStatus} style={{ color: statusColor[status] }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor[status], display: 'inline-block', marginRight: 5 }}/>
+            {statusLabel[status]}
+          </span>
         </div>
-        <ChevronDown size={15} className={[styles.sectionChevron, open && styles.sectionChevronOpen].join(' ')} />
-      </button>
-      {open && <div className={styles.sectionBody}>{children}</div>}
+      </div>
+      <div className={styles.integCardBody}>{children}</div>
     </div>
   );
 }
 
-// ── MAIN ──────────────────────────────────────────────────────────
+// ── PAGE ──────────────────────────────────────────────────────────
 export default function Configuracoes() {
   const toast = useStore(s => s.toast);
   const qc    = useQueryClient();
+  const [tab, setTab]   = useState('geral');
   const [saved, setSaved] = useState(false);
 
-  // ── Estado de cada seção ──
   const [nomeEmpresa,  setNomeEmpresa]  = useState('');
   const [promptIA,     setPromptIA]     = useState('');
   const [saudacao,     setSaudacao]     = useState('');
   const [horario,      setHorario]      = useState({ ativo: false, dias: [1,2,3,4,5], inicio: '08:00', fim: '18:00' });
   const [msgFora,      setMsgFora]      = useState('');
   const [notifs,       setNotifs]       = useState({ nova_conversa: true, fila_longa: true, equip_offline: false, os_agendada: false });
-  // API Keys
   const [anthropicKey, setAnthropicKey] = useState('');
   const [openaiKey,    setOpenaiKey]    = useState('');
   const [sgpUrl,       setSgpUrl]       = useState('');
@@ -108,18 +123,18 @@ export default function Configuracoes() {
 
   useEffect(() => {
     if (!kv) return;
-    setNomeEmpresa(kv.nome_empresa  || '');
-    setPromptIA(   kv.prompt_ia     || '');
-    setSaudacao(   kv.saudacao      || '');
-    setHorario(    kv.horario       || { ativo: false, dias: [1,2,3,4,5], inicio: '08:00', fim: '18:00' });
-    setMsgFora(    kv.mensagem_fora_hora || '');
-    setNotifs(     kv.notificacoes  || { nova_conversa: true, fila_longa: true, equip_offline: false, os_agendada: false });
-    setAnthropicKey(kv.anthropic_api_key || '');
-    setOpenaiKey(   kv.openai_api_key    || '');
-    setSgpUrl(      kv.sgp_url           || '');
-    setSgpToken(    kv.sgp_token         || '');
-    setEvoUrl(      kv.evolution_url     || '');
-    setEvoKey(      kv.evolution_key     || '');
+    setNomeEmpresa(kv.nome_empresa        || '');
+    setPromptIA(   kv.prompt_ia           || '');
+    setSaudacao(   kv.saudacao            || '');
+    setHorario(    kv.horario             || { ativo: false, dias: [1,2,3,4,5], inicio: '08:00', fim: '18:00' });
+    setMsgFora(    kv.mensagem_fora_hora  || '');
+    setNotifs(     kv.notificacoes        || { nova_conversa: true, fila_longa: true, equip_offline: false, os_agendada: false });
+    setAnthropicKey(kv.anthropic_api_key  || '');
+    setOpenaiKey(   kv.openai_api_key     || '');
+    setSgpUrl(      kv.sgp_url            || '');
+    setSgpToken(    kv.sgp_token          || '');
+    setEvoUrl(      kv.evolution_url      || '');
+    setEvoKey(      kv.evolution_key      || '');
   }, [kv]);
 
   const saveMut = useMutation({
@@ -133,227 +148,285 @@ export default function Configuracoes() {
   });
 
   const handleSave = () => saveMut.mutate({
-    nome_empresa:        nomeEmpresa,
-    prompt_ia:           promptIA,
-    saudacao,
-    horario,
-    mensagem_fora_hora:  msgFora,
-    notificacoes:        notifs,
-    anthropic_api_key:   anthropicKey,
-    openai_api_key:      openaiKey,
-    sgp_url:             sgpUrl,
-    sgp_token:           sgpToken,
-    evolution_url:       evoUrl,
-    evolution_key:       evoKey,
+    nome_empresa: nomeEmpresa, prompt_ia: promptIA, saudacao,
+    horario, mensagem_fora_hora: msgFora, notificacoes: notifs,
+    anthropic_api_key: anthropicKey, openai_api_key: openaiKey,
+    sgp_url: sgpUrl, sgp_token: sgpToken,
+    evolution_url: evoUrl, evolution_key: evoKey,
   });
 
   const DIAS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-  const toggleDia = (d) => setHorario(h => ({
-    ...h,
-    dias: h.dias.includes(d) ? h.dias.filter(x => x !== d) : [...h.dias, d].sort(),
+  const toggleDia = d => setHorario(h => ({
+    ...h, dias: h.dias.includes(d) ? h.dias.filter(x => x !== d) : [...h.dias, d].sort()
   }));
 
-  if (isLoading) return <div className={styles.loading}><span className="spinner spinner-lg" /></div>;
+  // Status das integrações
+  const integStatus = {
+    anthropic: anthropicKey ? 'ok' : 'off',
+    openai:    openaiKey    ? 'ok' : 'off',
+    sgp:       sgpUrl && sgpToken ? 'ok' : sgpUrl || sgpToken ? 'pending' : 'off',
+    evolution: evoUrl && evoKey   ? 'ok' : evoUrl || evoKey   ? 'pending' : 'off',
+  };
+
+  if (isLoading) return <div className={styles.loading}><span className="spinner spinner-lg"/></div>;
 
   return (
     <div className={styles.root}>
-      <div className={styles.content}>
 
-        {/* ── EMPRESA ── */}
-        <Section icon={Building} color="navy" title="Empresa" description="Identidade e nome exibido nas mensagens automáticas.">
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>Nome da empresa</label>
-            <input
-              className={styles.input}
-              value={nomeEmpresa}
-              onChange={e => setNomeEmpresa(e.target.value)}
-              placeholder="NetGo Internet"
-            />
-            <span className={styles.fieldHint}>Usado em variáveis como {'{{nome_empresa}}'} nos fluxos</span>
-          </div>
-        </Section>
+      {/* ── HEADER ── */}
+      <div className={styles.header}>
+        <div>
+          <h1 className={styles.headerTitle}>Configurações</h1>
+          <p className={styles.headerDesc}>Gerencie as configurações do sistema, integrações e APIs</p>
+        </div>
+        <Button variant="primary" size="md" loading={saveMut.isPending}
+          icon={saved ? Check : Save} onClick={handleSave}>
+          {saved ? 'Salvo!' : 'Salvar alterações'}
+        </Button>
+      </div>
 
-        {/* ── PROMPT IA ── */}
-        <Section icon={MessageSquare} color="purple" title="Prompt da IA" description="Instruções base que definem personalidade, tom e limites do assistente.">
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>Prompt do sistema</label>
-            <textarea
-              className={styles.mono}
-              rows={7}
-              value={promptIA}
-              onChange={e => setPromptIA(e.target.value)}
-              placeholder={'Você é um assistente de atendimento da NetGo Internet.\nSeja cordial, objetivo e útil.\nNão invente informações que não foram fornecidas.'}
-            />
-            <span className={styles.fieldHint}>{promptIA.length} caracteres</span>
-          </div>
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>Saudação inicial</label>
-            <input
-              className={styles.input}
-              value={saudacao}
-              onChange={e => setSaudacao(e.target.value)}
-              placeholder="Olá! Seja bem-vindo(a) à NetGo. Como posso ajudar?"
-            />
-            <span className={styles.fieldHint}>Variável {'{{saudacao}}'} disponível nos fluxos</span>
-          </div>
-        </Section>
+      {/* ── TABS ── */}
+      <div className={styles.tabs}>
+        {TABS.map(t => {
+          const Icon = t.icon;
+          const hasAlert = t.id === 'integracoes' && Object.values(integStatus).some(s => s === 'off');
+          return (
+            <button key={t.id}
+              className={[styles.tab, tab === t.id && styles.tabActive].join(' ')}
+              onClick={() => setTab(t.id)}>
+              <Icon size={14}/>
+              {t.label}
+              {hasAlert && <span className={styles.tabAlert}/>}
+            </button>
+          );
+        })}
+      </div>
 
-        {/* ── HORÁRIO ── */}
-        <Section icon={Clock} color="orange" title="Horário de atendimento" description="Fora do horário configurado o bot responde com a mensagem de ausência.">
-          <Toggle
-            checked={horario.ativo}
-            onChange={v => setHorario(h => ({ ...h, ativo: v }))}
-            label="Controle de horário"
-          />
-          {horario.ativo && (
-            <>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Dias de atendimento</label>
-                <div className={styles.diasGrid}>
-                  {DIAS.map((nome, i) => (
-                    <button key={i}
-                      className={[styles.diaBtn, horario.dias?.includes(i) && styles.diaBtnAtivo].join(' ')}
-                      onClick={() => toggleDia(i)} type="button">
-                      {nome}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className={styles.horasRow}>
-                <div className={styles.field}>
-                  <label className={styles.fieldLabel}>Abertura</label>
-                  <input type="time" className={styles.input} value={horario.inicio || '08:00'}
-                    onChange={e => setHorario(h => ({ ...h, inicio: e.target.value }))} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.fieldLabel}>Fechamento</label>
-                  <input type="time" className={styles.input} value={horario.fim || '18:00'}
-                    onChange={e => setHorario(h => ({ ...h, fim: e.target.value }))} />
-                </div>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Mensagem fora do horário</label>
-                <textarea className={styles.textarea} rows={3} value={msgFora}
-                  onChange={e => setMsgFora(e.target.value)}
-                  placeholder="Olá! Nosso atendimento é de segunda a sexta, das 8h às 18h. Retornaremos em breve!" />
-              </div>
-            </>
-          )}
-        </Section>
+      {/* ── CONTEÚDO ── */}
+      <div className={styles.body}>
 
-        {/* ── NOTIFICAÇÕES ── */}
-        <Section icon={Bell} color="blue" title="Notificações" description="Configure alertas de fila, tempo de espera e eventos do sistema.">
-          {[
-            { key: 'nova_conversa', label: 'Nova conversa',       desc: 'Sempre que uma nova conversa chegar' },
-            { key: 'fila_longa',    label: 'Fila longa (>5 min)', desc: 'Quando houver espera prolongada na fila' },
-            { key: 'equip_offline', label: 'Equipamento offline', desc: 'Quando um equipamento da rede ficar offline' },
-            { key: 'os_agendada',   label: 'OS agendada',         desc: 'Lembretes de ordens de serviço próximas' },
-          ].map(item => (
-            <label key={item.key} className={styles.notifItem}>
-              <div>
-                <p className={styles.notifLabel}>{item.label}</p>
-                <p className={styles.notifDesc}>{item.desc}</p>
-              </div>
-              <span className={styles.toggleWrap}>
-                <input type="checkbox" checked={notifs[item.key] || false}
-                  onChange={e => setNotifs(n => ({ ...n, [item.key]: e.target.checked }))}
-                  className={styles.toggleInput} />
-                <span className={styles.toggleTrack}><span className={styles.toggleThumb}/></span>
-              </span>
-            </label>
-          ))}
-        </Section>
-
-        {/* ── INTEGRAÇÕES IA ── */}
-        <Section icon={Zap} color="purple" title="Integrações de IA" description="Chaves para os modelos de linguagem usados nos fluxos automáticos.">
-          <div className={styles.apiGroup}>
-            <div className={styles.apiGroupTitle}>
-              <span className={styles.apiGroupDot} style={{ background: '#f472b6' }} />
-              Anthropic (Claude)
-            </div>
-            <ApiKeyField
-              label="API Key"
-              badge="Recomendado"
-              value={anthropicKey}
-              onChange={setAnthropicKey}
-              placeholder="sk-ant-api03-..."
-              hint="Usada pelos nós IA Responde e IA Roteador nos fluxos"
-            />
-          </div>
-          <div className={styles.apiGroup}>
-            <div className={styles.apiGroupTitle}>
-              <span className={styles.apiGroupDot} style={{ background: '#10b981' }} />
-              OpenAI (GPT)
-            </div>
-            <ApiKeyField
-              label="API Key"
-              value={openaiKey}
-              onChange={setOpenaiKey}
-              placeholder="sk-proj-..."
-              hint="Opcional — usado quando o modelo GPT-4o-mini for selecionado"
-            />
-          </div>
-        </Section>
-
-        {/* ── SGP / ERP ── */}
-        <Section icon={Globe} color="green" title="SGP / ERP" description="Conexão com o sistema de gestão de clientes e contratos." defaultOpen={false}>
-          <div className={styles.apiGroup}>
-            <div className={styles.apiGroupTitle}>
-              <span className={styles.apiGroupDot} style={{ background: '#3DB845' }} />
-              SGP Internet
-            </div>
+        {/* ── ABA GERAL ── */}
+        {tab === 'geral' && (
+          <div className={styles.panel}>
+            <div className={styles.panelTitle}>Informações da empresa</div>
             <div className={styles.field}>
-              <label className={styles.fieldLabel}>URL da API</label>
-              <input className={styles.input} value={sgpUrl} onChange={e => setSgpUrl(e.target.value)}
-                placeholder="https://sgp.suaempresa.com.br/api" />
+              <label className={styles.fieldLabel}>Nome da empresa</label>
+              <input className={styles.input} value={nomeEmpresa}
+                onChange={e => setNomeEmpresa(e.target.value)}
+                placeholder="NetGo Internet"/>
+              <p className={styles.fieldHint}>
+                Usado nas variáveis <code>{'{{nome_empresa}}'}</code> dos fluxos e mensagens automáticas
+              </p>
             </div>
-            <ApiKeyField
-              label="Token de autenticação"
-              value={sgpToken}
-              onChange={setSgpToken}
-              placeholder="Bearer eyJ..."
-              hint="Token Bearer gerado nas configurações do SGP"
-            />
           </div>
-        </Section>
+        )}
 
-        {/* ── EVOLUTION API (WhatsApp) ── */}
-        <Section icon={Shield} color="green" title="Evolution API — WhatsApp" description="Conexão com o servidor de mensagens WhatsApp." defaultOpen={false}>
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>URL do servidor</label>
-            <input className={styles.input} value={evoUrl} onChange={e => setEvoUrl(e.target.value)}
-              placeholder="https://evolution.suaempresa.com.br" />
-            <span className={styles.fieldHint}>URL base sem barra no final</span>
+        {/* ── ABA IA & BOT ── */}
+        {tab === 'ia' && (
+          <div className={styles.panel}>
+            <div className={styles.panelTitle}>Comportamento do assistente</div>
+
+            <div className={styles.field}>
+              <label className={styles.fieldLabel}>Prompt do sistema</label>
+              <p className={styles.fieldHint} style={{ marginBottom: 6 }}>
+                Define a personalidade, tom e limites do assistente de IA. Quanto mais detalhado, melhor o comportamento.
+              </p>
+              <textarea className={styles.mono} rows={8} value={promptIA}
+                onChange={e => setPromptIA(e.target.value)}
+                placeholder={'Você é um assistente de atendimento da NetGo Internet.\nSeja cordial, objetivo e útil.\nNão invente informações que não foram fornecidas.\nSempre confirme o CPF antes de fornecer dados do contrato.'}/>
+              <p className={styles.fieldHint}>{promptIA.length} caracteres</p>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.fieldLabel}>Saudação inicial</label>
+              <input className={styles.input} value={saudacao}
+                onChange={e => setSaudacao(e.target.value)}
+                placeholder="Olá! Seja bem-vindo(a) à NetGo. Como posso ajudar?"/>
+              <p className={styles.fieldHint}>
+                Disponível como <code>{'{{saudacao}}'}</code> nos nós de fluxo
+              </p>
+            </div>
+
+            {!anthropicKey && (
+              <div className={styles.alertBox}>
+                <AlertCircle size={14}/>
+                <p>
+                  <strong>Chave Anthropic não configurada.</strong>{' '}
+                  Os nós de IA não funcionarão. Configure em{' '}
+                  <button className={styles.alertLink} onClick={() => setTab('integracoes')}>
+                    Integrações → Anthropic
+                  </button>.
+                </p>
+              </div>
+            )}
           </div>
-          <ApiKeyField
-            label="API Key global"
-            value={evoKey}
-            onChange={setEvoKey}
-            placeholder="B6D711FCDE4D4FD5936544120E713976"
-            hint="Chave de autenticação global da Evolution API"
-          />
-          <div className={styles.infoBox}>
-            <p className={styles.infoBoxTitle}>⚡ Instâncias WhatsApp</p>
-            <p className={styles.infoBoxText}>
-              As instâncias (números de WhatsApp conectados) são configuradas individualmente na página{' '}
-              <strong>Canais</strong>. Cada canal tem seu próprio QR Code e configuração de webhook.
-            </p>
+        )}
+
+        {/* ── ABA HORÁRIO ── */}
+        {tab === 'horario' && (
+          <div className={styles.panel}>
+            <div className={styles.panelTitle}>Horário de atendimento</div>
+
+            <Toggle checked={horario.ativo}
+              onChange={v => setHorario(h => ({ ...h, ativo: v }))}
+              label="Ativar controle de horário"
+              desc="Fora do horário configurado, o bot responde com a mensagem de ausência"/>
+
+            {horario.ativo && (
+              <>
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>Dias de atendimento</label>
+                  <div className={styles.diasGrid}>
+                    {DIAS.map((nome, i) => (
+                      <button key={i} type="button"
+                        className={[styles.diaBtn, horario.dias?.includes(i) && styles.diaBtnAtivo].join(' ')}
+                        onClick={() => toggleDia(i)}>
+                        {nome}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.horasRow}>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>Abertura</label>
+                    <input type="time" className={styles.input} value={horario.inicio || '08:00'}
+                      onChange={e => setHorario(h => ({ ...h, inicio: e.target.value }))}/>
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>Fechamento</label>
+                    <input type="time" className={styles.input} value={horario.fim || '18:00'}
+                      onChange={e => setHorario(h => ({ ...h, fim: e.target.value }))}/>
+                  </div>
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>Mensagem fora do horário</label>
+                  <textarea className={styles.textarea} rows={3} value={msgFora}
+                    onChange={e => setMsgFora(e.target.value)}
+                    placeholder="Olá! Nosso atendimento é de segunda a sexta, das 8h às 18h. Em breve retornaremos! 😊"/>
+                </div>
+              </>
+            )}
           </div>
-        </Section>
+        )}
+
+        {/* ── ABA NOTIFICAÇÕES ── */}
+        {tab === 'notifs' && (
+          <div className={styles.panel}>
+            <div className={styles.panelTitle}>Alertas do sistema</div>
+            <div className={styles.notifList}>
+              {[
+                { key: 'nova_conversa', label: 'Nova conversa',       desc: 'Sempre que uma nova conversa chegar na fila' },
+                { key: 'fila_longa',    label: 'Fila longa (>5 min)', desc: 'Quando um cliente ficar mais de 5 min aguardando' },
+                { key: 'equip_offline', label: 'Equipamento offline', desc: 'Quando um equipamento da rede ficar offline' },
+                { key: 'os_agendada',   label: 'OS agendada',         desc: 'Lembretes de ordens de serviço próximas' },
+              ].map(item => (
+                <Toggle key={item.key}
+                  checked={notifs[item.key] || false}
+                  onChange={v => setNotifs(n => ({ ...n, [item.key]: v }))}
+                  label={item.label} desc={item.desc}/>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── ABA INTEGRAÇÕES ── */}
+        {tab === 'integracoes' && (
+          <div className={styles.panelInteg}>
+
+            {/* Anthropic */}
+            <IntegrationCard title="Anthropic — Claude" color="#8B5CF6" status={integStatus.anthropic}
+              logo={<span style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>A</span>}>
+              <p className={styles.integDesc}>
+                Usado pelos nós <strong>IA Responde</strong> e <strong>IA Roteador</strong> nos fluxos automáticos.
+                Obtenha sua chave em <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-blue)' }}>console.anthropic.com</a>
+              </p>
+              <ApiKeyField label="API Key" badge="Recomendado"
+                value={anthropicKey} onChange={setAnthropicKey}
+                placeholder="sk-ant-api03-..."
+                hint="Chave secreta. Nunca compartilhe publicamente."/>
+            </IntegrationCard>
+
+            {/* OpenAI */}
+            <IntegrationCard title="OpenAI — GPT" color="#10B981" status={integStatus.openai}
+              logo={<span style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>AI</span>}>
+              <p className={styles.integDesc}>
+                Opcional. Utilizado quando o modelo <strong>GPT-4o-mini</strong> for selecionado em um nó de IA.
+                Obtenha em <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-blue)' }}>platform.openai.com</a>
+              </p>
+              <ApiKeyField label="API Key" badge="Opcional"
+                value={openaiKey} onChange={setOpenaiKey}
+                placeholder="sk-proj-..."
+                hint="Deixe em branco para usar apenas o Claude (Anthropic)."/>
+            </IntegrationCard>
+
+            {/* SGP */}
+            <IntegrationCard title="SGP / ERP — Gestão de clientes" color="#2050B8" status={integStatus.sgp}
+              logo={<span style={{ color: '#fff', fontWeight: 700, fontSize: 11 }}>SGP</span>}>
+              <p className={styles.integDesc}>
+                Conecta os nós <strong>Consultar cliente</strong>, <strong>Consultar boleto</strong>, <strong>Verificar status</strong>,
+                {' '}<strong>Abrir chamado</strong> e <strong>Promessa de pagamento</strong> ao seu sistema de gestão.
+              </p>
+              <div className={styles.fieldRow}>
+                <div className={styles.field} style={{ flex: 2 }}>
+                  <label className={styles.fieldLabel}>URL da API</label>
+                  <input className={styles.input} value={sgpUrl} onChange={e => setSgpUrl(e.target.value)}
+                    placeholder="https://sgp.netgo.com.br/api"/>
+                  <p className={styles.fieldHint}>URL base sem barra no final</p>
+                </div>
+              </div>
+              <ApiKeyField label="Token de autenticação"
+                value={sgpToken} onChange={setSgpToken}
+                placeholder="Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                hint="Token Bearer gerado nas configurações do SGP. Inclua o prefixo 'Bearer ' se necessário."/>
+            </IntegrationCard>
+
+            {/* Evolution API */}
+            <IntegrationCard title="Evolution API — WhatsApp" color="#25D366" status={integStatus.evolution}
+              logo={<span style={{ color: '#fff', fontWeight: 700, fontSize: 11 }}>WA</span>}>
+              <p className={styles.integDesc}>
+                Necessário para <strong>enviar mensagens de volta</strong> ao cliente no WhatsApp.
+                As instâncias (números conectados) são configuradas individualmente em{' '}
+                <strong>Canais</strong>. Aqui você configura apenas a conexão global.
+              </p>
+              <div className={styles.fieldRow}>
+                <div className={styles.field} style={{ flex: 2 }}>
+                  <label className={styles.fieldLabel}>URL do servidor</label>
+                  <input className={styles.input} value={evoUrl} onChange={e => setEvoUrl(e.target.value)}
+                    placeholder="https://evolution.netgo.com.br"/>
+                  <p className={styles.fieldHint}>URL base da sua instância Evolution API</p>
+                </div>
+              </div>
+              <ApiKeyField label="API Key global"
+                value={evoKey} onChange={setEvoKey}
+                placeholder="B6D711FCDE4D4FD5936544120E713976"
+                hint="Chave de autenticação global. Encontrada em Settings → Authentication no painel da Evolution API."/>
+
+              {evoUrl && evoKey && (
+                <div className={styles.infoBox}>
+                  <p style={{ fontSize: 12, color: 'var(--brand-blue)', margin: 0, lineHeight: 1.5 }}>
+                    ✅ Webhook para receber mensagens:<br/>
+                    <code style={{ fontSize: 11, background: 'rgba(32,80,184,0.08)', padding: '2px 6px', borderRadius: 4 }}>
+                      {`https://gochat.netgo.net.br/api/webhooks/evolution`}
+                    </code><br/>
+                    Configure este URL no painel da Evolution API → Instâncias → Webhook.
+                  </p>
+                </div>
+              )}
+            </IntegrationCard>
+
+          </div>
+        )}
 
       </div>
 
       {/* ── FOOTER ── */}
       <div className={styles.footer}>
-        <p className={styles.footerInfo}>Alterações afetam imediatamente o comportamento do sistema</p>
-        <Button
-          variant="primary"
-          size="md"
-          loading={saveMut.isPending}
-          icon={saved ? Check : Save}
-          onClick={handleSave}
-        >
-          {saved ? 'Salvo!' : 'Salvar configurações'}
+        <p className={styles.footerInfo}>As alterações entram em vigor imediatamente após salvar</p>
+        <Button variant="primary" size="md" loading={saveMut.isPending}
+          icon={saved ? Check : Save} onClick={handleSave}>
+          {saved ? '✓ Salvo!' : 'Salvar alterações'}
         </Button>
       </div>
     </div>

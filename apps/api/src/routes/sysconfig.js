@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { invalidateConfigCache } from '../services/integrations.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler } from '../middlewares/errorHandler.js';
 import { getDb } from '../config/db.js';
@@ -32,6 +33,7 @@ sysconfigRouter.put('/', asyncHandler(async (req, res) => {
       .insert({ chave, valor: JSON.stringify(valor) })
       .onConflict('chave').merge(['valor', 'atualizado']);
   }
+  invalidateConfigCache();
   res.json({ ok: true });
 }));
 
