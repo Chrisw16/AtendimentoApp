@@ -33,10 +33,10 @@ import { errorHandler }      from './middlewares/errorHandler.js';
 const app  = express();
 const PORT = process.env.PORT || 4000;
 
-app.set('trust proxy', true);
+app.set('trust proxy', 1); // 1 = trust first proxy (Coolify/Traefik)
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(cors({ origin: process.env.CORS_ORIGIN || true, credentials: true }));
-app.use(rateLimit({ windowMs: 60000, max: 200, standardHeaders: true, legacyHeaders: false }));
+app.use(rateLimit({ windowMs: 60000, max: 200, standardHeaders: true, legacyHeaders: false, validate: { trustProxy: false } }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

@@ -1,3 +1,4 @@
+// cache-bust: 1776389177
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';

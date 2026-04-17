@@ -6,82 +6,96 @@ import { getDb } from '../config/db.js';
 export const dashboardRouter = Router();
 dashboardRouter.use(authMiddleware, adminMiddleware);
 
+// Helper: conta linhas sem quebrar se tabela não existir
+async function safeCount(db, table, where = '') {
+  try {
+    const r = await db.raw(`SELECT COUNT(*) as n FROM ${table} ${where}`);
+    return parseInt(r.rows?.[0]?.n || 0);
+  } catch { return 0; }
+}
+
+// Helper: busca NPS de qualquer tabela disponível
+async function getNPS(db, days) {
+  const since = `NOW() - INTERVAL '${days} days'`;
+  // Tenta satisfacao primeiro, depois avaliacoes
+  for (const table of ['satisfacao', 'avaliacoes']) {
+    try {
+      const r = await db.raw(`
+        SELECT
+          ROUND(AVG(nota)::numeric, 1) as media,
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE nota >= 9) as promotores,
+          COUNT(*) FILTER (WHERE nota BETWEEN 7 AND 8) as neutros,
+          COUNT(*) FILTER (WHERE nota <= 6) as detratores
+        FROM ${table}
+        WHERE criado_em >= ${since}
+      `);
+      return r.rows?.[0] || {};
+    } catch { continue; }
+  }
+  return {};
+}
+
 // GET /api/dashboard/kpis?range=30d
 dashboardRouter.get('/kpis', asyncHandler(async (req, res) => {
   const db   = getDb();
   const days = req.query.range === '7d' ? 7 : req.query.range === '90d' ? 90 : 30;
-
   const since = `NOW() - INTERVAL '${days} days'`;
 
-  const [total, porStatus, nps, satisfacao, canais] = await Promise.all([
-    // Total e breakdown de status
+  const [total, porStatus, nps, canais] = await Promise.all([
     db('conversas').whereRaw(`criado_em >= ${since}`)
       .select(db.raw(`
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'encerrada') as encerradas,
         COUNT(*) FILTER (WHERE status IN ('ia','aguardando','ativa')) as ativas,
         COUNT(*) FILTER (WHERE agente_id IS NOT NULL) as com_humano,
-        COUNT(*) FILTER (WHERE status = 'aguardando') as aguardando
+        COUNT(*) FILTER (WHERE status = 'aguardando') as aguardando,
+        COUNT(*) FILTER (WHERE status = 'encerrada' AND agente_id IS NULL) as so_ia
       `)).first(),
 
-    // Resolvidas só pela IA (encerradas sem agente humano)
     db('conversas').whereRaw(`criado_em >= ${since}`)
-      .where('status', 'encerrada')
-      .whereNull('agente_id')
+      .where('status', 'encerrada').whereNull('agente_id')
       .count('id as n').first(),
 
-    // NPS
-    db('satisfacao').whereRaw(`criado_em >= ${since}`)
-      .select(db.raw(`
-        ROUND(AVG(nota), 1) as media,
-        COUNT(*) as total,
-        COUNT(*) FILTER (WHERE nota >= 9) as promotores,
-        COUNT(*) FILTER (WHERE nota BETWEEN 7 AND 8) as neutros,
-        COUNT(*) FILTER (WHERE nota <= 6) as detratores
-      `)).first(),
+    getNPS(db, days),
 
-    // Avaliações (tabela alternativa)
-    db('avaliacoes').whereRaw(`criado_em >= ${since}`)
-      .avg('nota as media').count('id as total').first(),
-
-    // Por canal
     db('conversas').whereRaw(`criado_em >= ${since}`)
       .select('canal').count('id as n').groupBy('canal'),
   ]);
 
-  const totalN      = Number(total?.total || 0);
-  const encerradas  = Number(total?.encerradas || 0);
-  const comHumano   = Number(total?.com_humano || 0);
-  const soIA        = Number(porStatus?.n || 0);
-  const pctIA       = totalN > 0 ? Math.round((soIA / totalN) * 100) : 0;
+  const totalN     = Number(total?.total || 0);
+  const soIA       = Number(total?.so_ia  || 0);
+  const comHumano  = Number(total?.com_humano || 0);
+  const pctIA      = totalN > 0 ? Math.round((soIA / totalN) * 100) : 0;
 
-  // NPS Score (promotores - detratores) / total * 100
-  const npsTotal = Number(nps?.total || 0);
-  const promotores  = Number(nps?.promotores || 0);
-  const detratores  = Number(nps?.detratores || 0);
-  const npsScore    = npsTotal > 0 ? Math.round(((promotores - detratores) / npsTotal) * 100) : null;
-  const npsLabel    = npsScore === null ? null : npsScore >= 75 ? 'Excelente' : npsScore >= 50 ? 'Ótimo' : npsScore >= 25 ? 'Bom' : npsScore >= 0 ? 'Regular' : 'Crítico';
+  const npsTotal   = Number(nps?.total      || 0);
+  const promotores = Number(nps?.promotores  || 0);
+  const detratores = Number(nps?.detratores  || 0);
+  const npsScore   = npsTotal > 0 ? Math.round(((promotores - detratores) / npsTotal) * 100) : null;
+  const npsLabel   = npsScore === null ? null
+    : npsScore >= 75 ? 'Excelente' : npsScore >= 50 ? 'Ótimo'
+    : npsScore >= 25 ? 'Bom' : npsScore >= 0 ? 'Regular' : 'Crítico';
 
   res.json({
-    periodo_dias:     days,
-    total:            totalN,
-    encerradas,
-    ativas:           Number(total?.ativas || 0),
-    aguardando:       Number(total?.aguardando || 0),
-    com_humano:       comHumano,
-    so_ia:            soIA,
-    pct_ia:           pctIA,
-    nps_score:        npsScore,
-    nps_label:        npsLabel,
+    periodo_dias:        days,
+    total:               totalN,
+    encerradas:          Number(total?.encerradas   || 0),
+    ativas:              Number(total?.ativas        || 0),
+    aguardando:          Number(total?.aguardando    || 0),
+    com_humano:          comHumano,
+    so_ia:               soIA,
+    pct_ia:              pctIA,
+    nps_score:           npsScore,
+    nps_label:           npsLabel,
     nps_total_respostas: npsTotal,
-    nps_promotores:   promotores,
-    nps_neutros:      Number(nps?.neutros || 0),
-    nps_detratores:   detratores,
+    nps_promotores:      promotores,
+    nps_neutros:         Number(nps?.neutros    || 0),
+    nps_detratores:      detratores,
     canais: canais.map(r => ({ canal: r.canal || 'desconhecido', total: Number(r.n) })),
   });
 }));
 
-// GET /api/dashboard/serie?range=30d — série temporal
+// GET /api/dashboard/serie?range=30d
 dashboardRouter.get('/serie', asyncHandler(async (req, res) => {
   const db   = getDb();
   const days = req.query.range === '7d' ? 7 : req.query.range === '90d' ? 90 : 30;

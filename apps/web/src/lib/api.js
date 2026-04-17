@@ -100,18 +100,17 @@ export const chatApi = {
   reagir:          (msgId, body) => api.post(`/chat/mensagens/${msgId}/reacao`, body),
   apagar:          (msgId)       => api.delete(`/chat/mensagens/${msgId}`),
   respostasRapidas: ()           => api.get('/chat/respostas-rapidas'),
-
-// ── PROMPTS IA ───────────────────────────────────────────────────
-export const promptsApi = {
-  list:     ()           => api.get('/prompts'),
-  update:   (slug, body) => api.put(`/prompts/${slug}`, body),
-  restaurar:(slug)       => api.post(`/prompts/${slug}/restaurar`, {}),
-};
   agendarRetorno:  (id, body)    => api.post(`/chat/conversas/${id}/agendamento`, body),
   cancelarRetorno: (id)          => api.delete(`/chat/conversas/${id}/agendamento`),
 };
 
 // ── ENDPOINTS — AGENTES ───────────────────────────────────────────
+export const promptsApi = {
+  list:      ()           => api.get('/prompts'),
+  update:    (slug, body) => api.put(`/prompts/${slug}`, body),
+  restaurar: (slug)       => api.post(`/prompts/${slug}/restaurar`, {}),
+};
+
 export const agentesApi = {
   list:   ()           => api.get('/agentes'),
   get:    (id)         => api.get(`/agentes/${id}`),
