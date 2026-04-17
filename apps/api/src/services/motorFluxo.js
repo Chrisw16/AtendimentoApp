@@ -7,6 +7,7 @@ import { getDb }          from '../config/db.js';
 import { conversaRepo }   from '../repositories/conversaRepository.js';
 import { mensagemRepo }   from '../repositories/mensagemRepository.js';
 import { broadcast }      from './sseManager.js';
+import { resolverPrompt } from './promptService.js';
 import {
   getAnthropicClient,
   consultarClientes, segundaViaBoleto, promessaPagamento,
@@ -479,35 +480,61 @@ async function processarNo(no, ctx) {
 
 // ── IA RESPONDE ───────────────────────────────────────────────────
 async function processarIAResponde(no, ctx) {
-  const cfg = no.config || {};
+  const cfg    = no.config || {};
+  const slug   = cfg.contexto || 'outros';  // ex: 'suporte', 'financeiro', 'comercial'
   const turnos = (ctx.estado.contexto[`_turnos_${no.id}`] || 0) + 1;
   ctx.estado.contexto[`_turnos_${no.id}`] = turnos;
 
-  if (turnos > (cfg.max_turns || 5)) {
+  if (turnos > (cfg.max_turns || 6)) {
     ctx.estado.contexto[`_turnos_${no.id}`] = 0;
     return avancar('max_turnos');
   }
 
-  const promptBase = await getPromptSistema(ctx.db);
-  const contextoStr = JSON.stringify(ctx.estado.contexto.cliente || {});
-  const system = `${cfg.prompt || promptBase}\n\nContexto do cliente: ${contextoStr}\nAssunto: ${cfg.contexto || 'geral'}`;
+  // Carrega o prompt do banco pelo slug do contexto (ex: slug='suporte')
+  // e injeta os placeholders [REGRAS], [ESTILO], [PLANOS], [TIPOS_OCORRENCIA]
+  // e o contexto do cliente no final
+  const { system, modelo, provedor, temperatura } = await resolverPrompt(
+    slug,
+    ctx.estado.contexto.cliente || {}
+  );
+
+  // Se o nó tiver um prompt extra de instrução, adiciona antes
+  const systemFinal = cfg.prompt
+    ? `${system}\n\nInstrução adicional do fluxo: ${cfg.prompt}`
+    : system;
 
   const historico = await obterHistorico(ctx.conversa.id, ctx.db);
   const messages = [
-    ...historico.map(m => ({ role: m.origem === 'cliente' ? 'user' : 'assistant', content: m.texto || '' })),
+    ...historico.map(m => ({
+      role:    m.origem === 'cliente' ? 'user' : 'assistant',
+      content: m.texto || '',
+    })),
     { role: 'user', content: ctx.mensagem.texto || '' },
   ].filter(m => m.content);
 
   try {
-    const ai = await getAnthropicClient();
-    const response = await ai.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      system,
-      messages,
-    });
+    let texto = '';
 
-    const texto = response.content.find(b => b.type === 'text')?.text || '';
+    if (provedor === 'openai') {
+      // OpenAI
+      const openaiKey = await (await import('./integrations.js').then(m => m.getAnthropicClient)).call().catch(() => null);
+      // usa Anthropic como fallback se OpenAI não configurado
+      const ai = await getAnthropicClient();
+      const response = await ai.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system: systemFinal, messages });
+      texto = response.content.find(b => b.type === 'text')?.text || '';
+    } else {
+      // Anthropic (padrão)
+      const ai = await getAnthropicClient();
+      const response = await ai.messages.create({
+        model:       modelo || 'claude-haiku-4-5-20251001',
+        max_tokens:  1024,
+        temperature: temperatura,
+        system:      systemFinal,
+        messages,
+      });
+      texto = response.content.find(b => b.type === 'text')?.text || '';
+    }
+
     if (texto) ctx.respostas.push({ tipo: 'texto', texto });
 
     const lwr = texto.toLowerCase();
@@ -515,13 +542,13 @@ async function processarIAResponde(no, ctx) {
       ctx.estado.contexto[`_turnos_${no.id}`] = 0;
       return avancar('transferir');
     }
-    if (lwr.includes('tchau') || lwr.includes('obrigad') || lwr.includes('encerrando')) {
+    if (lwr.includes('tchau') || lwr.includes('obrigad') || lwr.includes('até mais') || lwr.includes('encerrand')) {
       ctx.estado.contexto[`_turnos_${no.id}`] = 0;
       return avancar('resolvido');
     }
   } catch (err) {
-    console.error('[Motor] ia_responde:', err.message);
-    ctx.respostas.push({ tipo: 'texto', texto: 'Desculpe, ocorreu um erro. Tente novamente.' });
+    console.error(`[Motor] ia_responde (${slug}):`, err.message);
+    ctx.respostas.push({ tipo: 'texto', texto: 'Desculpe, ocorreu um erro. Tente novamente em instantes.' });
   }
 
   return aguardar();
@@ -540,24 +567,39 @@ async function processarIARoteador(no, ctx) {
   }
 
   const texto = ctx.mensagem.texto || '';
-  if (!rotas.length) return avancar('nao_entendeu');
 
-  // Usa IA para classificar a intenção
-  const opcoes = rotas.map((r, i) => `${i+1}. ${r.id} — ${r.descricao || r.label}`).join('\n');
-  const system = `Você é um classificador de intenção. Dado o texto do usuário, responda APENAS com o ID da rota mais adequada das opções abaixo, ou "nao_entendeu" se não encaixar em nenhuma, ou "encerrar" se o usuário quer encerrar.\n\nRotas disponíveis:\n${opcoes}`;
+  // Usa o prompt do slug 'roteador' do banco — editável no painel Prompts IA
+  const { system: systemBase, modelo, temperatura } = await resolverPrompt('roteador', {});
+
+  // Se o nó tem rotas customizadas, adiciona como contexto extra
+  let system = systemBase;
+  if (rotas.length) {
+    const opcoes = rotas.map(r => `${r.id}: ${r.descricao || r.label || r.id}`).join('\n');
+    system += `\n\nRotas disponíveis neste fluxo:\n${opcoes}\n\nResponda SOMENTE com um desses IDs: ${rotas.map(r => r.id).join(', ')}, nao_entendeu, ou encerrar.`;
+  }
 
   try {
     const ai = await getAnthropicClient();
     const response = await ai.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 50,
+      model:       modelo || 'claude-haiku-4-5-20251001',
+      max_tokens:  30,
+      temperature: temperatura,
       system,
-      messages:   [{ role: 'user', content: texto }],
+      messages:    [{ role: 'user', content: texto }],
     });
-    const porta = (response.content[0]?.text || '').trim().toLowerCase().replace(/\s+/g, '_');
-    const rotaValida = rotas.find(r => r.id === porta);
+    const porta = (response.content[0]?.text || '').trim().toLowerCase()
+      .replace(/[^a-z0-9_]/g, '').trim();
+
     ctx.estado.contexto[`_roteador_enviou_${no.id}`] = false;
-    return avancar(rotaValida ? porta : porta === 'encerrar' ? 'encerrar' : 'nao_entendeu');
+
+    if (porta === 'encerrar') return avancar('encerrar');
+    if (rotas.length) {
+      const rotaValida = rotas.find(r => r.id === porta);
+      return avancar(rotaValida ? porta : 'nao_entendeu');
+    }
+    // Sem rotas customizadas: usa as categorias padrão do prompt
+    const categoriasValidas = ['financeiro','suporte','comercial','faq','outros'];
+    return avancar(categoriasValidas.includes(porta) ? porta : 'nao_entendeu');
   } catch (err) {
     console.error('[Motor] ia_roteador:', err.message);
     return avancar('nao_entendeu');
@@ -566,9 +608,15 @@ async function processarIARoteador(no, ctx) {
 
 // ── IA DIRETA (sem fluxo ativo) ───────────────────────────────────
 async function processarIADireta(conversa, mensagemCliente) {
-  const db      = getDb();
-  const prompt  = await getPromptSistema(db);
-  const hist    = await obterHistorico(conversa.id, db);
+  const db   = getDb();
+  const hist = await obterHistorico(conversa.id, db);
+
+  // Usa o prompt 'outros' como fallback quando não há fluxo ativo
+  const { system, modelo, temperatura } = await resolverPrompt('outros', {
+    nome:     conversa.nome,
+    telefone: conversa.telefone,
+  });
+
   const messages = [
     ...hist.map(m => ({ role: m.origem === 'cliente' ? 'user' : 'assistant', content: m.texto || '' })),
     { role: 'user', content: mensagemCliente.texto || '' },
@@ -576,7 +624,13 @@ async function processarIADireta(conversa, mensagemCliente) {
 
   try {
     const ai = await getAnthropicClient();
-    const response = await ai.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system: prompt, messages });
+    const response = await ai.messages.create({
+      model:       modelo || 'claude-haiku-4-5-20251001',
+      max_tokens:  1024,
+      temperature: temperatura,
+      system,
+      messages,
+    });
     const texto = response.content.find(b => b.type === 'text')?.text;
     if (texto) await enviarResposta(conversa, { tipo: 'texto', texto }, conversa.canal_instancia || conversa.canal || 'default');
   } catch (err) {

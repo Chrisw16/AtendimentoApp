@@ -18,6 +18,7 @@ import { canaisRouter }      from './routes/canais.js';
 import { fluxosRouter }      from './routes/fluxos.js';
 import { clientesRouter }    from './routes/clientes.js';
 import { ocorrenciasRouter } from './routes/ocorrencias.js';
+import { promptsRouter }   from './routes/prompts.js';
 import { dashboardRouter }   from './routes/dashboard.js';
 import { webhookRouter }     from './routes/webhooks.js';
 import { tarefasRouter }     from './routes/tarefas.js';
@@ -85,7 +86,13 @@ const server = app.listen(PORT, () => {
 if (process.env.DATABASE_URL) {
   import('./migrations/run.js')
     .then(({ runMigrations }) => runMigrations())
-    .then(() => console.log('✅ Migrations OK'))
+    .then(async () => {
+      console.log('✅ Migrations OK');
+      // Inicia monitor de SLA/fila
+      const { iniciarMonitorSLA } = await import('./services/filaService.js');
+      iniciarMonitorSLA();
+      console.log('✅ Monitor SLA iniciado');
+    })
     .catch(err => console.error('⚠️  Migration warning:', err.message));
 } else {
   console.warn('⚠️  DATABASE_URL não definida');

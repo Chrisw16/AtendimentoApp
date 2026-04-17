@@ -58,6 +58,12 @@ export function useChat() {
       modo_alterado: (data) => {
         store.setModo(data.modo);
       },
+      sla_critico: (data) => {
+        toast(`🚨 Fila crítica: ${data.nome} aguarda ${data.minutos}min`, 'error', 8000);
+      },
+      agente_fantasma: (data) => {
+        toast(`⚠️ ${data.agenteNome} assumiu mas não respondeu (${data.minutos}min)`, 'warning', 8000);
+      },
       onError: () => {
         // Reconecta automaticamente após 3s em caso de falha
         setTimeout(loadConversas, 3000);

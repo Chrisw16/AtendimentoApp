@@ -23,6 +23,7 @@ const OrdensServico = lazy(() => import('./pages/OrdensServico'));
 const Cobertura   = lazy(() => import('./pages/Cobertura'));
 const MonitorRede = lazy(() => import('./pages/MonitorRede'));
 const Configuracoes = lazy(() => import('./pages/Configuracoes'));
+const PromptsIA     = lazy(() => import('./pages/PromptsIA'));
 const Analytics     = lazy(() => import('./pages/stubs.jsx').then(m => ({ default: m.Analytics })));
 
 
@@ -88,6 +89,7 @@ function AppLayout() {
               <Route path="/cobertura"    element={<Cobertura />} />
               <Route path="/rede"         element={<AdminRoute><MonitorRede /></AdminRoute>} />
               <Route path="/configuracoes" element={<AdminRoute><Configuracoes /></AdminRoute>} />
+              <Route path="/prompts-ia"     element={<AdminRoute><PromptsIA /></AdminRoute>} />
               <Route path="*"             element={<Navigate to="/chat" replace />} />
             </Routes>
           </Suspense>

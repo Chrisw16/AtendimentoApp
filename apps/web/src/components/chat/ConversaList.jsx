@@ -67,9 +67,21 @@ function ConversaItem({ conv, ativa, onClick }) {
         </div>
         <div className={styles.row2}>
           <span className={styles.preview}>{conv.ultima_mensagem || '—'}</span>
-          {conv.nao_lidas > 0 && (
-            <span className={styles.badge}>{conv.nao_lidas > 9 ? '9+' : conv.nao_lidas}</span>
-          )}
+          <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
+            {conv.urgencia?.nivel === 'critico' && (
+              <span style={{ fontSize:9, background:'#DC2626', color:'#fff', borderRadius:4, padding:'1px 5px', fontWeight:700 }}>
+                {conv.urgencia.minutos}m
+              </span>
+            )}
+            {conv.urgencia?.nivel === 'atencao' && (
+              <span style={{ fontSize:9, background:'#D97706', color:'#fff', borderRadius:4, padding:'1px 5px', fontWeight:700 }}>
+                {conv.urgencia.minutos}m
+              </span>
+            )}
+            {conv.nao_lidas > 0 && (
+              <span className={styles.badge}>{conv.nao_lidas > 9 ? '9+' : conv.nao_lidas}</span>
+            )}
+          </div>
         </div>
       </div>
     </button>
