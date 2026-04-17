@@ -52,6 +52,13 @@ function AdminRoute({ children }) {
   return children;
 }
 
+
+// ── SMART REDIRECT ────────────────────────────────────────────────
+function SmartRedirect() {
+  const role = getRoleSync();
+  return <Navigate to={role === 'admin' ? '/dashboard' : '/chat'} replace />;
+}
+
 // ── QUERY CLIENT ─────────────────────────────────────────────────
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,7 +83,8 @@ function AppLayout() {
           <ErrorBoundary>
           <Suspense fallback={<Loading />}>
             <Routes>
-              <Route path="/"             element={<AdminRoute><Dashboard /></AdminRoute>} />
+              <Route path="/"             element={<SmartRedirect />} />
+              <Route path="/dashboard"     element={<AdminRoute><Dashboard /></AdminRoute>} />
               <Route path="/chat"         element={<Chat />} />
               <Route path="/historico"    element={<Historico />} />
               <Route path="/satisfacao"   element={<Satisfacao />} />
@@ -92,7 +100,7 @@ function AppLayout() {
               <Route path="/rede"         element={<AdminRoute><MonitorRede /></AdminRoute>} />
               <Route path="/configuracoes" element={<AdminRoute><Configuracoes /></AdminRoute>} />
               <Route path="/prompts-ia"     element={<AdminRoute><PromptsIA /></AdminRoute>} />
-              <Route path="*"             element={<Navigate to="/chat" replace />} />
+              <Route path="*"             element={<SmartRedirect />} />
             </Routes>
           </Suspense>
           </ErrorBoundary>
