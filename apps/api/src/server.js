@@ -54,6 +54,7 @@ app.use('/api/canais',      canaisRouter);
 app.use('/api/fluxos',      fluxosRouter);
 app.use('/api/clientes',    clientesRouter);
 app.use('/api/ocorrencias', ocorrenciasRouter);
+app.use('/api/prompts',     promptsRouter);
 app.use('/api/dashboard',   dashboardRouter);
 app.use('/api/tarefas',     tarefasRouter);
 app.use('/api/satisfacao',  satisfacaoRouter);

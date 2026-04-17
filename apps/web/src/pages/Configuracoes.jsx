@@ -153,7 +153,7 @@ export default function Configuracoes() {
     nome_empresa: nomeEmpresa, prompt_ia: promptIA, saudacao,
     horario, mensagem_fora_hora: msgFora, notificacoes: notifs,
     anthropic_api_key: anthropicKey, openai_api_key: openaiKey,
-    sgp_url: sgpUrl, sgp_token: sgpToken,
+    sgp_url: sgpUrl, sgp_app: sgpApp, sgp_token: sgpToken,
     evolution_url: evoUrl, evolution_key: evoKey,
   });
 
@@ -379,7 +379,7 @@ export default function Configuracoes() {
               <div className={styles.fieldRow}>
                 <div className={styles.field} style={{ flex: 1 }}>
                   <ApiKeyField label="SGP App"
-                    value={sgpApp} onChange={setSgpApp}
+                    value={sgpApp} onChange={e => setSgpApp(e.target.value)}
                     placeholder="nome_do_app"
                     hint="Identificador da aplicação no SGP"/>
                 </div>
