@@ -5,6 +5,7 @@ export const useStore = create(
   persist(
     (set, get) => ({
       /* ── AUTH ─────────────────────────────────────────────── */
+      _hydrated: false,
       token: null,
       user: null,
       role: null,
@@ -64,6 +65,9 @@ export const useStore = create(
     }),
     {
       name: 'maxxi-store',
+      onRehydrateStorage: () => (state) => {
+        if (state) state._hydrated = true;
+      },
       partialize: (s) => ({
         token: s.token,
         user: s.user,
