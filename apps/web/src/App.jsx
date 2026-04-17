@@ -6,6 +6,7 @@ import Sidebar from './components/layout/Sidebar';
 import Topbar from './components/layout/Topbar';
 import Toast from './components/ui/Toast';
 import styles from './App.module.css';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // ── LAZY PAGES ──────────────────────────────────────────────────
 const Login       = lazy(() => import('./pages/Login'));
@@ -72,6 +73,7 @@ function AppLayout() {
       <div className={styles.main}>
         <Topbar onCommandPalette={() => setCmdOpen(true)} />
         <main className={styles.content} role="main">
+          <ErrorBoundary>
           <Suspense fallback={<Loading />}>
             <Routes>
               <Route path="/"             element={<AdminRoute><Dashboard /></AdminRoute>} />
@@ -93,6 +95,7 @@ function AppLayout() {
               <Route path="*"             element={<Navigate to="/chat" replace />} />
             </Routes>
           </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
       <Toast />

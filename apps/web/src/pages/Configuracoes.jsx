@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { useStore } from '../store';
 import {
   Bot, Clock, Bell, Shield, Save, Check,
-  Eye, EyeOff, Globe, Zap, Building, Database,
+  Eye, EyeOff, Globe, Zap, Building,
   Key, AlertCircle,
 } from 'lucide-react';
 import Button from '../components/ui/Button';

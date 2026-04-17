@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   MessageSquare, LayoutDashboard, Users, GitBranch,
-  BarChart2, Clock, Star, Bell, Settings,
+  BarChart2, Clock, Star, Bell, Settings, Bot,
   ChevronLeft, Zap, Network, Map,
   Building, ChevronDown, Wrench,
 } from 'lucide-react';
@@ -26,7 +26,7 @@ const NAV = [
       { to: '/fluxos',     icon: GitBranch,       label: 'Fluxos',     adminOnly: true },
       { to: '/canais',     icon: Zap,             label: 'Canais',     adminOnly: true },
       { to: '/analytics',  icon: BarChart2,       label: 'Analytics',  adminOnly: true },
-      { to: '/prompts-ia',   icon: BrainCircuit,     label: 'Prompts IA',    adminOnly: true },
+      { to: '/prompts-ia',   icon: Bot,              label: 'Prompts IA',    adminOnly: true },
       { to: '/configuracoes',icon: Settings,         label: 'Configurações', adminOnly: true },
     ],
   },
