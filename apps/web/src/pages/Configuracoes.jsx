@@ -111,6 +111,7 @@ export default function Configuracoes() {
   const [anthropicKey, setAnthropicKey] = useState('');
   const [openaiKey,    setOpenaiKey]    = useState('');
   const [sgpUrl,       setSgpUrl]       = useState('');
+  const [sgpApp,       setSgpApp]       = useState('');
   const [sgpToken,     setSgpToken]     = useState('');
   const [evoUrl,       setEvoUrl]       = useState('');
   const [evoKey,       setEvoKey]       = useState('');
@@ -132,6 +133,7 @@ export default function Configuracoes() {
     setAnthropicKey(kv.anthropic_api_key  || '');
     setOpenaiKey(   kv.openai_api_key     || '');
     setSgpUrl(      kv.sgp_url            || '');
+    setSgpApp(      kv.sgp_app            || '');
     setSgpToken(    kv.sgp_token          || '');
     setEvoUrl(      kv.evolution_url      || '');
     setEvoKey(      kv.evolution_key      || '');
@@ -164,7 +166,7 @@ export default function Configuracoes() {
   const integStatus = {
     anthropic: anthropicKey ? 'ok' : 'off',
     openai:    openaiKey    ? 'ok' : 'off',
-    sgp:       sgpUrl && sgpToken ? 'ok' : sgpUrl || sgpToken ? 'pending' : 'off',
+    sgp:       sgpUrl && sgpToken && sgpApp ? 'ok' : (sgpUrl || sgpToken || sgpApp) ? 'pending' : 'off',
     evolution: evoUrl && evoKey   ? 'ok' : evoUrl || evoKey   ? 'pending' : 'off',
   };
 
@@ -368,18 +370,31 @@ export default function Configuracoes() {
                 Conecta os nós <strong>Consultar cliente</strong>, <strong>Consultar boleto</strong>, <strong>Verificar status</strong>,
                 {' '}<strong>Abrir chamado</strong> e <strong>Promessa de pagamento</strong> ao seu sistema de gestão.
               </p>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>URL da API</label>
+                <input className={styles.input} value={sgpUrl} onChange={e => setSgpUrl(e.target.value)}
+                  placeholder="https://conect.sgp.net.br/api"/>
+                <p className={styles.fieldHint}>URL base sem barra no final</p>
+              </div>
               <div className={styles.fieldRow}>
-                <div className={styles.field} style={{ flex: 2 }}>
-                  <label className={styles.fieldLabel}>URL da API</label>
-                  <input className={styles.input} value={sgpUrl} onChange={e => setSgpUrl(e.target.value)}
-                    placeholder="https://sgp.netgo.com.br/api"/>
-                  <p className={styles.fieldHint}>URL base sem barra no final</p>
+                <div className={styles.field} style={{ flex: 1 }}>
+                  <ApiKeyField label="SGP App"
+                    value={sgpApp} onChange={setSgpApp}
+                    placeholder="nome_do_app"
+                    hint="Identificador da aplicação no SGP"/>
+                </div>
+                <div className={styles.field} style={{ flex: 1 }}>
+                  <ApiKeyField label="SGP Token"
+                    value={sgpToken} onChange={setSgpToken}
+                    placeholder="token_gerado_no_sgp"
+                    hint="Token de autenticação gerado no SGP"/>
                 </div>
               </div>
-              <ApiKeyField label="Token de autenticação"
-                value={sgpToken} onChange={setSgpToken}
-                placeholder="Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                hint="Token Bearer gerado nas configurações do SGP. Inclua o prefixo 'Bearer ' se necessário."/>
+              <div className={styles.infoBox}>
+                <p style={{ fontSize: 12, color: 'var(--brand-blue)', margin: 0, lineHeight: 1.5 }}>
+                  💡 As credenciais são enviadas como headers <code>app</code> e <code>token</code> em cada requisição ao SGP.
+                </p>
+              </div>
             </IntegrationCard>
 
             {/* Evolution API */}

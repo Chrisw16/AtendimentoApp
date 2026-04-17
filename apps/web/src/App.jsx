@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useStore } from './store';
+import { useStore, getRoleSync } from './store';
 import Sidebar from './components/layout/Sidebar';
 import Topbar from './components/layout/Topbar';
 import Toast from './components/ui/Toast';
@@ -40,11 +40,12 @@ function PrivateRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  const hydrated = useStore(s => s._hydrated);
-  const role     = useStore(s => s.role);
+  // Lê role de forma síncrona do localStorage — sem race condition com hydration
+  const roleSync  = getRoleSync();
+  // Também subscreve ao store reativo para reagir a mudanças em tempo real
+  const roleStore = useStore(s => s.role);
+  const role = roleSync || roleStore;
 
-  // Aguarda o Zustand hidratar do localStorage antes de decidir
-  if (!hydrated) return <div className={styles.loading}><span className="spinner spinner-lg" /></div>;
   if (role !== 'admin') return <Navigate to="/chat" replace />;
   return children;
 }

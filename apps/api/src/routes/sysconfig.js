@@ -10,7 +10,7 @@ sysconfigRouter.use(authMiddleware, adminMiddleware);
 const CHAVES_PUBLICAS = [
   'prompt_ia', 'saudacao', 'horario', 'mensagem_fora_hora',
   'modo', 'horario_ativo', 'notificacoes',
-  'anthropic_api_key', 'openai_api_key', 'sgp_url', 'sgp_token',
+  'anthropic_api_key', 'openai_api_key', 'sgp_url', 'sgp_token', 'sgp_app',
   'evolution_url', 'evolution_key', 'nome_empresa',
 ];
 

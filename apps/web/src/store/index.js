@@ -1,11 +1,21 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// Lê role do localStorage de forma síncrona — sem race condition
+export function getRoleSync() {
+  try {
+    const raw = localStorage.getItem('maxxi-store');
+    if (!raw) return null;
+    return JSON.parse(raw)?.state?.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export const useStore = create(
   persist(
     (set, get) => ({
       /* ── AUTH ─────────────────────────────────────────────── */
-      _hydrated: false,
       token: null,
       user: null,
       role: null,
@@ -65,13 +75,10 @@ export const useStore = create(
     }),
     {
       name: 'maxxi-store',
-      onRehydrateStorage: () => (state) => {
-        if (state) state._hydrated = true;
-      },
       partialize: (s) => ({
         token: s.token,
-        user: s.user,
-        role: s.role,
+        user:  s.user,
+        role:  s.role,
         permissoes: s.permissoes,
         sidebarCollapsed: s.sidebarCollapsed,
       }),

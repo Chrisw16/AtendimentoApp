@@ -9,6 +9,8 @@ import { mensagemRepo }   from '../repositories/mensagemRepository.js';
 import { broadcast }      from './sseManager.js';
 import {
   getAnthropicClient,
+  consultarClientes, segundaViaBoleto, promessaPagamento,
+  criarChamado, verificarConexao, listarPlanos, consultarManutencao,
   sgpBuscarCliente, sgpBuscarBoletos, sgpVerificarStatus,
   sgpAbrirChamado, sgpPromessaPagamento, sgpListarPlanos,
   evolutionEnviarTexto, evolutionEnviarBotoes, evolutionEnviarLista,
@@ -221,12 +223,11 @@ async function processarNo(no, ctx) {
     // ── SGP / ERP ─────────────────────────────────────────────────
     case 'consultar_cliente': {
       if (ctx.estado.aguardando === no.id) {
-        // Já perguntou CPF — recebe resposta
         ctx.estado.aguardando = null;
         const tentativas = (ctx.estado.contexto._cpf_tentativas || 0) + 1;
         const cpf = (ctx.mensagem.texto || '').replace(/\D/g, '');
 
-        if (!cpf) {
+        if (cpf.length < 11) {
           if (tentativas >= (cfg.max_tentativas || 3)) return avancar('max_tentativas');
           ctx.estado.contexto._cpf_tentativas = tentativas;
           ctx.respostas.push({ tipo: 'texto', texto: cfg.mensagem_erro || 'CPF inválido. Tente novamente.' });
@@ -235,32 +236,34 @@ async function processarNo(no, ctx) {
         }
 
         try {
-          const data = await sgpBuscarCliente(cpf);
-          const clientes = Array.isArray(data) ? data : (data.data || data.clientes || [data]);
-          if (!clientes.length || !clientes[0]?.id) {
+          // usa consultarClientes — fiel ao erp.js original
+          const data = await consultarClientes(cpf);
+          if (data.erro || !data.contratos?.length) {
             if (tentativas >= (cfg.max_tentativas || 3)) return avancar('max_tentativas');
             ctx.estado.contexto._cpf_tentativas = tentativas;
-            ctx.respostas.push({ tipo: 'texto', texto: cfg.mensagem_erro || 'CPF não encontrado. Tente novamente.' });
+            ctx.respostas.push({ tipo: 'texto', texto: cfg.mensagem_erro || data.mensagem || 'CPF não encontrado. Tente novamente.' });
             ctx.estado.aguardando = no.id;
             return aguardar();
           }
 
-          const cli = clientes[0];
+          // Preenche contexto com o primeiro contrato (mais relevante pela ordenação do SGP)
+          const ct = data.contratos[0];
           ctx.estado.contexto.cliente = {
-            nome:     cli.nome      || cli.razao_social || '',
-            cpf:      cli.cpf       || cli.cnpj         || cpf,
-            contrato: cli.contrato  || cli.contrato_id  || '',
-            plano:    cli.plano     || cli.descricao_plano || '',
-            status:   cli.status    || '',
-            cidade:   cli.cidade    || '',
-            email:    cli.email     || '',
+            nome:     data.nome,
+            cpf:      data.cpfcnpj,
+            contrato: String(ct.id),
+            plano:    ct.plano,
+            status:   ct.status,
+            cidade:   ct.cidade || '',
+            email:    data.email || '',
+            popId:    ct.popId,
+            titulos_abertos: ct.titulos_abertos,
+            valor_aberto:    ct.valor_aberto,
           };
           ctx.estado.contexto._cpf_tentativas = 0;
+          ctx.estado.contexto._contratos_sgp = data.contratos;
 
-          if (clientes.length > 1) {
-            ctx.estado.contexto._contratos = clientes;
-            return avancar('multiplos_contratos');
-          }
+          if (data.contratos.length > 1) return avancar('multiplos_contratos');
           return avancar('encontrado');
         } catch (err) {
           console.error('[Motor] consultar_cliente:', err.message);
@@ -268,23 +271,21 @@ async function processarNo(no, ctx) {
         }
       }
 
-      // Primeiro acesso — já tem CPF no contexto ou precisa perguntar
+      // Já tem CPF no contexto
       const cpfExistente = ctx.estado.contexto.cliente?.cpf;
       if (cpfExistente) {
-        // Já tem CPF, consulta direto
         try {
-          const data    = await sgpBuscarCliente(cpfExistente);
-          const clientes = Array.isArray(data) ? data : (data.data || [data]);
-          if (clientes[0]?.id) {
-            const cli = clientes[0];
-            ctx.estado.contexto.cliente = { ...ctx.estado.contexto.cliente, nome: cli.nome || '', contrato: cli.contrato_id || '', plano: cli.descricao_plano || '', status: cli.status || '', cidade: cli.cidade || '' };
-            return avancar(clientes.length > 1 ? 'multiplos_contratos' : 'encontrado');
+          const data = await consultarClientes(cpfExistente);
+          if (!data.erro && data.contratos?.length) {
+            const ct = data.contratos[0];
+            ctx.estado.contexto.cliente = { ...ctx.estado.contexto.cliente, nome: data.nome, contrato: String(ct.id), plano: ct.plano, status: ct.status, cidade: ct.cidade || '' };
+            ctx.estado.contexto._contratos_sgp = data.contratos;
+            return avancar(data.contratos.length > 1 ? 'multiplos_contratos' : 'encontrado');
           }
         } catch (err) { console.error('[Motor] consultar_cliente (direto):', err.message); }
         return avancar('max_tentativas');
       }
 
-      // Pergunta o CPF
       if (cfg.pergunta) ctx.respostas.push({ tipo: 'texto', texto: cfg.pergunta });
       ctx.estado.contexto._cpf_tentativas = 0;
       ctx.estado.aguardando = no.id;
@@ -320,10 +321,17 @@ async function processarNo(no, ctx) {
       if (!contrato) return avancar('erro');
       try {
         const data   = await sgpVerificarStatus(contrato);
-        const status = data.status || data.situacao || '';
+        const status = (data.status || '').toLowerCase();
         ctx.estado.contexto.cliente.status = status;
-        const statusMap = { '1': 'ativo', '2': 'inativo', '3': 'cancelado', '4': 'suspenso', '5': 'inviabilidade', '6': 'novo', '7': 'reduzido', 'ativo': 'ativo', 'inativo': 'inativo', 'suspenso': 'suspenso', 'cancelado': 'cancelado' };
-        return avancar(statusMap[String(status).toLowerCase()] || 'inativo');
+        // Mapeamento oficial SGP: ativo, inativo, cancelado, suspenso, inviabilidade técnica, novo, ativo vel. reduzida
+        if (status.includes('ativo vel') || status.includes('reduzida')) return avancar('reduzido');
+        if (status === 'ativo')                   return avancar('ativo');
+        if (status === 'suspenso')                return avancar('suspenso');
+        if (status === 'inativo')                 return avancar('inativo');
+        if (status === 'cancelado')               return avancar('cancelado');
+        if (status.includes('inviabilidade'))     return avancar('inviabilidade');
+        if (status === 'novo')                    return avancar('novo');
+        return avancar('inativo');
       } catch (err) {
         console.error('[Motor] verificar_status:', err.message);
         return avancar('erro');
@@ -334,9 +342,18 @@ async function processarNo(no, ctx) {
       const contrato = getCtxVal(ctx, 'cliente.contrato');
       if (!contrato) return avancar('erro');
       try {
-        const data = await sgpAbrirChamado({ contratoId: contrato, tipoId: cfg.tipo_id, descricao: interpolar(cfg.descricao || 'Chamado via GoCHAT', ctx) });
-        ctx.estado.contexto.chamado = { protocolo: data.protocolo || data.id || data.numero || '' };
-        return avancar('sucesso');
+        // criarChamado(contrato, tipo, descricao) — fiel ao erp.js original
+        const data = await criarChamado(
+          contrato,
+          cfg.tipo_id || 5,
+          interpolar(cfg.descricao || 'Chamado aberto via GoCHAT', ctx)
+        );
+        ctx.estado.contexto.chamado = {
+          protocolo: data.protocolo || data.id || '',
+          aberto:    data.chamado_aberto,
+          cliente:   data.cliente || '',
+        };
+        return avancar(data.chamado_aberto ? 'sucesso' : 'erro');
       } catch (err) {
         console.error('[Motor] abrir_chamado:', err.message);
         return avancar('erro');
