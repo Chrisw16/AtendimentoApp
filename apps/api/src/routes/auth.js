@@ -64,3 +64,12 @@ authRouter.post('/logout', authMiddleware, asyncHandler(async (req, res) => {
   await db('agentes').where({ id: req.agente.id }).update({ online: false });
   res.json({ ok: true });
 }));
+
+// GET /api/auth/refresh — renova o token sem precisar fazer login novamente
+authRouter.get('/refresh', authMiddleware, asyncHandler(async (req, res) => {
+  const db    = getDb();
+  const agente = await db('agentes').where({ id: req.agente.id, ativo: true }).first();
+  if (!agente) throw new HttpError(401, 'Agente inativo');
+  const token = signToken({ id: agente.id, login: agente.login, nome: agente.nome, role: agente.role });
+  res.json({ token, user: { id: agente.id, nome: agente.nome, login: agente.login, role: agente.role } });
+}));

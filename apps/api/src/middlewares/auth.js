@@ -31,5 +31,5 @@ export function adminMiddleware(req, res, next) {
 }
 
 export function signToken(payload) {
-  return jwt.sign(payload, SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, SECRET, { expiresIn: '30d' });
 }

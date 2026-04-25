@@ -23,10 +23,31 @@ async function request(method, path, body = null, opts = {}) {
     signal: opts.signal,
   });
 
-  // Token expirado → logout automático (só se já estiver autenticado)
+  // Token expirado → tenta refresh antes de fazer logout
   if (res.status === 401 && useStore.getState().token) {
+    // Evita loop infinito na própria rota de refresh/login
+    if (!path.includes('/auth/')) {
+      try {
+        const refreshRes = await fetch(`${BASE}/auth/refresh`, {
+          headers: { Authorization: `Bearer ${useStore.getState().token}` },
+        });
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          useStore.getState().setAuth({ token: refreshData.token, user: refreshData.user, role: refreshData.user?.role });
+          // Retenta a requisição original com o novo token
+          const retryHeaders = {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${refreshData.token}`,
+          };
+          const retryRes = await fetch(`${BASE}${path}`, { method, headers: retryHeaders, body: body ? JSON.stringify(body) : undefined });
+          const retryData = await retryRes.json().catch(() => ({}));
+          if (!retryRes.ok) throw new Error(retryData.error || `Erro ${retryRes.status}`);
+          return retryData;
+        }
+      } catch {}
+    }
     useStore.getState().logout();
-    throw new Error('Sessão expirada');
+    throw new Error('Sessão expirada. Faça login novamente.');
   }
 
   const data = await res.json().catch(() => ({}));
