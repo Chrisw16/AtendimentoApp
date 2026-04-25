@@ -295,20 +295,64 @@ async function processarNo(no, ctx) {
 
     case 'consultar_boleto': {
       const contrato = getCtxVal(ctx, 'cliente.contrato') || cfg.contrato;
+      const cpf      = getCtxVal(ctx, 'cliente.cpf') || '';
       if (!contrato) {
-        ctx.respostas.push({ tipo: 'texto', texto: 'Contrato não identificado.' });
+        ctx.respostas.push({ tipo: 'texto', texto: 'Contrato não identificado. Por favor, informe seu CPF primeiro.' });
         return avancar('nao_encontrado');
       }
+      // Se estava aguardando seleção de boleto entre múltiplos
+      if (ctx.estado.aguardando === no.id && ctx.estado.contexto._boletos_disponiveis) {
+        const lista = ctx.estado.contexto._boletos_disponiveis;
+        const inp   = (ctx.mensagem.texto || '').replace(/\D/g, '');
+        const idx   = parseInt(inp) - 1;
+        const esc   = lista[idx] || lista.find(b => b.id === inp) || null;
+        if (esc) {
+          ctx.estado.aguardando = null;
+          ctx.estado.contexto._boletos_disponiveis = null;
+          ctx.estado.contexto.boleto = { valor: esc.valor, vencimento: esc.vencimento, link: esc.link, pix: esc.pix };
+          const msg = interpolar(cfg.mensagem_boleto ||
+            '📄 *Segunda via*\n\n💰 Valor: *R$ {{boleto.valor}}*\n📅 Vencimento: {{boleto.vencimento}}\n\n🔗 {{boleto.link}}\n\n💠 PIX copia e cola:\n{{boleto.pix}}', ctx);
+          ctx.respostas.push({ tipo: 'texto', texto: msg });
+          return avancar('encontrado');
+        }
+        ctx.respostas.push({ tipo: 'texto', texto: `Não entendi. Digite o número do boleto (1 a ${lista.length}):` });
+        return aguardar();
+      }
       try {
-        const data    = await sgpBuscarBoletos(contrato);
-        const boletos = Array.isArray(data) ? data : (data.data || data.boletos || []);
-        if (!boletos.length) {
-          if (cfg.mensagem_sem_boleto) ctx.respostas.push({ tipo: 'texto', texto: cfg.mensagem_sem_boleto });
+        // segundaViaBoleto(cpfcnpj, contrato) — POST /api/ura/fatura2via/
+        const res = await segundaViaBoleto(cpf || '00000000000', contrato);
+        if (!res || res.erro || res.status === 'sem_boleto') {
+          const msgSem = cfg.mensagem_sem_boleto || '✅ Não encontrei boletos em aberto para o contrato *#{{cliente.contrato}}*. Sua conta está em dia! 🎉';
+          ctx.respostas.push({ tipo: 'texto', texto: interpolar(msgSem, ctx) });
           return avancar('nao_encontrado');
         }
-        const b = boletos[0];
-        ctx.estado.contexto.boleto = { valor: b.valor || b.amount, vencimento: b.vencimento || b.due_date, link: b.link || b.url || b.boleto_url || '', pix: b.pix || b.pix_copia_cola || '' };
-        const msg = interpolar(cfg.mensagem_boleto || '📄 Valor: R$ {{boleto.valor}}\n📅 Venc: {{boleto.vencimento}}\n🔗 {{boleto.link}}', ctx);
+        if (res.status === 'multiplos_boletos') {
+          ctx.estado.contexto._boletos_disponiveis = res.lista.map(b => ({
+            id:         String(b.fatura_id || b.indice),
+            valor:      String(b.valor_cobrado || ''),
+            vencimento: String(b.vencimento_atual || ''),
+            link:       String(b.link_cobranca || b.link_boleto || ''),
+            pix:        String(b.pix_copia_cola || ''),
+          }));
+          const emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+          const linhas = ctx.estado.contexto._boletos_disponiveis.map((b, i) =>
+            `${emojis[i] || `${i+1}.`} *R$ ${b.valor}* — venc. ${b.vencimento}`
+          ).join('\n');
+          ctx.respostas.push({ tipo: 'texto', texto: `Encontrei *${res.total} boletos em aberto*. Qual deseja?\n\n${linhas}\n\nDigite o *número*:` });
+          ctx.estado.aguardando = no.id;
+          return aguardar();
+        }
+        // boleto_encontrado — único
+        ctx.estado.contexto.boleto = {
+          valor:      String(res.valor_cobrado || ''),
+          vencimento: String(res.vencimento_atual || ''),
+          link:       String(res.link_cobranca || res.link_boleto || ''),
+          pix:        String(res.pix_copia_cola || ''),
+          linha:      String(res.linha_digitavel || ''),
+          vencido:    res.vencido ? 'Sim' : 'Não',
+        };
+        const msg = interpolar(cfg.mensagem_boleto ||
+          '📄 *Segunda via*\n\n💰 Valor: *R$ {{boleto.valor}}*\n📅 Vencimento: {{boleto.vencimento}}\n\n🔗 {{boleto.link}}\n\n💠 PIX copia e cola:\n{{boleto.pix}}', ctx);
         ctx.respostas.push({ tipo: 'texto', texto: msg });
         return avancar('encontrado');
       } catch (err) {
@@ -318,25 +362,18 @@ async function processarNo(no, ctx) {
     }
 
     case 'verificar_status': {
-      const contrato = getCtxVal(ctx, 'cliente.contrato');
-      if (!contrato) return avancar('erro');
-      try {
-        const data   = await sgpVerificarStatus(contrato);
-        const status = (data.status || '').toLowerCase();
-        ctx.estado.contexto.cliente.status = status;
-        // Mapeamento oficial SGP: ativo, inativo, cancelado, suspenso, inviabilidade técnica, novo, ativo vel. reduzida
-        if (status.includes('ativo vel') || status.includes('reduzida')) return avancar('reduzido');
-        if (status === 'ativo')                   return avancar('ativo');
-        if (status === 'suspenso')                return avancar('suspenso');
-        if (status === 'inativo')                 return avancar('inativo');
-        if (status === 'cancelado')               return avancar('cancelado');
-        if (status.includes('inviabilidade'))     return avancar('inviabilidade');
-        if (status === 'novo')                    return avancar('novo');
-        return avancar('inativo');
-      } catch (err) {
-        console.error('[Motor] verificar_status:', err.message);
-        return avancar('erro');
-      }
+      // Lê o status já disponível na sessão (preenchido pelo consultar_cliente)
+      // Idêntico ao sistema de inspiração — sem chamada extra ao SGP
+      const statusRaw = getCtxVal(ctx, 'cliente.status') || '';
+      const s = statusRaw.toLowerCase().trim();
+      if      (s === '1' || s === 'ativo')                            return avancar('ativo');
+      else if (s === '2' || s === 'inativo')                          return avancar('inativo');
+      else if (s === '3' || s === 'cancelado')                        return avancar('cancelado');
+      else if (s === '4' || s === 'suspenso')                         return avancar('suspenso');
+      else if (s === '5' || s.includes('inviabilidade'))              return avancar('inviabilidade');
+      else if (s === '6' || s === 'novo')                             return avancar('novo');
+      else if (s === '7' || s.includes('reduzida') || s === 'reduzido') return avancar('reduzido');
+      else return avancar('ativo'); // fallback seguro como no original
     }
 
     case 'abrir_chamado': {
@@ -385,9 +422,13 @@ async function processarNo(no, ctx) {
     case 'listar_planos': {
       const cidade = interpolar(cfg.cidade || '{{cliente.cidade}}', ctx);
       try {
-        const data = await sgpListarPlanos(cidade);
-        const planos = Array.isArray(data) ? data : (data.data || data.planos || []);
-        ctx.estado.contexto.planos = { lista: planos.map((p, i) => `${i+1}. ${p.nome || p.descricao} — R$ ${p.valor || p.preco}`).join('\n') };
+        // listarPlanos retorna array já normalizado com { id, descricao, valor, velocidade }
+        const planos = await listarPlanos(cidade);
+        ctx.estado.contexto.planos = {
+          lista: planos.map((p, i) =>
+            `${i+1}. *${p.descricao}*${p.velocidade ? ` (${p.velocidade})` : ''} — R$ ${p.valor}`
+          ).join('\n'),
+        };
         return avancar('saida');
       } catch (err) {
         console.error('[Motor] listar_planos:', err.message);
@@ -396,9 +437,30 @@ async function processarNo(no, ctx) {
       }
     }
 
-    case 'consultar_historico':
-      ctx.estado.contexto.historico = { resumo: 'Histórico não disponível.' };
+    case 'consultar_historico': {
+      const contrato = getCtxVal(ctx, 'cliente.contrato');
+      if (!contrato) {
+        ctx.estado.contexto.historico = { resumo: 'Contrato não identificado.' };
+        return avancar('saida');
+      }
+      try {
+        // historicoOcorrencias — POST /api/ura/ocorrencia/list/
+        const { historicoOcorrencias } = await import('./integrations.js');
+        const lista = await historicoOcorrencias(contrato).catch(() => null);
+        if (!lista?.length) {
+          ctx.estado.contexto.historico = { resumo: 'Nenhum chamado encontrado.' };
+        } else {
+          ctx.estado.contexto.historico = {
+            resumo: lista.slice(0, 5).map(o =>
+              `#${o.numero} — ${o.tipo} (${o.status}) ${o.data_cadastro}`
+            ).join('\n'),
+          };
+        }
+      } catch (err) {
+        ctx.estado.contexto.historico = { resumo: 'Histórico temporariamente indisponível.' };
+      }
       return avancar('saida');
+    }
 
     // ── IA ────────────────────────────────────────────────────────
     case 'ia_responde':
@@ -480,35 +542,42 @@ async function processarNo(no, ctx) {
 
 // ── IA RESPONDE ───────────────────────────────────────────────────
 async function processarIAResponde(no, ctx) {
-  const cfg    = no.config || {};
-  const slug   = cfg.contexto || 'outros';  // ex: 'suporte', 'financeiro', 'comercial'
-  const turnos = (ctx.estado.contexto[`_turnos_${no.id}`] || 0) + 1;
-  ctx.estado.contexto[`_turnos_${no.id}`] = turnos;
+  const cfg      = no.config || {};
+  const slug     = cfg.contexto || 'outros';
+  const maxTurnos = parseInt(cfg.max_turns) || 6;
+  const turnosKey = `_ia_turnos_${no.id}`;
+  const histKey   = `_ia_hist_${no.id}`;
 
-  if (turnos > (cfg.max_turns || 6)) {
-    ctx.estado.contexto[`_turnos_${no.id}`] = 0;
+  // Controla turnos — idêntico ao sistema de inspiração
+  const turnosUsados = ctx.estado.contexto[turnosKey] || 0;
+  if (turnosUsados >= maxTurnos) {
+    ctx.estado.contexto[turnosKey] = 0;
+    ctx.estado.contexto[histKey]   = [];
     return avancar('max_turnos');
   }
 
-  // Carrega o prompt do banco pelo slug do contexto (ex: slug='suporte')
-  // e injeta os placeholders [REGRAS], [ESTILO], [PLANOS], [TIPOS_OCORRENCIA]
-  // e o contexto do cliente no final
-  const { system, modelo, provedor, temperatura } = await resolverPrompt(
-    slug,
-    ctx.estado.contexto.cliente || {}
+  // Carrega prompt do banco com placeholders resolvidos
+  const { system: systemBase, modelo, provedor, temperatura } = await resolverPrompt(
+    slug, ctx.estado.contexto.cliente || {}
   );
 
-  // Se o nó tiver um prompt extra de instrução, adiciona antes
-  const systemFinal = cfg.prompt
-    ? `${system}\n\nInstrução adicional do fluxo: ${cfg.prompt}`
-    : system;
+  // Injeta dados do cliente em variáveis de contexto (como no sistema de inspiração)
+  const ctxCliente = Object.entries(ctx.estado.contexto.cliente || {})
+    .filter(([, v]) => v)
+    .map(([k, v]) => `cliente.${k}: ${v}`)
+    .join('\n');
 
-  const historico = await obterHistorico(ctx.conversa.id, ctx.db);
-  const messages = [
-    ...historico.map(m => ({
-      role:    m.origem === 'cliente' ? 'user' : 'assistant',
-      content: m.texto || '',
-    })),
+  const system = [
+    systemBase,
+    cfg.prompt ? `\nInstrução específica: ${cfg.prompt}` : '',
+    ctxCliente ? `\n📋 Dados do cliente identificado:\n${ctxCliente}` : '',
+    '\nUse as ferramentas disponíveis quando necessário. Não peça dados que já foram fornecidos.',
+  ].filter(Boolean).join('\n');
+
+  // Histórico mantido em sessão por nó (não só do banco — preserva contexto entre turnos)
+  const histSessao = ctx.estado.contexto[histKey] || [];
+  const messages   = [
+    ...histSessao,
     { role: 'user', content: ctx.mensagem.texto || '' },
   ].filter(m => m.content);
 
@@ -516,39 +585,70 @@ async function processarIAResponde(no, ctx) {
     let texto = '';
 
     if (provedor === 'openai') {
-      // OpenAI
-      const openaiKey = await (await import('./integrations.js').then(m => m.getAnthropicClient)).call().catch(() => null);
-      // usa Anthropic como fallback se OpenAI não configurado
-      const ai = await getAnthropicClient();
-      const response = await ai.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system: systemFinal, messages });
-      texto = response.content.find(b => b.type === 'text')?.text || '';
+      // OpenAI — busca chave do banco
+      const openaiKey = await getDb()('sistema_kv').where({ chave: 'openai_api_key' }).first()
+        .then(r => r?.valor ? JSON.parse(r.valor) : null).catch(() => null);
+      if (openaiKey) {
+        const { default: OpenAI } = await import('openai');
+        const oai = new OpenAI({ apiKey: openaiKey });
+        const res = await oai.chat.completions.create({
+          model:       modelo || 'gpt-4o-mini',
+          max_tokens:  1024,
+          temperature: temperatura,
+          messages:    [{ role: 'system', content: system }, ...messages],
+        });
+        texto = res.choices[0]?.message?.content || '';
+      } else {
+        // Fallback Anthropic se OpenAI não configurado
+        const ai = await getAnthropicClient();
+        const res = await ai.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system, messages });
+        texto = res.content.find(b => b.type === 'text')?.text || '';
+      }
     } else {
       // Anthropic (padrão)
       const ai = await getAnthropicClient();
-      const response = await ai.messages.create({
+      const res = await ai.messages.create({
         model:       modelo || 'claude-haiku-4-5-20251001',
         max_tokens:  1024,
         temperature: temperatura,
-        system:      systemFinal,
+        system,
         messages,
       });
-      texto = response.content.find(b => b.type === 'text')?.text || '';
+      texto = res.content.find(b => b.type === 'text')?.text || '';
     }
 
     if (texto) ctx.respostas.push({ tipo: 'texto', texto });
 
+    // Atualiza histórico de sessão (mantém os últimos 20 turns — como no original)
+    ctx.estado.contexto[turnosKey] = turnosUsados + 1;
+    ctx.estado.contexto[histKey]   = [
+      ...histSessao,
+      { role: 'user',      content: ctx.mensagem.texto || '' },
+      { role: 'assistant', content: texto },
+    ].slice(-20);
+
+    // Roteamento: detecta transferência/resolução no texto
+    // (o sistema de inspiração usa tool_calls; sem tools usamos heurística melhorada)
     const lwr = texto.toLowerCase();
-    if (lwr.includes('transferi') || lwr.includes('atendente') || lwr.includes('humano')) {
-      ctx.estado.contexto[`_turnos_${no.id}`] = 0;
+    const transferiu = lwr.includes('vou te transferir') || lwr.includes('transferindo') ||
+                       lwr.includes('chamar um atendente') || lwr.includes('conectar com atendente');
+    const resolveu   = lwr.includes('posso te ajudar com mais') || lwr.includes('mais alguma coisa') ||
+                       lwr.includes('foi um prazer') || lwr.includes('até mais');
+
+    if (transferiu) {
+      ctx.estado.contexto[turnosKey] = 0;
+      ctx.estado.contexto[histKey]   = [];
       return avancar('transferir');
     }
-    if (lwr.includes('tchau') || lwr.includes('obrigad') || lwr.includes('até mais') || lwr.includes('encerrand')) {
-      ctx.estado.contexto[`_turnos_${no.id}`] = 0;
+    if (resolveu) {
+      ctx.estado.contexto[turnosKey] = 0;
+      ctx.estado.contexto[histKey]   = [];
       return avancar('resolvido');
     }
   } catch (err) {
     console.error(`[Motor] ia_responde (${slug}):`, err.message);
     ctx.respostas.push({ tipo: 'texto', texto: 'Desculpe, ocorreu um erro. Tente novamente em instantes.' });
+    return avancar('transferir');
   }
 
   return aguardar();
@@ -558,48 +658,63 @@ async function processarIAResponde(no, ctx) {
 async function processarIARoteador(no, ctx) {
   const cfg   = no.config || {};
   const rotas = Array.isArray(cfg.rotas) ? cfg.rotas : [];
+  const roteadorKey = `_roteador_${no.id}`;
 
-  if (cfg.mensagem && !ctx.estado.contexto[`_roteador_enviou_${no.id}`]) {
+  // Envia mensagem inicial e aguarda (só na primeira vez)
+  if (cfg.mensagem && !ctx.estado.contexto[roteadorKey]) {
     ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem, ctx) });
-    ctx.estado.contexto[`_roteador_enviou_${no.id}`] = true;
+    ctx.estado.contexto[roteadorKey] = true;
     ctx.estado.aguardando = no.id;
     return aguardar();
   }
+  // Limpa flag para próxima execução
+  ctx.estado.contexto[roteadorKey] = false;
 
   const texto = ctx.mensagem.texto || '';
 
-  // Usa o prompt do slug 'roteador' do banco — editável no painel Prompts IA
-  const { system: systemBase, modelo, temperatura } = await resolverPrompt('roteador', {});
+  // ── Detecta despedida antes de chamar IA (economiza chamada API)
+  // Idêntico ao sistema de inspiração
+  const isDespedida = /^(obrigad|valeu|vlw|não|nao|tchau|encerr|até|flw|ok|certo|tudo|fechou?|nada|por enquanto|por ora)[^\w]*/i
+    .test(texto.trim());
+  if (isDespedida) return avancar('encerrar');
 
-  // Se o nó tem rotas customizadas, adiciona como contexto extra
-  let system = systemBase;
-  if (rotas.length) {
-    const opcoes = rotas.map(r => `${r.id}: ${r.descricao || r.label || r.id}`).join('\n');
-    system += `\n\nRotas disponíveis neste fluxo:\n${opcoes}\n\nResponda SOMENTE com um desses IDs: ${rotas.map(r => r.id).join(', ')}, nao_entendeu, ou encerrar.`;
-  }
+  if (!rotas.length) return avancar('nao_entendeu');
+
+  // ── Monta prompt XML estruturado (idêntico ao sistema de inspiração)
+  const rotasDesc = rotas.map(r =>
+    `- "${r.id}": ${r.label || r.id}${r.descricao ? ` (${r.descricao})` : ''}`
+  ).join('\n');
+
+  const system = `Você é um classificador de intenções. Analise a mensagem e escolha UMA das rotas.
+
+Rotas disponíveis:
+${rotasDesc}
+- "encerrar": cliente quer encerrar, disse obrigado, tchau ou não precisa de mais nada
+- "nao_entendeu": nenhuma rota se encaixa
+
+Responda APENAS com a tag XML abaixo, sem texto adicional:
+<rota>id_da_rota_escolhida</rota>`;
 
   try {
     const ai = await getAnthropicClient();
     const response = await ai.messages.create({
-      model:       modelo || 'claude-haiku-4-5-20251001',
-      max_tokens:  30,
-      temperature: temperatura,
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 30,
       system,
-      messages:    [{ role: 'user', content: texto }],
+      messages:   [{ role: 'user', content: texto }],
     });
-    const porta = (response.content[0]?.text || '').trim().toLowerCase()
-      .replace(/[^a-z0-9_]/g, '').trim();
 
-    ctx.estado.contexto[`_roteador_enviou_${no.id}`] = false;
+    const rawText  = (response.content[0]?.text || '').trim();
+    // Extrai tag XML — mais robusto que texto puro
+    const xmlMatch = rawText.match(/<rota>([\s\S]*?)<\/rota>/);
+    const portaRaw = xmlMatch ? xmlMatch[1].trim() : rawText;
+    const portaIA  = portaRaw.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40);
 
-    if (porta === 'encerrar') return avancar('encerrar');
-    if (rotas.length) {
-      const rotaValida = rotas.find(r => r.id === porta);
-      return avancar(rotaValida ? porta : 'nao_entendeu');
-    }
-    // Sem rotas customizadas: usa as categorias padrão do prompt
-    const categoriasValidas = ['financeiro','suporte','comercial','faq','outros'];
-    return avancar(categoriasValidas.includes(porta) ? porta : 'nao_entendeu');
+    const idsValidos = [...rotas.map(r => r.id), 'nao_entendeu', 'encerrar'];
+    const porta = idsValidos.includes(portaIA) ? portaIA : 'nao_entendeu';
+
+    ctx.estado.contexto.roteador_intencao = porta;
+    return avancar(porta);
   } catch (err) {
     console.error('[Motor] ia_roteador:', err.message);
     return avancar('nao_entendeu');

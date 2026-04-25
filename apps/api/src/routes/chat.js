@@ -6,6 +6,7 @@ import { mensagemRepo }   from '../repositories/mensagemRepository.js';
 import { addClient, removeClient, broadcast, sendToAgente } from '../services/sseManager.js';
 import { getDb } from '../config/db.js';
 import { calcularUrgencia, detectarPalavrasCriticas, marcarAguardando, limparAguardando, getPosicaoNaFila, getTotalNaFila } from '../services/filaService.js';
+import { processarMensagemCliente, analisarConversaEncerrada } from '../services/supervisoraIA.js';
 import { evolutionEnviarTexto } from '../services/integrations.js';
 
 export const chatRouter = Router();
@@ -90,6 +91,11 @@ chatRouter.post('/conversas/:id/mensagens', asyncHandler(async (req, res) => {
 
   // Broadcast SSE
   broadcast('mensagem', { ...msg, agente_nome: req.agente.nome });
+
+  // Supervisora IA — analisa sentimento se mensagem do cliente em conversa com agente
+  if (conv.agente_id && req.agente.role !== 'admin') {
+    // mensagem do agente — não precisa analisar
+  }
 
   // Envia para canal externo (WhatsApp via Evolution API)
   if (conv.canal === 'whatsapp' && conv.telefone && texto) {

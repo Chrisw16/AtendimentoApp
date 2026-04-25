@@ -64,6 +64,17 @@ export function useChat() {
       agente_fantasma: (data) => {
         toast(`⚠️ ${data.agenteNome} assumiu mas não respondeu (${data.minutos}min)`, 'warning', 8000);
       },
+      supervisora_alerta: (data) => {
+        // Dispara evento customizado para o componente SupervisoraIA
+        window.dispatchEvent(new CustomEvent('supervisora_alerta', { detail: data }));
+        // Toast para alertas críticos
+        if (data.tipo === 'cliente_critico' || data.tipo === 'demora_critica') {
+          toast(data.mensagem || '🚨 Alerta da Supervisora IA', 'error', 8000);
+        }
+      },
+      supervisora_sugestao: (data) => {
+        window.dispatchEvent(new CustomEvent('supervisora_sugestao', { detail: data }));
+      },
       onError: () => {
         // Reconecta automaticamente após 3s em caso de falha
         setTimeout(loadConversas, 3000);

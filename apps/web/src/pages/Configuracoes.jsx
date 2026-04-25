@@ -374,7 +374,7 @@ export default function Configuracoes() {
                 <label className={styles.fieldLabel}>URL da API</label>
                 <input className={styles.input} value={sgpUrl} onChange={e => setSgpUrl(e.target.value)}
                   placeholder="https://conect.sgp.net.br/api"/>
-                <p className={styles.fieldHint}>URL base sem barra no final</p>
+                <p className={styles.fieldHint}>URL base do SGP — ex: https://conect.sgp.net.br (sem /api ou barra no final)</p>
               </div>
               <div className={styles.fieldRow}>
                 <div className={styles.field} style={{ flex: 1 }}>

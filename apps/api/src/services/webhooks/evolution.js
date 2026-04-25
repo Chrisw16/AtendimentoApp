@@ -21,12 +21,15 @@ export async function handleEvolution(body) {
 }
 
 async function processarMensagem(body) {
-  const data    = body?.data;
-  const msg     = data?.message;
+  const data      = body?.data;
+  const msg       = data?.message;
   if (!msg || msg?.key?.fromMe) return;  // ignora mensagens próprias
 
-  const telefone = msg.key?.remoteJid?.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '');
+  const telefone  = msg.key?.remoteJid?.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '');
   if (!telefone) return;
+
+  // Evolution v2 envia o nome da instância no body — essencial para enviar respostas de volta
+  const instancia = body?.instance || body?.instanceName || body?.data?.instance || null;
 
   const external_id = msg.key?.id;
 
@@ -37,8 +40,19 @@ async function processarMensagem(body) {
 
   if (!conversa) {
     const nome = data?.pushName || null;
-    conversa   = await conversaRepo.criar({ canal: 'whatsapp', telefone, nome, status: 'ia' });
+    conversa   = await conversaRepo.criar({
+      canal: 'whatsapp',
+      telefone,
+      nome,
+      status: 'ia',
+      canal_instancia: instancia,  // salva instância para poder enviar de volta
+    });
     broadcast('nova_conversa', conversa);
+  } else if (instancia && !conversa.canal_instancia) {
+    // Atualiza instância se ainda não tinha
+    const { getDb } = await import('../../config/db.js');
+    await getDb()('conversas').where({ id: conversa.id }).update({ canal_instancia: instancia });
+    conversa.canal_instancia = instancia;
   }
 
   const { texto, tipo, url, mime } = extrairConteudoEvolution(msg);
@@ -56,6 +70,12 @@ async function processarMensagem(body) {
   await conversaRepo.incrementarNaoLidas(conversa.id);
   broadcast('mensagem', { ...mensagem, conversa_id: conversa.id });
   broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));
+
+  // Supervisora IA — analisa sentimento em tempo real se há agente na conversa
+  if (conversa.status === 'ativa' && conversa.agente_id && texto) {
+    const { processarMensagemCliente } = await import('../supervisoraIA.js');
+    processarMensagemCliente(conversa, mensagem).catch(() => {});
+  }
 
   if (conversa.status === 'ia') {
     const { processarConversa } = await import('../motorFluxo.js');

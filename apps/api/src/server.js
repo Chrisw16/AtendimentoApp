@@ -93,6 +93,8 @@ if (process.env.DATABASE_URL) {
       const { iniciarMonitorSLA } = await import('./services/filaService.js');
       iniciarMonitorSLA();
       console.log('✅ Monitor SLA iniciado');
+      const { iniciarMonitorSupervisora } = await import('./services/supervisoraIA.js');
+      iniciarMonitorSupervisora();
     })
     .catch(err => console.error('⚠️  Migration warning:', err.message));
 } else {

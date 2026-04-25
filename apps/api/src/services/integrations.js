@@ -33,7 +33,9 @@ async function getSGPConfig() {
   if (!url)   throw new Error('URL do SGP não configurada. Acesse Configurações → SGP/ERP.');
   if (!app)   throw new Error('SGP App não configurado. Acesse Configurações → SGP/ERP.');
   if (!token) throw new Error('Token do SGP não configurado. Acesse Configurações → SGP/ERP.');
-  return { url: url.replace(/\/$/, ''), app, token };
+  // Remove barra final e também /api/ duplicado caso o usuário tenha incluído na URL base
+  const cleanUrl = url.replace(/\/+$/, '').replace(/\/api$/, '');
+  return { url: cleanUrl, app, token };
 }
 
 // ── HELPERS SGP ───────────────────────────────────────────────────
@@ -96,37 +98,7 @@ export async function consultarClientes(cpfcnpj) {
   if (!raw?.contratos?.length) {
     raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: formatted }).catch(() => null);
   }
-  if (!raw?.contratos?.length) {
-    const { url, app, token } = await getSGPConfig().catch(() => ({}));
-    if (url) {
-      try {
-        const r = await fetch(`${url}/api/ura/clientes/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ app, token, cpfcnpj: digits, limit: 1 }),
-        });
-        const d = await r.json().catch(() => null);
-        const cli = d?.clientes?.[0];
-        if (cli) {
-          raw = {
-            contratos: (cli.contratos || []).map(ct => ({
-              contratoId:            ct.id,
-              razaoSocial:           cli.nome,
-              cpfCnpj:               cli.cpfcnpj,
-              planointernet:         ct.servicos?.[0]?.plano?.descricao || '',
-              contratoStatus:        typeof ct.status === 'string'
-                ? {'Ativo':1,'Inativo':2,'Cancelado':3,'Suspenso':4,'Inviabilidade Técnica':5,'Novo':6,'Ativo V. Reduzia':7}[ct.status] || 1
-                : ct.status,
-              contratoStatusDisplay: ct.status,
-              endereco_cidade:       ct.servicos?.[0]?.endereco?.cidade || cli.endereco?.cidade || '',
-              cobVencimento:         ct.vencimento,
-            })),
-          };
-          if (!raw.contratos.length) raw = null;
-        }
-      } catch {}
-    }
-  }
+  // Endpoint /api/ura/clientes/ não consta na doc oficial SGP — removido
 
   const todosContratos = raw?.contratos || [];
   if (!todosContratos.length) return { erro: true, mensagem: 'Cliente não encontrado para este CPF/CNPJ.' };
@@ -148,8 +120,10 @@ export async function consultarClientes(cpfcnpj) {
   return {
     nome:     primeiro.razaoSocial || '',
     cpfcnpj:  primeiro.cpfCnpj    || digits,
+    // emails é array direto no contrato, não no cliente
     email:    primeiro.emails?.[0] || '',
-    fone:     primeiro.telefones?.[0] || '',
+    // telefones_cargos é o campo real do SGP; telefones é array de strings direto
+    fone:     primeiro.telefones?.[0] || primeiro.telefones_cargos?.[0]?.contato || '',
     contratos: ordenados.map(ct => ({
       id:              ct.contratoId,
       plano:           ct.planointernet || ct.planotv || ct.servico_plano || '',
@@ -227,10 +201,9 @@ export async function promessaPagamento(contrato, extras = {}) {
   const { url, app, token } = await getSGPConfig();
   const body = new URLSearchParams({
     app, token,
-    contrato:       String(contrato),
-    data_promessa:  dataPromessa,
-    enviar_sms:     '1',
-    conteudo:       extras.conteudo || 'Liberação por promessa de pagamento via GoCHAT',
+    contrato:      String(contrato),
+    data_promessa: dataPromessa,
+    // enviar_sms e conteudo removidos — não documentados na API SGP
   }).toString();
 
   const res = await fetch(`${url}/api/ura/liberacaopromessa/`, {
@@ -259,15 +232,12 @@ export async function promessaPagamento(contrato, extras = {}) {
 // POST /api/ura/chamado/ — body JSON
 // Tipos: 5=Outros, 200=Reparo, 13=MudEndereco, 23=MudPlano, 22=ProbFatura
 export async function criarChamado(contrato, ocorrenciatipo, conteudo, extras = {}) {
+  // Doc SGP: apenas app, token, contrato (int), ocorrenciatipo (int), conteudo
   const raw = await sgpPostJSON('/api/ura/chamado/', {
-    contrato:          Number(contrato),
-    ocorrenciatipo:    Number(ocorrenciatipo) || 5,
-    conteudo:          conteudo || 'Chamado aberto via GoCHAT',
-    notificar_cliente: 1,
-    conteudolimpo:     1,
-    ...(extras.contato_nome     ? { contato_nome:     extras.contato_nome }             : {}),
-    ...(extras.contato_telefone ? { contato_telefone: String(extras.contato_telefone).replace(/\D/g, '') } : {}),
-    ...(extras.observacao       ? { observacao:       extras.observacao }                : {}),
+    contrato:       Number(contrato),
+    ocorrenciatipo: Number(ocorrenciatipo) || 5,
+    conteudo:       conteudo || 'Chamado aberto via GoCHAT',
+    // notificar_cliente e conteudolimpo removidos — não documentados na API SGP
   });
 
   return {
