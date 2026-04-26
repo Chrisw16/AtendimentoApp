@@ -163,7 +163,9 @@ async function processarNo(no, ctx) {
     }
 
     case 'enviar_lista': {
-      const itens = cfg.itens || [];
+      let itens = cfg.itens || [];
+      if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
+      if (!Array.isArray(itens)) itens = [];
       if (ctx.estado.aguardando === no.id) {
         ctx.estado.aguardando = null;
         const inp = ctx.mensagem.texto?.trim() || '';
@@ -798,7 +800,10 @@ async function enviarResposta(conversa, resp, instancia) {
           break;
         case 'lista': {
           // Telegram não tem lista nativa — converte para botões (máx 8 itens)
-          const itens = resp.itens || [];
+          let itens = resp.itens || [];
+          // Garante array — pode vir como string JSON
+          if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
+          if (!Array.isArray(itens)) itens = [];
           if (!itens.length) break;
           if (itens.length <= 8) {
             // Até 8 itens: usa botões inline
