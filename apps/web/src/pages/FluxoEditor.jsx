@@ -248,7 +248,7 @@ const FlowNode = memo(({ data, selected }) => {
           type="target"
           position={Position.Left}
           id="entrada"
-          style={tgtHandle}
+          style={{ width:10, height:10, background:'rgba(255,255,255,.2)', border:'1.5px solid rgba(255,255,255,.4)', left:-5, borderRadius:'50%' }}
         />
       )}
 
@@ -259,7 +259,7 @@ const FlowNode = memo(({ data, selected }) => {
           type="source"
           position={Position.Right}
           id="saida"
-          style={srcHandle(def.color)}
+          style={{ width:10, height:10, background:def.color, border:'2px solid rgba(2,35,45,.95)', right:-5, borderRadius:'50%' }}
         />
       ) : portas.length > 0 ? (
         // Portas de saída — estilo idêntico ao sistema de inspiração
