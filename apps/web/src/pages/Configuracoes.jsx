@@ -376,14 +376,14 @@ export default function Configuracoes() {
               </p>
               <div className={styles.field}>
                 <label className={styles.fieldLabel}>URL da API</label>
-                <input className={styles.input} value={sgpUrl} onChange={e => setSgpUrl(e.target.value)}
+                <input className={styles.input} value={sgpUrl} onChange={setSgpUrl}
                   placeholder="https://conect.sgp.net.br/api"/>
                 <p className={styles.fieldHint}>URL base do SGP — ex: https://conect.sgp.net.br (sem /api ou barra no final)</p>
               </div>
               <div className={styles.fieldRow}>
                 <div className={styles.field} style={{ flex: 1 }}>
                   <ApiKeyField label="SGP App"
-                    value={sgpApp} onChange={e => setSgpApp(e.target.value)}
+                    value={sgpApp} onChange={setSgpApp}
                     placeholder="nome_do_app"
                     hint="Identificador da aplicação no SGP"/>
                 </div>

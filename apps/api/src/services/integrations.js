@@ -34,7 +34,11 @@ async function getSGPConfig() {
   if (!app)   throw new Error('SGP App não configurado. Acesse Configurações → SGP/ERP.');
   if (!token) throw new Error('Token do SGP não configurado. Acesse Configurações → SGP/ERP.');
   // Remove barra final e também /api/ duplicado caso o usuário tenha incluído na URL base
-  const cleanUrl = url.replace(/\/+$/, '').replace(/\/api$/, '');
+  let cleanUrl = url.replace(/\/+$/, '').replace(/\/api$/, '');
+  // Garante protocolo https:// se não tiver
+  if (cleanUrl && !cleanUrl.startsWith('http')) {
+    cleanUrl = 'https://' + cleanUrl;
+  }
   return { url: cleanUrl, app, token };
 }
 
