@@ -454,6 +454,16 @@ async function processarNo(no, ctx) {
       }
     }
 
+    // ── NÓS DO SISTEMA DE INSPIRAÇÃO (stubs seguros) ─────────────
+    case 'mudanca_endereco':
+    case 'mudar_plano':
+    case 'cadastrar_lead':
+    case 'cadastrar_condominio':
+    case 'registrar_ocorrencia_cond':
+      // Nós avançados — agendam via texto e transferem para agente
+      if (cfg.mensagem) ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem, ctx) });
+      return avancar('saida');
+
     case 'consultar_historico': {
       const contrato = getCtxVal(ctx, 'cliente.contrato');
       if (!contrato) {
@@ -800,11 +810,17 @@ async function enviarResposta(conversa, resp, instancia) {
           break;
         case 'lista': {
           // Telegram não tem lista nativa — converte para botões (máx 8 itens)
+          console.log('[Motor] lista resp:', JSON.stringify(resp).slice(0, 300));
           let itens = resp.itens || [];
           // Garante array — pode vir como string JSON
           if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
           if (!Array.isArray(itens)) itens = [];
-          if (!itens.length) break;
+          console.log('[Motor] lista itens count:', itens.length, 'tipo:', typeof resp.itens);
+          if (!itens.length) {
+            // Sem itens configurados — envia só o corpo como texto para não travar
+            if (resp.corpo) await tgEnviarTexto(chatId, resp.corpo);
+            break;
+          }
           if (itens.length <= 8) {
             // Até 8 itens: usa botões inline
             const botoes = itens.map(it => ({ id: it.id, label: it.titulo || it.id }));

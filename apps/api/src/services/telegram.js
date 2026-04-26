@@ -47,16 +47,20 @@ export async function tgEnviarTexto(chatId, texto) {
 }
 
 export async function tgEnviarBotoes(chatId, texto, botoes) {
+  // Divide botões em linhas de 2 para melhor visualização
+  const rows = [];
+  const btnList = botoes.map(b => ({
+    text:          b.label || b,
+    callback_data: String(b.id || b.label || b).slice(0, 64),
+  }));
+  for (let i = 0; i < btnList.length; i += 2) {
+    rows.push(btnList.slice(i, i + 2));
+  }
   return tgPost('sendMessage', {
     chat_id:      chatId,
     text:         texto,
     parse_mode:   'Markdown',
-    reply_markup: {
-      inline_keyboard: [botoes.map(b => ({
-        text:          b.label || b,
-        callback_data: b.id   || (b.label || b),
-      }))],
-    },
+    reply_markup: { inline_keyboard: rows },
   });
 }
 
