@@ -55,6 +55,19 @@ const RF_STYLE = `
   .react-flow__edge-path {
     cursor: pointer !important;
   }
+  /* Edges padrão — azul-ciano suave */
+  .react-flow__edge .react-flow__edge-path {
+    stroke: rgba(62,207,255,.5) !important;
+    stroke-width: 1.5px !important;
+  }
+  .react-flow__edge:hover .react-flow__edge-path {
+    stroke: rgba(62,207,255,.85) !important;
+    stroke-width: 2px !important;
+  }
+  .react-flow__edge.selected .react-flow__edge-path {
+    stroke: #f5c518 !important;
+    stroke-width: 2.5px !important;
+  }
   /* Controles */
   .react-flow__controls {
     box-shadow: none !important;
@@ -186,65 +199,50 @@ function getPortas(tipo, cfg = {}) {
   return def.portas.map(p=>({id:p,color:PORTA_META[p]?.color||def.color,label:PORTA_META[p]?.label||p}));
 }
 
-// ── FLOW NODE ────────────────────────────────────────────────────
-// Regra crítica: Handle é o único elemento visual na borda direita.
-// Nunca colocar div decorativa + Handle no mesmo row — causa duplo ponto.
+// ── FLOW NODE — visual idêntico ao sistema de inspiração ─────────
 const FlowNode = memo(({ data, selected }) => {
   const def    = NODE_TYPES[data.tipo] || { label:data.tipo, color:'#888', group:'logica', portas:['saida'] };
-  const portas = getPortas(data.tipo, data.config||{});
+  const cfg    = data.config || {};
+  const portas = getPortas(data.tipo, cfg);
   const isSingle = portas.length === 1 && portas[0].id === 'saida';
 
-  // Handle style factory
-  const srcHandle = (color) => ({
-    width: 11, height: 11,
-    background: color,
-    border: '2px solid #080C14',
-    borderRadius: '50%',
-    cursor: 'crosshair',
-  });
-
-  const tgtHandle = {
-    width: 11, height: 11,
-    background: '#111827',
-    border: '2px solid rgba(255,255,255,.4)',
-    borderRadius: '50%',
-    cursor: 'crosshair',
-  };
+  // Listas inline para enviar_lista
+  const itensList = data.tipo === 'enviar_lista'
+    ? (Array.isArray(cfg.itens) ? cfg.itens : [])
+    : [];
 
   return (
     <div style={{
-      background: 'rgba(8,14,22,.97)',
-      border: `1.5px solid ${selected ? def.color : 'rgba(255,255,255,.12)'}`,
+      background: selected ? 'rgba(2,40,50,.98)' : 'rgba(2,35,45,.95)',
+      border: selected ? `1.5px solid ${def.color}` : '1px solid rgba(255,255,255,.12)',
       borderRadius: 10,
-      minWidth: 180,
-      maxWidth: 240,
-      boxShadow: selected
-        ? `0 0 0 2px ${def.color}44, 0 8px 24px rgba(0,0,0,.7)`
-        : '0 4px 16px rgba(0,0,0,.5)',
-      fontFamily: 'Plus Jakarta Sans, DM Sans, sans-serif',
-      fontSize: 12,
-      color: 'rgba(255,255,255,.85)',
-      transition: 'border-color .15s, box-shadow .15s',
+      minWidth: itensList.length ? 210 : 165,
+      maxWidth: itensList.length ? 260 : 220,
+      boxShadow: selected ? `0 0 0 3px ${def.color}22` : 'none',
+      transition: 'all .15s',
+      position: 'relative',
+      fontFamily: 'DM Sans, sans-serif',
     }}>
 
+      {/* Badge alias */}
+      {cfg.alias && (
+        <div style={{ position:'absolute', top:-9, left:10, background:'rgba(167,139,250,.2)', border:'1px solid rgba(167,139,250,.4)', borderRadius:4, padding:'1px 6px', fontSize:8.5, fontFamily:'monospace', color:'#a78bfa', whiteSpace:'nowrap' }}>
+          #{cfg.alias}
+        </div>
+      )}
+
       {/* ── HEADER ── */}
-      <div style={{
-        padding: '7px 10px 6px',
-        borderBottom: '1px solid rgba(255,255,255,.07)',
-        display: 'flex', alignItems: 'center', gap: 6,
-      }}>
+      <div style={{ padding:'8px 12px', borderBottom:'1px solid rgba(255,255,255,.07)', display:'flex', alignItems:'center', gap:7 }}>
         <div style={{ width:7, height:7, borderRadius:'50%', background:def.color, flexShrink:0 }}/>
-        <span style={{ fontSize:10, fontWeight:700, color:def.color, textTransform:'uppercase', letterSpacing:'.06em' }}>
-          {def.label}
-        </span>
+        <span style={{ fontSize:10, fontWeight:700, color:def.color, textTransform:'uppercase', letterSpacing:'.06em' }}>{def.label}</span>
       </div>
 
       {/* ── PREVIEW ── */}
-      <div style={{ padding: '6px 10px 8px', minHeight: 24 }}>
-        <NodePreview tipo={data.tipo} cfg={data.config||{}}/>
+      <div style={{ padding:'7px 12px', fontSize:11, color:'rgba(255,255,255,.55)', lineHeight:1.5, overflow:'hidden' }}>
+        <NodePreview tipo={data.tipo} cfg={cfg}/>
       </div>
 
-      {/* ── HANDLE ENTRADA — âncora única no meio-esquerdo ── */}
+      {/* Handle entrada */}
       {data.tipo !== 'inicio' && (
         <Handle
           type="target"
@@ -264,48 +262,38 @@ const FlowNode = memo(({ data, selected }) => {
           style={srcHandle(def.color)}
         />
       ) : portas.length > 0 ? (
-        // Múltiplas saídas: cada linha TEM O HANDLE COMO ÚNICO PONTO VISUAL
-        // paddingRight deixa espaço para o handle que fica na borda do nó
-        <div style={{ borderTop:'1px solid rgba(255,255,255,.08)', paddingTop:3, paddingBottom:4 }}>
-          {portas.map((p, i) => {
-            // Calcula top% proporcional para distribuir handles igualmente
-            const pct = portas.length === 1
-              ? 50
-              : 15 + (i / (portas.length - 1)) * 70;
-            return (
-              <div key={p.id} style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                // paddingRight deixa 14px livres para o Handle na borda
-                padding: '3px 18px 3px 10px',
-                minHeight: 22,
-              }}>
+        // Portas de saída — estilo idêntico ao sistema de inspiração
+        // Cada porta tem label alinhado à direita + handle na borda
+        <div style={{ borderTop:'1px solid rgba(255,255,255,.06)', padding:'4px 0 3px' }}>
+          {portas.map((p) => (
+            <div key={p.id} style={{
+              display:'flex', alignItems:'center', justifyContent:'flex-end',
+              padding:'2px 20px 2px 10px', position:'relative', minHeight:20,
+            }}>
+              {p.label && (
                 <span style={{
-                  fontSize: 9.5,
-                  color: 'rgba(255,255,255,.45)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  maxWidth: 145,
-                  textAlign: 'right',
-                }}>
-                  {p.label}
-                </span>
-                {/* Handle é o único ponto — sem div decorativa ao lado */}
-                <Handle
-                  type="source"
-                  position={Position.Right}
-                  id={p.id}
-                  style={{
-                    ...srcHandle(p.color),
-                    // posição absoluta calculada por React Flow via top em %
-                    // Não usar top manual aqui — deixar o RF alinhar pelo DOM
-                  }}
-                />
-              </div>
-            );
-          })}
+                  fontSize:9.5, color:'rgba(255,255,255,.38)', marginRight:7,
+                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+                  maxWidth:140, textAlign:'right',
+                }}>{p.label}</span>
+              )}
+              <div style={{ width:6, height:6, borderRadius:'50%', background:p.color, flexShrink:0 }}/>
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={p.id}
+                style={{
+                  position:'absolute', right:-5, top:'50%',
+                  transform:'translateY(-50%)',
+                  width:10, height:10,
+                  background:p.color,
+                  border:'2px solid rgba(2,35,45,.95)',
+                  borderRadius:'50%',
+                  cursor:'crosshair',
+                }}
+              />
+            </div>
+          ))}
         </div>
       ) : null}
     </div>
@@ -618,7 +606,7 @@ function FluxoCanvas({ id }) {
         if(!d?.nodes||!Array.isArray(d.nodes)){toast('Arquivo inválido','error');return;}
         if(!window.confirm(`Importar "${obj.nome||file.name}"? Vai substituir o fluxo atual.`))return;
         setNodes(d.nodes.map(n=>({id:n.id,type:'fluxo',position:{x:n.posX||0,y:n.posY||0},data:{tipo:n.tipo,config:n.config||{}}})));
-        setEdges((d.edges||[]).map(e=>({id:`e-${e.from}-${e.to}-${e.port||''}`,source:e.from,target:e.to,sourceHandle:e.port||'saida',targetHandle:'entrada',style:{stroke:'rgba(255,255,255,.25)',strokeWidth:1.5}})));
+        setEdges((d.edges||[]).map(e=>({id:`e-${e.from}-${e.to}-${e.port||''}`,source:e.from,target:e.to,sourceHandle:e.port||'saida',targetHandle:'entrada',style:{stroke:'rgba(62,207,255,.5)',strokeWidth:1.5},type:'smoothstep'})));
         if(obj.nome)setFluxo(f=>({...f,nome:obj.nome}));
         toast('Importado! Clique em Salvar.','success');
       } catch(err){toast('Erro: '+err.message,'error');}
