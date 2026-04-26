@@ -462,7 +462,7 @@ function FluxoCanvas({ id }) {
   // Carrega fluxo
   useEffect(() => {
     if (!id || id === 'novo') { setLoaded(true); return; }
-    const token = localStorage.getItem('maxxi_token') || '';
+    const token = JSON.parse(localStorage.getItem('maxxi-store') || '{}')?.state?.token || '';
     fetch(`/api/fluxos/${id}`, { headers:{ Authorization:`Bearer ${token}` } })
       .then(r => r.json())
       .then(f => {
@@ -496,7 +496,12 @@ function FluxoCanvas({ id }) {
   const salvar = useCallback(async () => {
     setSaving(true);
     try {
-      const token  = localStorage.getItem('maxxi_token') || '';
+      // Lê token do store Zustand (salvo em maxxi-store, não maxxi_token)
+      let token = '';
+      try {
+        const raw = localStorage.getItem('maxxi-store');
+        if (raw) token = JSON.parse(raw)?.state?.token || '';
+      } catch {}
       const dados  = buildDados();
       const body   = JSON.stringify({ nome: fluxo?.nome || 'Novo fluxo', gatilho: fluxo?.gatilho || 'nova_conversa', dados, ativo: fluxo?.ativo || false });
       const url    = id && id !== 'novo' ? `/api/fluxos/${id}` : '/api/fluxos';
