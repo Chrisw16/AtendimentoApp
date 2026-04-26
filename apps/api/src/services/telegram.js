@@ -5,10 +5,24 @@
 import { getDb } from '../config/db.js';
 
 async function getBotToken() {
-  const db  = getDb();
-  const row = await db('sistema_kv').where({ chave: 'telegram_bot_token' }).first();
-  if (!row?.valor) throw new Error('Token do bot Telegram não configurado. Acesse Configurações → Integrações.');
-  try { return JSON.parse(row.valor); } catch { return row.valor; }
+  const db = getDb();
+
+  // Tenta 1: tabela canais (salvo pela página Canais → Telegram → Bot Token)
+  const canal = await db('canais').where({ tipo: 'telegram' }).first();
+  const tokenCanal = canal?.config?.bot_token || (
+    typeof canal?.config === 'string'
+      ? JSON.parse(canal.config || '{}')?.bot_token
+      : null
+  );
+  if (tokenCanal) return tokenCanal;
+
+  // Tenta 2: sistema_kv (salvo pela página Configurações → Integrações)
+  const kv = await db('sistema_kv').where({ chave: 'telegram_bot_token' }).first();
+  if (kv?.valor) {
+    try { return JSON.parse(kv.valor); } catch { return kv.valor; }
+  }
+
+  throw new Error('Token do bot Telegram não configurado. Acesse Canais → Telegram → Bot Token.');
 }
 
 async function tgPost(method, body) {
