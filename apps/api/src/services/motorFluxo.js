@@ -61,16 +61,22 @@ export async function processarConversa(conversa, mensagemCliente) {
   let iteracoes = 0;
   while (iteracoes++ < 15) {
     const no = dados.nodes.find(n => n.id === ctx.estado.noAtual);
-    if (!no) break;
+    if (!no) {
+      console.warn(`[Motor] Nó não encontrado: ${ctx.estado.noAtual} — encerrando`);
+      break;
+    }
 
+    console.log(`[Motor] Executando nó: ${no.tipo} (id=${no.id})`);
     let resultado;
     try {
       resultado = await processarNo(no, ctx);
     } catch (err) {
-      console.error(`[Motor] Erro no nó ${no.tipo}:`, err.message);
+      console.error(`[Motor] Erro no nó ${no.tipo}:`, err.message, err.stack?.split('\n')[1]);
       ctx.respostas.push({ tipo: 'texto', texto: `⚠️ Erro interno: ${err.message.slice(0, 100)}` });
       resultado = { tipo: 'fim' };
     }
+
+    console.log(`[Motor] Resultado nó ${no.tipo}: tipo=${resultado.tipo} saida=${resultado.saida}`);
 
     if (resultado.tipo === 'aguardar_input') {
       estadosExecucao.set(conversa.id, ctx.estado);
@@ -78,6 +84,7 @@ export async function processarConversa(conversa, mensagemCliente) {
     }
     if (resultado.tipo === 'avancar') {
       const proxId = encontrarProximo(no.id, resultado.saida, dados.edges);
+      console.log(`[Motor] Próximo nó: ${proxId || 'NENHUM (fim do fluxo)'}`);
       if (!proxId) { estadosExecucao.delete(conversa.id); break; }
       ctx.estado.noAtual = proxId;
       continue;
@@ -89,6 +96,7 @@ export async function processarConversa(conversa, mensagemCliente) {
     break;
   }
 
+  console.log(`[Motor] Respostas geradas: ${ctx.respostas.length}`);
   for (const resp of ctx.respostas) {
     await enviarResposta(conversa, resp, ctx.instancia);
   }

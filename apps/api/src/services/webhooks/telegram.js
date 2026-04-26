@@ -35,6 +35,20 @@ export async function handleTelegram(body) {
   await conversaRepo.incrementarNaoLidas(conversa.id);
   broadcast('mensagem', { ...mensagem, conversa_id: conversa.id });
   broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));
+
+  // ── Dispara motor de fluxos (igual ao webhook Evolution) ─────────
+  if (conversa.status === 'ia') {
+    const { processarConversa } = await import('../motorFluxo.js');
+    processarConversa(conversa, mensagem).catch(err =>
+      console.error('[Webhook Telegram] Motor fluxo erro:', err.message)
+    );
+  }
+
+  // ── Supervisora IA (se houver agente) ────────────────────────────
+  if (conversa.status === 'ativa' && conversa.agente_id && texto) {
+    const { processarMensagemCliente } = await import('../supervisoraIA.js');
+    processarMensagemCliente(conversa, mensagem).catch(() => {});
+  }
 }
 
 function extrairConteudoTelegram(msg) {
