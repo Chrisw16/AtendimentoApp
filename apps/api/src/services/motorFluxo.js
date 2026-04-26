@@ -567,15 +567,15 @@ async function processarNo(no, ctx) {
   }
 }
 
-// ── IA RESPONDE ───────────────────────────────────────────────────
+// ── IA RESPONDE — com suporte a tool calls (igual ao sistema de inspiração) ──
 async function processarIAResponde(no, ctx) {
-  const cfg      = no.config || {};
-  const slug     = cfg.contexto || 'outros';
-  const maxTurnos = parseInt(cfg.max_turns) || 6;
+  const cfg       = no.config || {};
+  const slug      = cfg.contexto || 'outros';
+  const maxTurnos = parseInt(cfg.max_turns || cfg.max_turnos) || 6;
   const turnosKey = `_ia_turnos_${no.id}`;
   const histKey   = `_ia_hist_${no.id}`;
 
-  // Controla turnos — idêntico ao sistema de inspiração
+  // Controla turnos
   const turnosUsados = ctx.estado.contexto[turnosKey] || 0;
   if (turnosUsados >= maxTurnos) {
     ctx.estado.contexto[turnosKey] = 0;
@@ -583,84 +583,124 @@ async function processarIAResponde(no, ctx) {
     return avancar('max_turnos');
   }
 
-  // Carrega prompt do banco com placeholders resolvidos
+  // Carrega prompt do banco
   const { system: systemBase, modelo, provedor, temperatura } = await resolverPrompt(
     slug, ctx.estado.contexto.cliente || {}
   );
 
-  // Injeta dados do cliente em variáveis de contexto (como no sistema de inspiração)
+  // Dados do cliente para contexto
   const ctxCliente = Object.entries(ctx.estado.contexto.cliente || {})
     .filter(([, v]) => v)
     .map(([k, v]) => `cliente.${k}: ${v}`)
     .join('\n');
 
   const system = [
-    systemBase,
-    cfg.prompt ? `\nInstrução específica: ${cfg.prompt}` : '',
+    systemBase || cfg.prompt,
+    cfg.prompt && systemBase ? `\nInstrução específica: ${cfg.prompt}` : '',
     ctxCliente ? `\n📋 Dados do cliente identificado:\n${ctxCliente}` : '',
-    '\nUse as ferramentas disponíveis quando necessário. Não peça dados que já foram fornecidos.',
+    `\n## REGRAS CRÍTICAS DE FERRAMENTAS
+- Você tem acesso a ferramentas reais (tool_use). Use-as diretamente — NUNCA escreva o nome delas no texto.
+- ERRADO: "Deixa eu verificar... verificar_conexao" 
+- CERTO: [executa a tool verificar_conexao silenciosamente e responde com o resultado]
+- Execute a ferramenta PRIMEIRO, depois responda ao cliente com o resultado.
+- Não peça dados que já estão no contexto acima.
+- Não diga "vou verificar" ou "aguarde" — apenas execute e responda.`,
   ].filter(Boolean).join('\n');
 
-  // Histórico mantido em sessão por nó (não só do banco — preserva contexto entre turnos)
+  // Histórico
   const histSessao = ctx.estado.contexto[histKey] || [];
   const messages   = [
     ...histSessao,
     { role: 'user', content: ctx.mensagem.texto || '' },
   ].filter(m => m.content);
 
-  try {
-    let texto = '';
+  // Carrega tools disponíveis
+  const { IA_TOOLS, executarTool } = await import('./iaTools.js');
+  const toolsAtivas = cfg.tools_ativas || [
+    'verificar_conexao', 'consultar_manutencao', 'status_rede',
+    'consultar_onu_acs', 'reiniciar_onu_acs', 'consultar_radius',
+    'criar_chamado', 'segunda_via_boleto', 'consultar_boleto',
+    'promessa_pagamento', 'historico_ocorrencias',
+    'transferir_para_humano', 'encerrar_atendimento',
+  ];
+  const tools = IA_TOOLS.filter(t => toolsAtivas.includes(t.name));
 
-    if (provedor === 'openai') {
-      // OpenAI — busca chave do banco
-      const openaiKey = await getDb()('sistema_kv').where({ chave: 'openai_api_key' }).first()
-        .then(r => r?.valor ? JSON.parse(r.valor) : null).catch(() => null);
-      if (openaiKey) {
-        const { default: OpenAI } = await import('openai');
-        const oai = new OpenAI({ apiKey: openaiKey });
-        const res = await oai.chat.completions.create({
-          model:       modelo || 'gpt-4o-mini',
-          max_tokens:  1024,
-          temperature: temperatura,
-          messages:    [{ role: 'system', content: system }, ...messages],
-        });
-        texto = res.choices[0]?.message?.content || '';
-      } else {
-        // Fallback Anthropic se OpenAI não configurado
-        const ai = await getAnthropicClient();
-        const res = await ai.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system, messages });
-        texto = res.content.find(b => b.type === 'text')?.text || '';
-      }
-    } else {
-      // Anthropic (padrão)
-      const ai = await getAnthropicClient();
+  try {
+    const ai = await getAnthropicClient();
+    let texto = '';
+    let transferiu = false;
+    let resolveu = false;
+
+    // ── Loop agentico: IA pode chamar múltiplas tools antes de responder ──
+    let loopMessages = [...messages];
+    let loopCount = 0;
+
+    while (loopCount++ < 5) {
       const res = await ai.messages.create({
-        model:       modelo || 'claude-haiku-4-5-20251001',
-        max_tokens:  1024,
-        temperature: temperatura,
+        model:      modelo || 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
         system,
-        messages,
+        tools,
+        messages:   loopMessages,
       });
+
+      // Verifica stop reason
+      if (res.stop_reason === 'end_turn') {
+        texto = res.content.find(b => b.type === 'text')?.text || '';
+        break;
+      }
+
+      if (res.stop_reason === 'tool_use') {
+        // Processa todos os tool_use do bloco
+        const toolUses = res.content.filter(b => b.type === 'tool_use');
+        const toolResults = [];
+
+        for (const tu of toolUses) {
+          console.log(`[IA] Executando tool: ${tu.name}`, tu.input);
+          const result = await executarTool(tu.name, tu.input || {}, {
+            cliente: ctx.estado.contexto.cliente || {},
+            conversa: ctx.conversa,
+          }).catch(e => `Erro ao executar ${tu.name}: ${e.message}`);
+
+          // Detecta ações especiais
+          if (typeof result === 'string' && result.startsWith('__TRANSFERIR__')) {
+            transferiu = true;
+            texto = result.replace('__TRANSFERIR__:', '').trim();
+          } else if (typeof result === 'string' && result.startsWith('__ENCERRAR__')) {
+            resolveu = true;
+            texto = result.replace('__ENCERRAR__:', '').trim();
+          }
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: tu.id,
+            content: typeof result === 'string' ? result : JSON.stringify(result),
+          });
+        }
+
+        // Adiciona assistant turn + tool results e continua o loop
+        loopMessages = [
+          ...loopMessages,
+          { role: 'assistant', content: res.content },
+          { role: 'user',      content: toolResults },
+        ];
+        continue;
+      }
+
+      // Fallback: extrai texto se houver
       texto = res.content.find(b => b.type === 'text')?.text || '';
+      break;
     }
 
     if (texto) ctx.respostas.push({ tipo: 'texto', texto });
 
-    // Atualiza histórico de sessão (mantém os últimos 20 turns — como no original)
+    // Atualiza histórico (últimos 20 turns)
     ctx.estado.contexto[turnosKey] = turnosUsados + 1;
     ctx.estado.contexto[histKey]   = [
       ...histSessao,
       { role: 'user',      content: ctx.mensagem.texto || '' },
       { role: 'assistant', content: texto },
     ].slice(-20);
-
-    // Roteamento: detecta transferência/resolução no texto
-    // (o sistema de inspiração usa tool_calls; sem tools usamos heurística melhorada)
-    const lwr = texto.toLowerCase();
-    const transferiu = lwr.includes('vou te transferir') || lwr.includes('transferindo') ||
-                       lwr.includes('chamar um atendente') || lwr.includes('conectar com atendente');
-    const resolveu   = lwr.includes('posso te ajudar com mais') || lwr.includes('mais alguma coisa') ||
-                       lwr.includes('foi um prazer') || lwr.includes('até mais');
 
     if (transferiu) {
       ctx.estado.contexto[turnosKey] = 0;
@@ -672,6 +712,20 @@ async function processarIAResponde(no, ctx) {
       ctx.estado.contexto[histKey]   = [];
       return avancar('resolvido');
     }
+
+    // Heurística de roteamento pelo texto (fallback)
+    const lwr = texto.toLowerCase();
+    if (lwr.includes('transferir') || lwr.includes('atendente humano')) {
+      ctx.estado.contexto[turnosKey] = 0;
+      ctx.estado.contexto[histKey]   = [];
+      return avancar('transferir');
+    }
+    if (lwr.includes('mais alguma coisa') || lwr.includes('foi um prazer') || lwr.includes('até mais')) {
+      ctx.estado.contexto[turnosKey] = 0;
+      ctx.estado.contexto[histKey]   = [];
+      return avancar('resolvido');
+    }
+
   } catch (err) {
     console.error(`[Motor] ia_responde (${slug}):`, err.message);
     ctx.respostas.push({ tipo: 'texto', texto: 'Desculpe, ocorreu um erro. Tente novamente em instantes.' });

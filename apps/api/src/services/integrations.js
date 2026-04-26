@@ -339,6 +339,90 @@ export async function consultarManutencao() {
   }
 }
 
+
+// ── STATUS DA REDE ───────────────────────────────────────────────
+// Usa consultarManutencao (SGP) — o sistema de inspiração usa monitor interno
+// que faz ping em hosts. No GoCHAT usamos manutenções do SGP como proxy.
+export async function statusRede() {
+  try {
+    const man = await consultarManutencao();
+    if (!man.ativa) return { status: 'ok', mensagem: 'Rede operando normalmente.' };
+    const cidades = man.cidadesAfetadas?.length ? ` Cidades afetadas: ${man.cidadesAfetadas.join(', ')}.` : '';
+    const previsao = man.previsao ? ` Previsão: ${man.previsao}.` : '';
+    return {
+      status: 'manutencao',
+      mensagem: `${man.titulo || 'Manutenção ativa'}.${cidades}${previsao}`,
+      detalhes: man.itens?.slice(0, 3) || [],
+    };
+  } catch {
+    return { status: 'ok', mensagem: 'Rede operando normalmente.' };
+  }
+}
+
+// ── ACS: CONSULTAR ONU ────────────────────────────────────────────
+// O sistema de inspiração usa banco ACS interno (acs-db.js), não SGP.
+// No GoCHAT não temos ACS configurado — retorna aviso informativo.
+export async function consultarOnuAcs(serial) {
+  // TODO: integrar com servidor ACS TR-069 quando disponível
+  // No sistema de inspiração: busca por serial na tabela acs_devices do banco
+  // Retorna: sinal_rx, sinal_tx, uptime, firmware, ip_wan, wan_status
+  return {
+    encontrado: false,
+    mensagem: 'Consulta de ONU via ACS não configurada. Verifique as luzes do equipamento fisicamente.',
+    requer_acs: true,
+  };
+}
+
+// ── ACS: REINICIAR ONU ─────────────────────────────────────────────
+// O sistema de inspiração usa ACS TR-069 interno (enfileirarReboot).
+// No GoCHAT não temos ACS — abre chamado de reinicialização remota.
+export async function reiniciarOnuAcs(serial) {
+  // TODO: integrar com servidor ACS TR-069 quando disponível
+  return {
+    sucesso: false,
+    mensagem: 'Reinicialização remota via ACS não configurada. Oriente o cliente a desligar o equipamento da tomada, aguardar 30 segundos e religar.',
+    requer_acs: true,
+  };
+}
+
+// ── SGP: CONSULTAR RADIUS ─────────────────────────────────────────
+// Endpoint real: POST /ws/radius/radacct/list/all/ com cpfcnpj
+export async function consultarRadius(cpfcnpj) {
+  try {
+    const { url, app, token } = await getSGPConfig();
+    const digits = String(cpfcnpj || '').replace(/\D/g, '');
+    const body = new URLSearchParams({ app, token, tipoconexao: 'PPP', cpfcnpj: digits }).toString();
+    const res = await fetch(`${url}/ws/radius/radacct/list/all/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(10000),
+    });
+    const raw = await res.json();
+    const lista = Array.isArray(raw) ? raw : (raw?.results || []);
+    const sessoes = lista.slice(0, 3).map(r => ({
+      usuario:       r.username,
+      ip:            r.framedipaddress,
+      online:        r.acctstoptime === null,
+      inicio:        r.acctstarttime,
+      nas:           r.nasipaddress,
+    }));
+    const ativa = sessoes.find(s => s.online);
+    return {
+      sessao_ativa: !!ativa,
+      ip:           ativa?.ip || null,
+      usuario:      ativa?.usuario || null,
+      inicio_sessao: ativa?.inicio || null,
+      mensagem: ativa
+        ? `Sessão PPPoE ativa. IP: ${ativa.ip}, usuário: ${ativa.usuario}`
+        : 'Nenhuma sessão PPPoE ativa encontrada.',
+      sessoes,
+    };
+  } catch (e) {
+    return { sessao_ativa: false, mensagem: `Erro ao consultar Radius: ${e.message}` };
+  }
+}
+
 // ── ANTHROPIC ─────────────────────────────────────────────────────
 export async function getAnthropicClient() {
   const key = await getKV('anthropic_api_key');
