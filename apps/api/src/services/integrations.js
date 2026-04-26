@@ -94,9 +94,23 @@ export async function consultarClientes(cpfcnpj) {
 
   // Tenta 3 formas como no original
   let raw = null;
-  raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: digits }).catch(() => null);
+  try {
+    const { url } = await getSGPConfig();
+    console.log(`[SGP] consultacliente: URL=${url} CPF=${digits}`);
+    raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: digits });
+    console.log(`[SGP] Resposta (digits):`, JSON.stringify(raw)?.slice(0, 200));
+  } catch(e) {
+    console.error('[SGP] Erro consultacliente (digits):', e.message);
+    raw = null;
+  }
   if (!raw?.contratos?.length) {
-    raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: formatted }).catch(() => null);
+    try {
+      raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: formatted });
+      console.log(`[SGP] Resposta (formatted):`, JSON.stringify(raw)?.slice(0, 200));
+    } catch(e) {
+      console.error('[SGP] Erro consultacliente (formatted):', e.message);
+      raw = null;
+    }
   }
   // Endpoint /api/ura/clientes/ não consta na doc oficial SGP — removido
 
