@@ -768,31 +768,48 @@ async function enviarResposta(conversa, resp, instancia) {
 
   if (msg) broadcast('mensagem', { ...msg, conversa_id: conversa.id });
 
-  // Envia para WhatsApp via Evolution API
-  const num = conversa.telefone;
-  if (!num || !instancia) return;
+  const chatId = conversa.telefone;
+  if (!chatId) return;
 
   try {
-    switch (resp.tipo) {
-      case 'texto':
-        await evolutionEnviarTexto(instancia, num, resp.texto); break;
-      case 'cta':
-        await evolutionEnviarCTA(instancia, num, resp); break;
-      case 'botoes':
-        if (resp.botoes?.length) await evolutionEnviarBotoes(instancia, num, resp);
-        break;
-      case 'lista':
-        if (resp.itens?.length) await evolutionEnviarLista(instancia, num, resp);
-        break;
-      case 'imagem':
-        if (resp.url) await evolutionEnviarImagem(instancia, num, resp); break;
-      case 'audio':
-        if (resp.url) await evolutionEnviarAudio(instancia, num, resp); break;
-      case 'arquivo':
-        if (resp.url) await evolutionEnviarArquivo(instancia, num, resp); break;
+    if (conversa.canal === 'telegram') {
+      // ── Envio via Telegram ──────────────────────────────────
+      const { tgEnviarTexto, tgEnviarBotoes, tgEnviarImagem } = await import('./telegram.js');
+      switch (resp.tipo) {
+        case 'texto':
+          if (resp.texto) await tgEnviarTexto(chatId, resp.texto); break;
+        case 'botoes':
+          if (resp.botoes?.length) await tgEnviarBotoes(chatId, resp.corpo || resp.texto || '', resp.botoes);
+          break;
+        case 'imagem':
+          if (resp.url) await tgEnviarImagem(chatId, resp.url, resp.legenda); break;
+        default:
+          if (resp.texto) await tgEnviarTexto(chatId, resp.texto); break;
+      }
+    } else {
+      // ── Envio via Evolution API (WhatsApp) ───────────────────
+      if (!instancia) return;
+      switch (resp.tipo) {
+        case 'texto':
+          await evolutionEnviarTexto(instancia, chatId, resp.texto); break;
+        case 'cta':
+          await evolutionEnviarCTA(instancia, chatId, resp); break;
+        case 'botoes':
+          if (resp.botoes?.length) await evolutionEnviarBotoes(instancia, chatId, resp);
+          break;
+        case 'lista':
+          if (resp.itens?.length) await evolutionEnviarLista(instancia, chatId, resp);
+          break;
+        case 'imagem':
+          if (resp.url) await evolutionEnviarImagem(instancia, chatId, resp); break;
+        case 'audio':
+          if (resp.url) await evolutionEnviarAudio(instancia, chatId, resp); break;
+        case 'arquivo':
+          if (resp.url) await evolutionEnviarArquivo(instancia, chatId, resp); break;
+      }
     }
   } catch (err) {
-    console.error('[Motor] Evolution envio falhou:', err.message);
+    console.error(`[Motor] Envio ${conversa.canal} falhou:`, err.message);
   }
 }
 

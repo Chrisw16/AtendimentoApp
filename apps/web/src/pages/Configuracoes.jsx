@@ -114,6 +114,7 @@ export default function Configuracoes() {
   const [sgpApp,       setSgpApp]       = useState('');
   const [sgpToken,     setSgpToken]     = useState('');
   const [evoUrl,       setEvoUrl]       = useState('');
+  const [tgToken,      setTgToken]      = useState('');
   const [evoKey,       setEvoKey]       = useState('');
 
   const { data: kv, isLoading } = useQuery({
@@ -136,6 +137,7 @@ export default function Configuracoes() {
     setSgpApp(      kv.sgp_app            || '');
     setSgpToken(    kv.sgp_token          || '');
     setEvoUrl(      kv.evolution_url      || '');
+    setTgToken(     kv.telegram_bot_token  || '');
     setEvoKey(      kv.evolution_key      || '');
   }, [kv]);
 
@@ -155,6 +157,7 @@ export default function Configuracoes() {
     anthropic_api_key: anthropicKey, openai_api_key: openaiKey,
     sgp_url: sgpUrl, sgp_app: sgpApp, sgp_token: sgpToken,
     evolution_url: evoUrl, evolution_key: evoKey,
+    telegram_bot_token: tgToken,
   });
 
   const DIAS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -168,6 +171,7 @@ export default function Configuracoes() {
     openai:    openaiKey    ? 'ok' : 'off',
     sgp:       sgpUrl && sgpToken && sgpApp ? 'ok' : (sgpUrl || sgpToken || sgpApp) ? 'pending' : 'off',
     evolution: evoUrl && evoKey   ? 'ok' : evoUrl || evoKey   ? 'pending' : 'off',
+    telegram:  tgToken ? 'ok' : 'off',
   };
 
   if (isLoading) return <div className={styles.loading}><span className="spinner spinner-lg"/></div>;

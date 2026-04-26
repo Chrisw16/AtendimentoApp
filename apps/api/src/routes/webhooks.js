@@ -33,3 +33,13 @@ webhookRouter.post('/telegram', asyncHandler(async (req, res) => {
   await handleTelegram(req.body);
   res.json({ ok: true });
 }));
+
+// POST /api/webhooks/telegram/setup — configura o webhook do bot no Telegram
+import { Router as _R } from 'express';
+webhookRouter.post('/telegram/setup', asyncHandler(async (req, res) => {
+  const { tgSetWebhook, tgGetMe } = await import('../services/telegram.js');
+  const url = `${req.protocol}://${req.get('host')}/api/webhooks/telegram`;
+  await tgSetWebhook(url);
+  const me = await tgGetMe();
+  res.json({ ok: true, bot: me.result || me, webhook_url: url });
+}));

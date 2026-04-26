@@ -11,7 +11,7 @@ const CHAVES_PUBLICAS = [
   'prompt_ia', 'saudacao', 'horario', 'mensagem_fora_hora',
   'modo', 'horario_ativo', 'notificacoes',
   'anthropic_api_key', 'openai_api_key', 'sgp_url', 'sgp_token', 'sgp_app',
-  'evolution_url', 'evolution_key', 'nome_empresa',
+  'evolution_url', 'evolution_key', 'telegram_bot_token', 'nome_empresa',
 ];
 
 sysconfigRouter.get('/', asyncHandler(async (req, res) => {
