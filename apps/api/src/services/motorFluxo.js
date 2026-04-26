@@ -167,8 +167,11 @@ async function processarNo(no, ctx) {
       if (ctx.estado.aguardando === no.id) {
         ctx.estado.aguardando = null;
         const inp = ctx.mensagem.texto?.trim() || '';
-        const match = itens.find(it => inp.toLowerCase() === (it.titulo||'').toLowerCase() || inp === it.id);
-        return avancar(match ? match.id : 'saida');
+        // Aceita número digitado (ex: "1", "2") além de título/id
+      const num = parseInt(inp) - 1;
+      const match = itens.find(it => inp.toLowerCase() === (it.titulo||'').toLowerCase() || inp === it.id)
+        || (num >= 0 && num < itens.length ? itens[num] : null);
+      return avancar(match ? match.id : 'saida');
       }
       ctx.respostas.push({ tipo: 'lista', corpo: interpolar(cfg.corpo || '', ctx), label_botao: cfg.label_botao, titulo_secao: cfg.titulo_secao, itens });
       ctx.estado.aguardando = no.id;
@@ -793,6 +796,24 @@ async function enviarResposta(conversa, resp, instancia) {
         case 'botoes':
           if (resp.botoes?.length) await tgEnviarBotoes(chatId, resp.corpo || resp.texto || '', resp.botoes);
           break;
+        case 'lista': {
+          // Telegram não tem lista nativa — converte para botões (máx 8 itens)
+          const itens = resp.itens || [];
+          if (!itens.length) break;
+          if (itens.length <= 8) {
+            // Até 8 itens: usa botões inline
+            const botoes = itens.map(it => ({ id: it.id, label: it.titulo || it.id }));
+            await tgEnviarBotoes(chatId, resp.corpo || 'Selecione uma opção:', botoes);
+          } else {
+            // Muitos itens: texto numerado
+            const emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+            const linhas = itens.slice(0,10).map((it, i) => `${emojis[i]||`${i+1}.`} ${it.titulo||it.id}`).join('\n');
+            await tgEnviarTexto(chatId, `${resp.corpo || 'Selecione uma opção:'}\n\n${linhas}\n\nDigite o *número* da opção:`);
+          }
+          break;
+        }
+        case 'cta':
+          if (resp.corpo) await tgEnviarTexto(chatId, `${resp.corpo}\n\n🔗 [${resp.label || 'Acessar'}](${resp.url})`); break;
         case 'imagem':
           if (resp.url) await tgEnviarImagem(chatId, resp.url, resp.legenda); break;
         default:
