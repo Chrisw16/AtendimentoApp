@@ -31,7 +31,11 @@ export async function processarConversa(conversa, mensagemCliente) {
   if (!fluxo) return processarIADireta(conversa, mensagemCliente);
 
   const dados = parseDados(fluxo);
-  if (!dados.nodes?.length) return processarIADireta(conversa, mensagemCliente);
+  console.log(`[Motor] Fluxo "${fluxo.nome}": ${dados.nodes?.length || 0} nós, ${dados.edges?.length || 0} edges`);
+  if (!dados.nodes?.length) {
+    console.warn('[Motor] Fluxo sem nós — caindo para IA direta');
+    return processarIADireta(conversa, mensagemCliente);
+  }
 
   let estado = estadosExecucao.get(conversa.id) || {
     noAtual:  null,
@@ -833,17 +837,10 @@ function parseDados(fluxo) {
     edges = typeof fluxo.conexoes === 'string' ? JSON.parse(fluxo.conexoes || '[]') : (fluxo.conexoes || []);
   }
 
-  // Normaliza edges: editor salva {from, to, port} mas motor espera {source, target, sourceHandle}
-  edges = edges.map(e => ({
-    source:       e.source || e.from,
-    target:       e.target || e.to,
-    sourceHandle: e.sourceHandle || e.port || 'saida',
-  }));
-
-  // Normaliza nodes: garante campo tipo (pode vir como type em alguns formatos)
+  // Normaliza nodes: garante campo tipo e config no nível raiz
   nodes = nodes.map(n => ({
     ...n,
-    tipo: n.tipo || n.type || n.data?.tipo || '',
+    tipo:   n.tipo   || n.type   || n.data?.tipo   || '',
     config: n.config || n.data?.config || {},
   }));
 
@@ -852,11 +849,12 @@ function parseDados(fluxo) {
 
 function encontrarProximo(noId, saida, edges) {
   if (!edges?.length) return null;
-  // Tenta porta exata, depois porta 'saida', depois qualquer saída do nó
-  const match = edges.find(e => e.source === noId && e.sourceHandle === saida)
-    || edges.find(e => e.source === noId && e.sourceHandle === 'saida')
-    || edges.find(e => e.source === noId);
-  return match?.target || null;
+  // Suporta formato {from, to, port} (editor) e {source, target, sourceHandle} (legado)
+  const edge =
+    edges.find(e => (e.from || e.source) === noId && (e.port || e.sourceHandle || 'saida') === saida) ||
+    edges.find(e => (e.from || e.source) === noId && (e.port || e.sourceHandle) === 'saida') ||
+    edges.find(e => (e.from || e.source) === noId);
+  return edge?.to || edge?.target || null;
 }
 
 function interpolar(texto, ctx) {

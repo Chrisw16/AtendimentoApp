@@ -8,6 +8,7 @@ import { getDb } from '../config/db.js';
 import { calcularUrgencia, detectarPalavrasCriticas, marcarAguardando, limparAguardando, getPosicaoNaFila, getTotalNaFila } from '../services/filaService.js';
 import { processarMensagemCliente, analisarConversaEncerrada } from '../services/supervisoraIA.js';
 import { evolutionEnviarTexto } from '../services/integrations.js';
+import { tgEnviarTexto } from '../services/telegram.js';
 
 export const chatRouter = Router();
 chatRouter.use(authMiddleware);
@@ -97,11 +98,16 @@ chatRouter.post('/conversas/:id/mensagens', asyncHandler(async (req, res) => {
     // mensagem do agente — não precisa analisar
   }
 
-  // Envia para canal externo (WhatsApp via Evolution API)
-  if (conv.canal === 'whatsapp' && conv.telefone && texto) {
-    const instancia = conv.canal_instancia || conv.canal || 'default';
-    evolutionEnviarTexto(instancia, conv.telefone, texto)
-      .catch(err => console.error('[Chat] Evolution send failed:', err.message));
+  // Envia para canal externo
+  if (conv.telefone && texto) {
+    if (conv.canal === 'whatsapp') {
+      const instancia = conv.canal_instancia || conv.canal || 'default';
+      evolutionEnviarTexto(instancia, conv.telefone, texto)
+        .catch(err => console.error('[Chat] Evolution send failed:', err.message));
+    } else if (conv.canal === 'telegram') {
+      tgEnviarTexto(conv.telefone, texto)
+        .catch(err => console.error('[Chat] Telegram send failed:', err.message));
+    }
   }
 
   res.status(201).json(msg);

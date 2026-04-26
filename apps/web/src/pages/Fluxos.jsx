@@ -73,7 +73,13 @@ function FluxoModal({ fluxo, onClose, onSave }) {
 
 // ── FLUXO CARD ────────────────────────────────────────────────────
 function FluxoCard({ fluxo, onEdit, onAtivar, onDelete, onOpenEditor }) {
-  const nosCount = Array.isArray(fluxo.nos) ? fluxo.nos.length : (fluxo.nos?.length || 0);
+  // dados pode ser string JSON ou objeto — editor salva em dados.nodes
+  const dadosParsed = (() => {
+    try { return typeof fluxo.dados === 'string' ? JSON.parse(fluxo.dados) : (fluxo.dados || {}); }
+    catch { return {}; }
+  })();
+  const nosCount = dadosParsed?.nodes?.length
+    || (Array.isArray(fluxo.nos) ? fluxo.nos.length : 0);
 
   return (
     <div className={[styles.card, fluxo.ativo && styles.cardAtivo].join(' ')}>
