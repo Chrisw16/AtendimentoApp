@@ -819,14 +819,35 @@ const aguardar = () => ({ tipo: 'aguardar_input' });
 const fim = () => ({ tipo: 'fim' });
 
 function parseDados(fluxo) {
+  let nodes = [], edges = [];
+
   if (fluxo.dados) {
     const d = typeof fluxo.dados === 'string' ? JSON.parse(fluxo.dados) : fluxo.dados;
-    if (d?.nodes) return d;
+    if (d?.nodes) {
+      nodes = d.nodes;
+      edges = d.edges || [];
+    }
+  } else {
+    // Fallback para formato antigo
+    nodes = typeof fluxo.nos      === 'string' ? JSON.parse(fluxo.nos      || '[]') : (fluxo.nos      || []);
+    edges = typeof fluxo.conexoes === 'string' ? JSON.parse(fluxo.conexoes || '[]') : (fluxo.conexoes || []);
   }
-  // Fallback para formato antigo
-  const nos      = typeof fluxo.nos      === 'string' ? JSON.parse(fluxo.nos      || '[]') : (fluxo.nos      || []);
-  const conexoes = typeof fluxo.conexoes === 'string' ? JSON.parse(fluxo.conexoes || '[]') : (fluxo.conexoes || []);
-  return { nodes: nos, edges: conexoes };
+
+  // Normaliza edges: editor salva {from, to, port} mas motor espera {source, target, sourceHandle}
+  edges = edges.map(e => ({
+    source:       e.source || e.from,
+    target:       e.target || e.to,
+    sourceHandle: e.sourceHandle || e.port || 'saida',
+  }));
+
+  // Normaliza nodes: garante campo tipo (pode vir como type em alguns formatos)
+  nodes = nodes.map(n => ({
+    ...n,
+    tipo: n.tipo || n.type || n.data?.tipo || '',
+    config: n.config || n.data?.config || {},
+  }));
+
+  return { nodes, edges };
 }
 
 function encontrarProximo(noId, saida, edges) {
