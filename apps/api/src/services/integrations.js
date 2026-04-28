@@ -250,20 +250,28 @@ export async function promessaPagamento(contrato, extras = {}) {
 // POST /api/ura/chamado/ — body JSON
 // Tipos: 5=Outros, 200=Reparo, 13=MudEndereco, 23=MudPlano, 22=ProbFatura
 export async function criarChamado(contrato, ocorrenciatipo, conteudo, extras = {}) {
-  // Doc SGP: apenas app, token, contrato (int), ocorrenciatipo (int), conteudo
+  console.log(`[SGP] criarChamado: contrato=${contrato} tipo=${ocorrenciatipo}`);
   const raw = await sgpPostJSON('/api/ura/chamado/', {
     contrato:       Number(contrato),
     ocorrenciatipo: Number(ocorrenciatipo) || 5,
     conteudo:       conteudo || 'Chamado aberto via GoCHAT',
-    // notificar_cliente e conteudolimpo removidos — não documentados na API SGP
   });
+  console.log(`[SGP] criarChamado resposta:`, JSON.stringify(raw));
+
+  // SGP retorna diferentes formatos dependendo da versão
+  const protocolo = raw?.protocolo
+    || raw?.numero_chamado
+    || raw?.numero
+    || raw?.id
+    || raw?.ocorrencia_id
+    || null;
 
   return {
     ...raw,
-    protocolo:     raw?.protocolo || null,
-    chamado_aberto: raw?.status === 1,
-    contrato:      raw?.contratoId || contrato,
-    cliente:       raw?.razaoSocial || null,
+    protocolo,
+    chamado_aberto: !!(protocolo || raw?.status === 1),
+    contrato:       raw?.contratoId || contrato,
+    cliente:        raw?.razaoSocial || null,
   };
 }
 

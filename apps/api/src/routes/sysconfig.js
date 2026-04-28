@@ -44,3 +44,45 @@ sysconfigRouter.get('/:chave', asyncHandler(async (req, res) => {
   try { res.json({ valor: typeof row.valor === 'string' ? JSON.parse(row.valor) : row.valor }); }
   catch { res.json({ valor: row.valor }); }
 }));
+
+// ── ROTA DE TESTE DE TOOLS SGP ────────────────────────────────────────────
+import { consultarClientes, segundaViaBoleto, promessaPagamento, criarChamado,
+  verificarConexao, consultarManutencao, historicoOcorrencias, consultarRadius,
+  statusRede } from '../services/integrations.js';
+
+sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandler(async (req, res) => {
+  const { tool, params = {} } = req.body;
+  let result;
+  const t0 = Date.now();
+  try {
+    switch (tool) {
+      case 'consultar_cliente':
+        result = await consultarClientes(params.cpfcnpj); break;
+      case 'verificar_conexao':
+        result = await verificarConexao(params.contrato); break;
+      case 'consultar_manutencao':
+        result = await consultarManutencao(); break;
+      case 'status_rede':
+        result = await statusRede(); break;
+      case 'consultar_radius':
+        result = await consultarRadius(params.cpfcnpj); break;
+      case 'segunda_via_boleto':
+        result = await segundaViaBoleto(params.cpfcnpj, params.contrato); break;
+      case 'promessa_pagamento':
+        result = await promessaPagamento(params.contrato); break;
+      case 'historico_ocorrencias':
+        result = await historicoOcorrencias(params.contrato); break;
+      case 'criar_chamado':
+        result = await criarChamado(
+          params.contrato, params.ocorrenciatipo || 5,
+          params.conteudo || 'Teste via painel',
+          { contato_nome: params.contato_nome, contato_telefone: params.contato_telefone }
+        ); break;
+      default:
+        return res.status(400).json({ error: `Tool desconhecida: ${tool}` });
+    }
+    res.json({ ok: true, ms: Date.now() - t0, result });
+  } catch (e) {
+    res.json({ ok: false, ms: Date.now() - t0, error: e.message });
+  }
+}));

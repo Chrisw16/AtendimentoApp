@@ -138,8 +138,10 @@ export const IA_TOOLS = [
 
 // ── EXECUTOR DE FERRAMENTAS ────────────────────────────────────────────────
 export async function executarTool(name, input, ctx) {
+  // input.contrato tem prioridade — IA pode selecionar contrato específico para clientes multi-contrato
+  // Fallback para o contrato do contexto se IA não especificar
   const contrato = input.contrato || ctx?.cliente?.contrato;
-  const cpfcnpj  = input.cpfcnpj  || ctx?.cliente?.cpf || ctx?.cliente?.cpfcnpj;
+  const cpfcnpj  = ctx?.cliente?.cpf || ctx?.cliente?.cpfcnpj || input.cpfcnpj;
 
   switch (name) {
     case 'verificar_conexao': {

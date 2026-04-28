@@ -601,10 +601,12 @@ async function processarIAResponde(no, ctx) {
     `\n## REGRAS CRÍTICAS DE FERRAMENTAS
 - Você tem acesso a ferramentas reais (tool_use). Use-as diretamente — NUNCA escreva o nome delas no texto.
 - ERRADO: "Deixa eu verificar... verificar_conexao" 
-- CERTO: [executa a tool verificar_conexao silenciosamente e responde com o resultado]
+- CERTO: [executa a tool silenciosamente e responde com o resultado]
 - Execute a ferramenta PRIMEIRO, depois responda ao cliente com o resultado.
 - Não peça dados que já estão no contexto acima.
-- Não diga "vou verificar" ou "aguarde" — apenas execute e responda.`,
+- Não diga "vou verificar" ou "aguarde" — apenas execute e responda.
+- NUNCA invente ou suponha números de contrato, CPF ou protocolo. Use APENAS os dados do contexto acima.
+- Ao chamar criar_chamado, NÃO passe o campo "contrato" no input — ele é preenchido automaticamente pelo sistema com o contrato correto do cliente.`,
   ].filter(Boolean).join('\n');
 
   // Histórico

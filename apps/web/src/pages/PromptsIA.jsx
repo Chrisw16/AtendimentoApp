@@ -33,6 +33,214 @@ const PLACEHOLDERS = [
   { tag: '[PLANOS]',           desc: 'Lista de planos cadastrados no sistema'       },
 ];
 
+
+// ── CATÁLOGO DE TOOLS DA IA ───────────────────────────────────────
+const TOOLS_CATALOG = [
+  {
+    name: 'verificar_conexao',
+    label: 'Verificar Conexão',
+    icon: '📡',
+    category: 'Diagnóstico',
+    endpoint: 'POST /api/ura/verificaacesso/',
+    params: 'contrato',
+    desc: 'Verifica se o cliente está online ou offline no SGP. Retorna status da conexão e mensagem.',
+    status: 'ok',
+  },
+  {
+    name: 'consultar_manutencao',
+    label: 'Consultar Manutenção',
+    icon: '🔧',
+    category: 'Diagnóstico',
+    endpoint: 'GET /api/ura/manutencao/list',
+    params: '—',
+    desc: 'Lista manutenções ativas na rede. Retorna previsão de normalização e áreas afetadas.',
+    status: 'ok',
+  },
+  {
+    name: 'status_rede',
+    label: 'Status da Rede',
+    icon: '🌐',
+    category: 'Diagnóstico',
+    endpoint: 'GET /api/ura/manutencao/list',
+    params: '—',
+    desc: 'Versão resumida do consultar_manutencao. Retorna "ok" ou lista de ocorrências ativas.',
+    status: 'ok',
+  },
+  {
+    name: 'consultar_radius',
+    label: 'Consultar Radius',
+    icon: '🔌',
+    category: 'Diagnóstico',
+    endpoint: 'POST /ws/radius/radacct/list/all/',
+    params: 'cpfcnpj, tipoconexao=PPP',
+    desc: 'Consulta sessão PPPoE ativa no Radius. Retorna IP, usuário e início da sessão.',
+    status: 'ok',
+  },
+  {
+    name: 'consultar_onu_acs',
+    label: 'Consultar ONU (ACS)',
+    icon: '📶',
+    category: 'Diagnóstico',
+    endpoint: 'ACS TR-069 interno',
+    params: 'serial',
+    desc: 'Lê dados da ONU: sinal Rx/Tx, uptime, firmware, IP WAN. Requer servidor ACS configurado.',
+    status: 'pendente',
+  },
+  {
+    name: 'reiniciar_onu_acs',
+    label: 'Reiniciar ONU (ACS)',
+    icon: '🔄',
+    category: 'Diagnóstico',
+    endpoint: 'ACS TR-069 interno',
+    params: 'serial',
+    desc: 'Reinicia ONU remotamente via ACS TR-069 (~2 min). Requer servidor ACS configurado.',
+    status: 'pendente',
+  },
+  {
+    name: 'criar_chamado',
+    label: 'Criar Chamado',
+    icon: '🎫',
+    category: 'Atendimento',
+    endpoint: 'POST /api/ura/chamado/',
+    params: 'contrato¹, ocorrenciatipo, conteudo, contato_nome, contato_telefone',
+    desc: 'Abre ocorrência técnica no SGP. ¹Contrato preenchido automaticamente pelo contexto. Tipos: 200=Reparo, 3=MudSenhaWifi, 14=RelocRoteador, 13=MudEndereco, 23=MudPlano, 22=ProbFatura, 5=Outros.',
+    status: 'ok',
+  },
+  {
+    name: 'historico_ocorrencias',
+    label: 'Histórico de Ocorrências',
+    icon: '📋',
+    category: 'Atendimento',
+    endpoint: 'POST /api/ura/ocorrencia/list/',
+    params: 'contrato, offset=0, limit=5',
+    desc: 'Lista chamados técnicos anteriores do cliente com status, tipo e data.',
+    status: 'ok',
+  },
+  {
+    name: 'transferir_para_humano',
+    label: 'Transferir para Humano',
+    icon: '👤',
+    category: 'Atendimento',
+    endpoint: 'Lógica interna',
+    params: 'motivo',
+    desc: 'Encaminha a conversa para fila de atendimento humano. Altera status da conversa no banco.',
+    status: 'ok',
+  },
+  {
+    name: 'encerrar_atendimento',
+    label: 'Encerrar Atendimento',
+    icon: '✅',
+    category: 'Atendimento',
+    endpoint: 'Lógica interna',
+    params: '—',
+    desc: 'Encerra a conversa quando o problema foi resolvido. Avança pelo fluxo porta "resolvido".',
+    status: 'ok',
+  },
+  {
+    name: 'segunda_via_boleto',
+    label: '2ª Via de Boleto',
+    icon: '💳',
+    category: 'Financeiro',
+    endpoint: 'POST /api/ura/fatura2via/',
+    params: 'cpfcnpj, contrato, status=abertos',
+    desc: 'Emite segunda via de fatura. Retorna valor, vencimento, link do boleto e código PIX.',
+    status: 'ok',
+  },
+  {
+    name: 'promessa_pagamento',
+    label: 'Promessa de Pagamento',
+    icon: '🤝',
+    category: 'Financeiro',
+    endpoint: 'POST /api/ura/liberacaopromessa/',
+    params: 'contrato',
+    desc: 'Libera acesso suspenso ou com velocidade reduzida (1x por mês). Cliente promete pagar.',
+    status: 'ok',
+  },
+];
+
+const CATEGORY_COLORS = {
+  'Diagnóstico': '#3b82f6',
+  'Atendimento': '#8b5cf6',
+  'Financeiro':  '#10b981',
+};
+
+const STATUS_BADGE = {
+  ok:       { label: 'Ativo',    bg: 'rgba(16,185,129,.12)', color: '#10b981' },
+  pendente: { label: 'Requer config', bg: 'rgba(245,158,11,.12)', color: '#f59e0b' },
+};
+
+
+// ── DEFINIÇÃO DOS TESTES ──────────────────────────────────────────
+const TEST_TOOLS = [
+  {
+    id: 'consultar_cliente', label: 'Consultar Cliente', icon: '👤', category: 'SGP — Clientes',
+    endpoint: 'POST /api/ura/consultacliente/',
+    desc: 'Busca cliente por CPF ou CNPJ. Retorna nome, contratos, status, plano e cidade.',
+    fields: [{ key: 'cpfcnpj', label: 'CPF ou CNPJ', placeholder: '13193380466', required: true }],
+  },
+  {
+    id: 'verificar_conexao', label: 'Verificar Conexão', icon: '📡', category: 'SGP — Diagnóstico',
+    endpoint: 'POST /api/ura/verificaacesso/',
+    desc: 'Verifica se o contrato está online/offline no SGP.',
+    fields: [{ key: 'contrato', label: 'ID do Contrato', placeholder: '30951', required: true }],
+  },
+  {
+    id: 'consultar_radius', label: 'Consultar Radius', icon: '🔌', category: 'SGP — Diagnóstico',
+    endpoint: 'POST /ws/radius/radacct/list/all/',
+    desc: 'Consulta sessão PPPoE ativa. Retorna IP, usuário e início da sessão.',
+    fields: [{ key: 'cpfcnpj', label: 'CPF ou CNPJ', placeholder: '13193380466', required: true }],
+  },
+  {
+    id: 'consultar_manutencao', label: 'Consultar Manutenção', icon: '🔧', category: 'SGP — Diagnóstico',
+    endpoint: 'GET /api/ura/manutencao/list',
+    desc: 'Lista manutenções ativas na rede. Sem parâmetros obrigatórios.',
+    fields: [],
+  },
+  {
+    id: 'status_rede', label: 'Status da Rede', icon: '🌐', category: 'SGP — Diagnóstico',
+    endpoint: 'GET /api/ura/manutencao/list',
+    desc: 'Versão resumida: retorna ok ou lista de ocorrências ativas.',
+    fields: [],
+  },
+  {
+    id: 'segunda_via_boleto', label: '2ª Via de Boleto', icon: '💳', category: 'SGP — Financeiro',
+    endpoint: 'POST /api/ura/fatura2via/',
+    desc: 'Emite segunda via. Retorna valor, vencimento, link e código PIX.',
+    fields: [
+      { key: 'cpfcnpj',  label: 'CPF ou CNPJ', placeholder: '13193380466', required: true },
+      { key: 'contrato', label: 'ID do Contrato', placeholder: '30951', required: true },
+    ],
+  },
+  {
+    id: 'promessa_pagamento', label: 'Promessa de Pagamento', icon: '🤝', category: 'SGP — Financeiro',
+    endpoint: 'POST /api/ura/liberacaopromessa/',
+    desc: '⚠️ Libera acesso suspenso (1x/mês). Só use em contrato realmente suspenso.',
+    fields: [{ key: 'contrato', label: 'ID do Contrato', placeholder: '30951', required: true }],
+    warn: true,
+  },
+  {
+    id: 'historico_ocorrencias', label: 'Histórico de Ocorrências', icon: '📋', category: 'SGP — Atendimento',
+    endpoint: 'POST /api/ura/ocorrencia/list/',
+    desc: 'Lista chamados técnicos do contrato.',
+    fields: [{ key: 'contrato', label: 'ID do Contrato', placeholder: '30951', required: true }],
+  },
+  {
+    id: 'criar_chamado', label: 'Criar Chamado', icon: '🎫', category: 'SGP — Atendimento',
+    endpoint: 'POST /api/ura/chamado/',
+    desc: '⚠️ Abre ocorrência REAL no SGP. Tipos: 200=Reparo, 5=Outros, 3=MudSenhaWifi, 13=MudEndereco, 14=RelocRoteador, 22=ProbFatura, 23=MudPlano.',
+    fields: [
+      { key: 'contrato',       label: 'ID do Contrato',     placeholder: '30951',             required: true },
+      { key: 'ocorrenciatipo', label: 'Tipo (ex: 5)',        placeholder: '5',                 required: true },
+      { key: 'conteudo',       label: 'Descrição',          placeholder: 'Teste via painel',  required: true },
+      { key: 'contato_nome',   label: 'Nome do contato',    placeholder: 'João Silva' },
+      { key: 'contato_telefone', label: 'Telefone',         placeholder: '84999999999' },
+    ],
+    warn: true,
+  },
+];
+
+const CATEGORY_ORDER = ['SGP — Clientes','SGP — Diagnóstico','SGP — Financeiro','SGP — Atendimento'];
+
 // ── COMPONENTE PRINCIPAL ──────────────────────────────────────────
 export default function PromptsIA() {
   const toast = useStore(s => s.toast);
@@ -101,6 +309,19 @@ export default function PromptsIA() {
   const isCustomized  = activePrompt && activePrompt.conteudo !== activePrompt.padrao;
   const showModelConf = SLUGS_COM_MODELO.includes(activeSlug);
 
+
+  async function runTest() {
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const r = await api.post('/sysconfig/tools/test', { tool: testTool, params: testParams });
+      setTestResult(r);
+    } catch(e) {
+      setTestResult({ ok: false, error: e.message });
+    }
+    setTestLoading(false);
+  }
+
   function copyTag(tag) {
     navigator.clipboard.writeText(tag).catch(() => {});
     setCopied(tag);
@@ -126,9 +347,160 @@ export default function PromptsIA() {
         </div>
       </div>
 
-      {isLoading ? (
+      {/* TABS */}
+      <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:'1px solid var(--border)', paddingBottom:0 }}>
+        {[{id:'prompt',label:'🧠 Prompts'},{id:'tools',label:'🛠 Catálogo'},{id:'test',label:'⚡ Testar Tools'}].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding:'8px 18px', border:'none', background:'transparent', cursor:'pointer',
+            fontSize:13, fontWeight: tab===t.id ? 700 : 400,
+            color: tab===t.id ? 'var(--brand-blue)' : 'var(--text-secondary)',
+            borderBottom: tab===t.id ? '2px solid var(--brand-blue)' : '2px solid transparent',
+            transition:'all .15s', marginBottom:-1,
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* TOOLS TAB */}
+      {tab === 'tools' && (
+        <div>
+          <p style={{ fontSize:13, color:'var(--text-secondary)', marginBottom:20 }}>
+            Funções disponíveis para os agentes de IA. Cada tool chama uma API real do SGP ou executa lógica interna.
+          </p>
+          {['Diagnóstico','Atendimento','Financeiro'].map(cat => (
+            <div key={cat} style={{ marginBottom:28 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                <div style={{ width:3, height:18, borderRadius:2, background:CATEGORY_COLORS[cat] }}/>
+                <span style={{ fontSize:12, fontWeight:700, color:CATEGORY_COLORS[cat], textTransform:'uppercase', letterSpacing:'.06em' }}>{cat}</span>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {TOOLS_CATALOG.filter(t => t.category === cat).map(tool => {
+                  const st = STATUS_BADGE[tool.status];
+                  return (
+                    <div key={tool.name} style={{
+                      background:'var(--bg-secondary)', border:'1px solid var(--border)',
+                      borderRadius:10, padding:'12px 16px',
+                      display:'grid', gridTemplateColumns:'auto 1fr auto', gap:'0 16px', alignItems:'start',
+                    }}>
+                      <span style={{ fontSize:22, gridRow:'1/3' }}>{tool.icon}</span>
+                      <div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                          <span style={{ fontSize:13, fontWeight:600, color:'var(--text-primary)' }}>{tool.label}</span>
+                          <code style={{ fontSize:10, color:'var(--text-tertiary)', background:'var(--bg-tertiary)', padding:'1px 6px', borderRadius:4 }}>{tool.name}</code>
+                          <span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:20, background:st.bg, color:st.color }}>{st.label}</span>
+                        </div>
+                        <p style={{ fontSize:12, color:'var(--text-secondary)', margin:0, lineHeight:1.6 }}>{tool.desc}</p>
+                      </div>
+                      <div style={{ fontSize:11, textAlign:'right', whiteSpace:'nowrap' }}>
+                        <div style={{ color:'var(--text-tertiary)', marginBottom:2 }}>
+                          <code style={{ background:'var(--bg-tertiary)', padding:'2px 6px', borderRadius:4, fontSize:10 }}>{tool.endpoint}</code>
+                        </div>
+                        <div style={{ color:'var(--text-tertiary)', fontSize:10 }}>params: {tool.params}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+
+      {/* TEST TAB */}
+      {tab === 'test' && (
+        <div style={{ display:'grid', gridTemplateColumns:'240px 1fr', gap:16, minHeight:500 }}>
+
+          {/* SIDEBAR — lista de tools */}
+          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+            {CATEGORY_ORDER.map(cat => (
+              <div key={cat} style={{ marginBottom:8 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:'var(--text-tertiary)', textTransform:'uppercase', letterSpacing:'.06em', padding:'4px 10px', marginBottom:2 }}>{cat.replace('SGP — ','')}</div>
+                {TEST_TOOLS.filter(t => t.category === cat).map(t => (
+                  <button key={t.id} onClick={() => { setTestTool(t.id); setTestParams({}); setTestResult(null); }}
+                    style={{
+                      width:'100%', textAlign:'left', padding:'8px 10px', border:'none', borderRadius:8, cursor:'pointer',
+                      background: testTool === t.id ? 'rgba(59,130,246,.12)' : 'transparent',
+                      color: testTool === t.id ? 'var(--brand-blue)' : 'var(--text-secondary)',
+                      fontWeight: testTool === t.id ? 600 : 400,
+                      fontSize:12, display:'flex', alignItems:'center', gap:6,
+                    }}>
+                    <span>{t.icon}</span>{t.label}
+                    {t.warn && <span style={{ fontSize:9, color:'#f59e0b', marginLeft:'auto' }}>⚠️</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* PAINEL DIREITO */}
+          {(() => {
+            const tool = TEST_TOOLS.find(t => t.id === testTool);
+            if (!tool) return null;
+            return (
+              <div style={{ background:'var(--bg-secondary)', border:'1px solid var(--border)', borderRadius:12, padding:20 }}>
+
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+                  <span style={{ fontSize:24 }}>{tool.icon}</span>
+                  <div>
+                    <div style={{ fontSize:15, fontWeight:700, color:'var(--text-primary)' }}>{tool.label}</div>
+                    <code style={{ fontSize:10, color:'var(--text-tertiary)' }}>{tool.endpoint}</code>
+                  </div>
+                </div>
+
+                <p style={{ fontSize:12, color: tool.warn ? '#f59e0b' : 'var(--text-secondary)', marginBottom:16, padding: tool.warn ? '8px 12px' : 0, background: tool.warn ? 'rgba(245,158,11,.08)' : 'transparent', borderRadius:8 }}>
+                  {tool.desc}
+                </p>
+
+                {/* Campos */}
+                {tool.fields.length > 0 && (
+                  <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:16 }}>
+                    {tool.fields.map(f => (
+                      <div key={f.key}>
+                        <label style={{ fontSize:11, fontWeight:600, color:'var(--text-secondary)', display:'block', marginBottom:4 }}>
+                          {f.label}{f.required && <span style={{ color:'#ef4444' }}> *</span>}
+                        </label>
+                        <input
+                          value={testParams[f.key] || ''}
+                          onChange={e => setTestParams(p => ({ ...p, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder}
+                          style={{ width:'100%', padding:'8px 12px', borderRadius:8, border:'1px solid var(--border)', background:'var(--bg-primary)', color:'var(--text-primary)', fontSize:13, boxSizing:'border-box' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button onClick={runTest} disabled={testLoading}
+                  style={{ padding:'9px 20px', borderRadius:8, border:'none', background:'var(--brand-blue)', color:'#fff', fontWeight:700, fontSize:13, cursor:'pointer', opacity: testLoading ? .6 : 1 }}>
+                  {testLoading ? '⏳ Executando...' : '▶ Executar'}
+                </button>
+
+                {/* Resultado */}
+                {testResult && (
+                  <div style={{ marginTop:16 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                      <span style={{ fontSize:13, fontWeight:700, color: testResult.ok ? '#10b981' : '#ef4444' }}>
+                        {testResult.ok ? '✅ Sucesso' : '❌ Erro'}
+                      </span>
+                      {testResult.ms && <span style={{ fontSize:11, color:'var(--text-tertiary)' }}>{testResult.ms}ms</span>}
+                    </div>
+                    <pre style={{
+                      background:'var(--bg-primary)', border:'1px solid var(--border)', borderRadius:8,
+                      padding:14, fontSize:11, color:'var(--text-primary)', overflow:'auto',
+                      maxHeight:360, margin:0, lineHeight:1.6,
+                    }}>{JSON.stringify(testResult.error || testResult.result, null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {tab === 'prompt' && isLoading ? (
         <div className={styles.loading}><span className="spinner spinner-lg"/></div>
-      ) : (
+      ) : tab === 'prompt' && (
         <div className={styles.layout}>
 
           {/* SIDEBAR */}
