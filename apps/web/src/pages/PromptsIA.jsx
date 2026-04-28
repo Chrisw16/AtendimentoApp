@@ -253,6 +253,11 @@ export default function PromptsIA() {
   const [editTemp,   setEditTemp]   = useState(0.3);
   const [dirty,      setDirty]      = useState(false);
   const [copied,     setCopied]     = useState('');
+  const [tab,        setTab]          = useState('prompt');
+  const [testTool,   setTestTool]     = useState('consultar_cliente');
+  const [testParams, setTestParams]   = useState({});
+  const [testResult, setTestResult]   = useState(null);
+  const [testLoading,setTestLoading]  = useState(false);
 
   const { data: prompts = [], isLoading } = useQuery({
     queryKey: ['prompts-ia'],
