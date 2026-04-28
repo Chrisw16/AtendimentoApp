@@ -28,12 +28,17 @@ const RF_STYLE = `
     box-shadow: 0 0 0 4px rgba(255,255,255,0.35) !important;
     transform: scale(1.3) !important;
   }
-  /* Handles de múltiplas portas — alinhados ao texto da linha */
-  .react-flow__handle-right {
-    right: -5.5px !important;
+  /* Handles de múltiplas portas — centrados na row de 24px */
+  .react-flow__handle.porta-multipla-handle {
+    /* (row 24px - handle 10px) / 2 = 7px */
+    top: 7px !important;
+    right: -5px !important;
+    transform: none !important;
+    bottom: auto !important;
   }
+  /* Para handles de saída ÚNICA (centro do nó), mantém comportamento padrão */
   .react-flow__handle-left {
-    left: -5.5px !important;
+    left: -5px !important;
   }
   /* Cursor no nó */
   .react-flow__node {
@@ -262,14 +267,19 @@ const FlowNode = memo(({ data, selected }) => {
           style={{ width:10, height:10, background:def.color, border:'2px solid rgba(2,35,45,.95)', right:-5, borderRadius:'50%' }}
         />
       ) : portas.length > 0 ? (
-        // Portas de saída — estilo idêntico ao sistema de inspiração
-        // Cada porta tem label alinhado à direita + handle na borda
+        // Portas de saída — cada linha tem altura fixa e o Handle é posicionado
+        // em pixels (não % + transform) para que o React Flow leia o hitbox certo.
         <div style={{ borderTop:'1px solid rgba(255,255,255,.06)', padding:'4px 0 3px' }}>
-          {portas.map((p) => (
-            <div key={p.id} style={{
-              display:'flex', alignItems:'center', justifyContent:'flex-end',
-              padding:'2px 20px 2px 10px', position:'relative', minHeight:20,
-            }}>
+          {portas.map((p, idx) => (
+            <div
+              key={p.id}
+              className="porta-row"
+              style={{
+                display:'flex', alignItems:'center', justifyContent:'flex-end',
+                padding:'0 20px 0 10px', position:'relative',
+                height:24, // altura fixa — referencial pro Handle
+              }}
+            >
               {p.label && (
                 <span style={{
                   fontSize:9.5, color:'rgba(255,255,255,.38)', marginRight:7,
@@ -282,14 +292,19 @@ const FlowNode = memo(({ data, selected }) => {
                 type="source"
                 position={Position.Right}
                 id={p.id}
+                className="porta-multipla-handle"
                 style={{
-                  position:'absolute', right:-5, top:'50%',
-                  transform:'translateY(-50%)',
-                  width:10, height:10,
-                  background:p.color,
-                  border:'2px solid rgba(2,35,45,.95)',
-                  borderRadius:'50%',
-                  cursor:'crosshair',
+                  // Centro vertical da row de 24px: (24 - 10) / 2 = 7px.
+                  // Sem transform — para o React Flow medir o hitbox corretamente.
+                  top: 7,
+                  right: -5,
+                  width: 10,
+                  height: 10,
+                  background: p.color,
+                  border: '2px solid rgba(2,35,45,.95)',
+                  borderRadius: '50%',
+                  cursor: 'crosshair',
+                  transform: 'none',
                 }}
               />
             </div>
