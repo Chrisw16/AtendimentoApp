@@ -619,7 +619,7 @@ async function processarIAResponde(no, ctx) {
   const toolsAtivas = cfg.tools_ativas || [
     'verificar_conexao', 'consultar_manutencao', 'status_rede',
     'consultar_onu_acs', 'reiniciar_onu_acs', 'consultar_radius',
-    'criar_chamado', 'segunda_via_boleto', 'consultar_boleto',
+    'criar_chamado', 'segunda_via_boleto',
     'promessa_pagamento', 'historico_ocorrencias',
     'transferir_para_humano', 'encerrar_atendimento',
   ];

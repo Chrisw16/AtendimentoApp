@@ -5,7 +5,7 @@
 import {
   consultarClientes, segundaViaBoleto, promessaPagamento,
   criarChamado, verificarConexao, consultarManutencao,
-  historicoOcorrencias, consultarBoleto,
+  historicoOcorrencias,
   statusRede, consultarOnuAcs, reiniciarOnuAcs, consultarRadius,
 } from './integrations.js';
 
