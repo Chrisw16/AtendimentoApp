@@ -10,36 +10,10 @@ import '@xyflow/react/dist/style.css';
 import { useStore } from '../store';
 import { NODE_TYPES, NODE_GROUPS, PORTA_META } from '../lib/nodeTypes';
 
-// ── CSS OVERRIDE — força handles a receberem eventos ─────────────
+// ── CSS OVERRIDE — apenas ajustes visuais que NÃO interferem na detecção
+//    de eventos do @xyflow/react v12. Não mexer no posicionamento/transform
+//    dos .react-flow__handle, pois isso quebra a hitbox de conexão na v12.
 const RF_STYLE = `
-  /* Handles sempre clicáveis e visíveis */
-  .react-flow__handle {
-    pointer-events: all !important;
-    cursor: crosshair !important;
-    z-index: 10 !important;
-    transition: transform 0.12s ease, box-shadow 0.12s ease !important;
-  }
-  .react-flow__handle:hover {
-    transform: scale(1.5) !important;
-    box-shadow: 0 0 0 3px rgba(255,255,255,0.2) !important;
-  }
-  /* Handle de conexão sendo arrastado */
-  .react-flow__handle.connecting {
-    box-shadow: 0 0 0 4px rgba(255,255,255,0.35) !important;
-    transform: scale(1.3) !important;
-  }
-  /* Handles de múltiplas portas — centrados na row de 24px */
-  .react-flow__handle.porta-multipla-handle {
-    /* (row 24px - handle 10px) / 2 = 7px */
-    top: 7px !important;
-    right: -5px !important;
-    transform: none !important;
-    bottom: auto !important;
-  }
-  /* Para handles de saída ÚNICA (centro do nó), mantém comportamento padrão */
-  .react-flow__handle-left {
-    left: -5px !important;
-  }
   /* Cursor no nó */
   .react-flow__node {
     cursor: default !important;
@@ -267,19 +241,14 @@ const FlowNode = memo(({ data, selected }) => {
           style={{ width:10, height:10, background:def.color, border:'2px solid rgba(2,35,45,.95)', right:-5, borderRadius:'50%' }}
         />
       ) : portas.length > 0 ? (
-        // Portas de saída — cada linha tem altura fixa e o Handle é posicionado
-        // em pixels (não % + transform) para que o React Flow leia o hitbox certo.
+        // Portas de saída — formato idêntico ao sistema de inspiração que funciona.
+        // Cada porta é uma row com position:relative; o Handle é absolute dentro dela.
         <div style={{ borderTop:'1px solid rgba(255,255,255,.06)', padding:'4px 0 3px' }}>
-          {portas.map((p, idx) => (
-            <div
-              key={p.id}
-              className="porta-row"
-              style={{
-                display:'flex', alignItems:'center', justifyContent:'flex-end',
-                padding:'0 20px 0 10px', position:'relative',
-                height:24, // altura fixa — referencial pro Handle
-              }}
-            >
+          {portas.map((p) => (
+            <div key={p.id} style={{
+              display:'flex', alignItems:'center', justifyContent:'flex-end',
+              padding:'2px 20px 2px 10px', position:'relative', minHeight:20,
+            }}>
               {p.label && (
                 <span style={{
                   fontSize:9.5, color:'rgba(255,255,255,.38)', marginRight:7,
@@ -292,19 +261,14 @@ const FlowNode = memo(({ data, selected }) => {
                 type="source"
                 position={Position.Right}
                 id={p.id}
-                className="porta-multipla-handle"
                 style={{
-                  // Centro vertical da row de 24px: (24 - 10) / 2 = 7px.
-                  // Sem transform — para o React Flow medir o hitbox corretamente.
-                  top: 7,
-                  right: -5,
-                  width: 10,
-                  height: 10,
-                  background: p.color,
-                  border: '2px solid rgba(2,35,45,.95)',
-                  borderRadius: '50%',
-                  cursor: 'crosshair',
-                  transform: 'none',
+                  position:'absolute', right:-5, top:'50%',
+                  transform:'translateY(-50%)',
+                  width:10, height:10,
+                  background:p.color,
+                  border:'2px solid rgba(2,35,45,.95)',
+                  borderRadius:'50%',
+                  cursor:'crosshair',
                 }}
               />
             </div>
