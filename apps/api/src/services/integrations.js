@@ -431,6 +431,23 @@ export async function consultarRadius(cpfcnpj) {
   }
 }
 
+// ── SGP: LISTAR VENCIMENTOS ───────────────────────────────────────
+// POST /api/precadastro/vencimento/list — retorna dias de vencimento
+// disponíveis para o cliente escolher na hora do pré-cadastro.
+export async function listarVencimentos() {
+  try {
+    const raw = await sgpPost('/api/precadastro/vencimento/list', {});
+    const lista = Array.isArray(raw) ? raw : (raw?.vencimentos || raw?.results || []);
+    return lista.map(v => ({
+      id:  v.id ?? v.vencimento_id ?? v.codigo,
+      dia: v.dia ?? v.day ?? v.descricao ?? v.label,
+    })).filter(v => v.id != null);
+  } catch (e) {
+    console.error('[SGP] listarVencimentos:', e.message);
+    return [];
+  }
+}
+
 // ── SGP: PRÉ-CADASTRO PF ──────────────────────────────────────────
 // POST /api/precadastro/F — cadastra novo cliente Pessoa Física no SGP.
 // Inspirado na implementação do sistema de referência (services/erp.js).

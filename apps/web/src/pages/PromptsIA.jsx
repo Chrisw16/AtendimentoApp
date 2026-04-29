@@ -163,7 +163,27 @@ const TOOLS_CATALOG = [
     category: 'Comercial',
     endpoint: 'POST /api/precadastro/F',
     params: 'nome, cpf, datanasc, email, celular, endereço, plano_id, vencimento_id',
-    desc: 'Cadastra novo cliente PF no SGP. Use no contexto comercial após coletar todos os dados. Planos Natal/Macaíba/SGA: Essencial=12, Avançado=13, Premium=16. SMG: Essencial=30, Avançado=29, Premium=28. POP e portador são auto-detectados pela cidade.',
+    desc: 'Cadastra novo cliente PF no SGP. Use no contexto comercial após coletar todos os dados. POP e portador são auto-detectados pela cidade. IDs de plano e vencimento devem vir das tools listar_planos_ativos e listar_vencimentos.',
+    status: 'ok',
+  },
+  {
+    name: 'listar_planos_ativos',
+    label: 'Listar Planos Ativos',
+    icon: '📋',
+    category: 'Comercial',
+    endpoint: 'GET /api/planos (local)',
+    params: 'cidade (opcional)',
+    desc: 'Retorna catálogo de planos cadastrados em Configurações → Planos. Filtra por cidade se informado. Necessário antes de precadastrar_cliente para a IA saber o plano_id correto.',
+    status: 'ok',
+  },
+  {
+    name: 'listar_vencimentos',
+    label: 'Listar Vencimentos',
+    icon: '📅',
+    category: 'Comercial',
+    endpoint: 'POST /api/precadastro/vencimento/list',
+    params: '—',
+    desc: 'Retorna dias de vencimento disponíveis no SGP. Necessário antes de precadastrar_cliente para a IA saber o vencimento_id correto.',
     status: 'ok',
   },
 ];
@@ -251,7 +271,7 @@ const TEST_TOOLS = [
   {
     id: 'precadastrar_cliente', label: 'Pré-Cadastro de Cliente', icon: '📝', category: 'SGP — Comercial',
     endpoint: 'POST /api/precadastro/F',
-    desc: '⚠️ Cria cliente REAL no SGP. POP e portador são auto-detectados pela cidade quando omitidos. Planos Natal/Macaíba/SGA: 12/13/16. SMG: 30/29/28.',
+    desc: '⚠️ Cria cliente REAL no SGP. POP e portador são auto-detectados pela cidade quando omitidos. Use IDs de plano/vencimento das outras tools comerciais.',
     fields: [
       { key: 'nome',          label: 'Nome completo',         placeholder: 'João da Silva',           required: true },
       { key: 'cpf',           label: 'CPF',                   placeholder: '12345678900',             required: true },
@@ -268,6 +288,20 @@ const TEST_TOOLS = [
       { key: 'vencimento_id', label: 'ID do Vencimento',      placeholder: '1',                       required: true },
     ],
     warn: true,
+  },
+  {
+    id: 'listar_planos_ativos', label: 'Listar Planos Ativos', icon: '📋', category: 'SGP — Comercial',
+    endpoint: 'GET /api/planos (local)',
+    desc: 'Retorna planos cadastrados em Configurações → Planos. Filtra por cidade se informado.',
+    fields: [
+      { key: 'cidade', label: 'Cidade (opcional)', placeholder: 'Natal' },
+    ],
+  },
+  {
+    id: 'listar_vencimentos', label: 'Listar Vencimentos', icon: '📅', category: 'SGP — Comercial',
+    endpoint: 'POST /api/precadastro/vencimento/list',
+    desc: 'Retorna dias de vencimento disponíveis no SGP. Sem parâmetros.',
+    fields: [],
   },
 ];
 

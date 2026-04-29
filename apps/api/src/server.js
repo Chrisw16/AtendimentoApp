@@ -28,6 +28,7 @@ import { coberturaRouter }   from './routes/cobertura.js';
 import { ordensRouter }      from './routes/ordens.js';
 import { financeiroRouter }  from './routes/financeiro.js';
 import { sysconfigRouter }   from './routes/sysconfig.js';
+import { planosRouter }      from './routes/planos.js';
 import { errorHandler }      from './middlewares/errorHandler.js';
 
 const app  = express();
@@ -63,6 +64,7 @@ app.use('/api/cobertura',   coberturaRouter);
 app.use('/api/ordens',      ordensRouter);
 app.use('/api/financeiro',  financeiroRouter);
 app.use('/api/sysconfig',   sysconfigRouter);
+app.use('/api/planos',      planosRouter);
 
 // Frontend estático
 if (existsSync(frontendDist)) {

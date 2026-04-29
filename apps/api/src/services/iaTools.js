@@ -7,8 +7,9 @@ import {
   criarChamado, verificarConexao, consultarManutencao,
   historicoOcorrencias,
   statusRede, consultarOnuAcs, reiniciarOnuAcs, consultarRadius,
-  precadastrarCliente,
+  precadastrarCliente, listarVencimentos,
 } from './integrations.js';
+import { getDb } from '../config/db.js';
 
 // ── DEFINIÇÃO DAS FERRAMENTAS ──────────────────────────────────────────────
 export const IA_TOOLS = [
@@ -114,6 +115,21 @@ export const IA_TOOLS = [
       },
       required: ['cpfcnpj'],
     },
+  },
+  {
+    name: 'listar_planos_ativos',
+    description: 'Lista os planos comerciais ativos disponíveis para venda. Use SEMPRE no início de uma conversa de venda, antes de oferecer planos. Retorna nome, valor, velocidade, cidade e plano_id (necessário para precadastrar_cliente). Pode filtrar por cidade.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cidade: { type: 'string', description: 'Filtrar planos por cidade — opcional. Ex: "Natal", "Macaíba", "São Miguel do Gostoso".' },
+      },
+    },
+  },
+  {
+    name: 'listar_vencimentos',
+    description: 'Lista os dias de vencimento disponíveis no SGP para o pré-cadastro. Use ANTES de chamar precadastrar_cliente para que o cliente escolha o melhor dia, e pegue o vencimento_id correspondente.',
+    input_schema: { type: 'object', properties: {} },
   },
   {
     name: 'precadastrar_cliente',
@@ -252,6 +268,37 @@ export async function executarTool(name, input, ctx) {
       if (!cpf) return 'CPF não disponível para consultar Radius.';
       const r = await consultarRadius(cpf).catch(e => ({ sessao_ativa: false, mensagem: e.message }));
       return r.mensagem;
+    }
+
+    case 'listar_planos_ativos': {
+      // Lê catálogo local de planos cadastrados em Configurações → Planos
+      const db = getDb();
+      let q = db('planos').where({ ativo: true });
+      if (input.cidade) {
+        // Match case-insensitive parcial — "natal" casa com "Natal", "Macaíba" com "macaiba" etc.
+        const termo = String(input.cidade).toLowerCase();
+        q = q.whereRaw('LOWER(cidade) LIKE ?', [`%${termo}%`]);
+      }
+      const rows = await q.orderBy([{ column: 'ordem', order: 'asc' }, { column: 'valor', order: 'asc' }]);
+      if (!rows.length) {
+        return input.cidade
+          ? `Nenhum plano ativo encontrado para "${input.cidade}". Tente sem filtro de cidade.`
+          : 'Nenhum plano ativo cadastrado. Avise o administrador.';
+      }
+      const linhas = rows.map(p => {
+        const valor = p.valor != null ? `R$ ${Number(p.valor).toFixed(2).replace('.', ',')}` : '—';
+        const fid   = p.fidelidade_meses ? ` · ${p.fidelidade_meses}m fidelidade` : '';
+        const cid   = p.cidade ? ` (${p.cidade})` : '';
+        return `• ${p.nome} — ${p.velocidade || '—'} — ${valor}${cid}${fid} | plano_id=${p.plano_id_sgp}`;
+      }).join('\n');
+      return `📋 Planos disponíveis:\n${linhas}\n\n⚠️ Use o plano_id ao chamar precadastrar_cliente.`;
+    }
+
+    case 'listar_vencimentos': {
+      const lista = await listarVencimentos();
+      if (!lista.length) return 'Não foi possível obter os vencimentos do SGP no momento.';
+      const linhas = lista.map(v => `• Dia ${v.dia} | vencimento_id=${v.id}`).join('\n');
+      return `📅 Vencimentos disponíveis:\n${linhas}\n\n⚠️ Use o vencimento_id ao chamar precadastrar_cliente.`;
     }
 
     case 'precadastrar_cliente': {

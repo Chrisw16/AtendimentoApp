@@ -48,7 +48,7 @@ sysconfigRouter.get('/:chave', asyncHandler(async (req, res) => {
 // ── ROTA DE TESTE DE TOOLS SGP ────────────────────────────────────────────
 import { consultarClientes, segundaViaBoleto, promessaPagamento, criarChamado,
   verificarConexao, consultarManutencao, historicoOcorrencias, consultarRadius,
-  statusRede, precadastrarCliente } from '../services/integrations.js';
+  statusRede, precadastrarCliente, listarVencimentos } from '../services/integrations.js';
 
 sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandler(async (req, res) => {
   const { tool, params = {} } = req.body;
@@ -80,6 +80,16 @@ sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandle
         ); break;
       case 'precadastrar_cliente':
         result = await precadastrarCliente(params); break;
+      case 'listar_vencimentos':
+        result = await listarVencimentos(); break;
+      case 'listar_planos_ativos': {
+        // Lê do banco local — mesmo que o executor da IA usa
+        const db = getDb();
+        let q = db('planos').where({ ativo: true });
+        if (params.cidade) q = q.whereRaw('LOWER(cidade) LIKE ?', [`%${String(params.cidade).toLowerCase()}%`]);
+        result = await q.orderBy([{ column: 'ordem', order: 'asc' }, { column: 'valor', order: 'asc' }]);
+        break;
+      }
       default:
         return res.status(400).json({ error: `Tool desconhecida: ${tool}` });
     }

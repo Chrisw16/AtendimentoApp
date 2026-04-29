@@ -98,6 +98,8 @@ const IA_TOOLS_LIST = [
   { id: 'historico_ocorrencias', label: '📋 Histórico de ocorrências',cat: 'Atendimento' },
   { id: 'segunda_via_boleto',    label: '💳 2ª via de boleto',        cat: 'Financeiro' },
   { id: 'promessa_pagamento',    label: '🤝 Promessa de pagamento',   cat: 'Financeiro' },
+  { id: 'listar_planos_ativos',  label: '📋 Listar planos ativos',    cat: 'Comercial'   },
+  { id: 'listar_vencimentos',    label: '📅 Listar vencimentos',      cat: 'Comercial'   },
   { id: 'precadastrar_cliente',  label: '📝 Pré-cadastro de cliente', cat: 'Comercial'   },
   { id: 'transferir_para_humano',label: '👤 Transferir para humano',  cat: 'Controle'    },
   { id: 'encerrar_atendimento',  label: '✅ Encerrar atendimento',    cat: 'Controle'    },
