@@ -156,12 +156,23 @@ const TOOLS_CATALOG = [
     desc: 'Libera acesso suspenso ou com velocidade reduzida (1x por mês). Cliente promete pagar.',
     status: 'ok',
   },
+  {
+    name: 'precadastrar_cliente',
+    label: 'Pré-Cadastro de Cliente',
+    icon: '📝',
+    category: 'Comercial',
+    endpoint: 'POST /api/precadastro/F',
+    params: 'nome, cpf, datanasc, email, celular, endereço, plano_id, vencimento_id',
+    desc: 'Cadastra novo cliente PF no SGP. Use no contexto comercial após coletar todos os dados. Planos Natal/Macaíba/SGA: Essencial=12, Avançado=13, Premium=16. SMG: Essencial=30, Avançado=29, Premium=28. POP e portador são auto-detectados pela cidade.',
+    status: 'ok',
+  },
 ];
 
 const CATEGORY_COLORS = {
   'Diagnóstico': '#3b82f6',
   'Atendimento': '#8b5cf6',
   'Financeiro':  '#10b981',
+  'Comercial':   '#f59e0b',
 };
 
 const STATUS_BADGE = {
@@ -237,9 +248,30 @@ const TEST_TOOLS = [
     ],
     warn: true,
   },
+  {
+    id: 'precadastrar_cliente', label: 'Pré-Cadastro de Cliente', icon: '📝', category: 'SGP — Comercial',
+    endpoint: 'POST /api/precadastro/F',
+    desc: '⚠️ Cria cliente REAL no SGP. POP e portador são auto-detectados pela cidade quando omitidos. Planos Natal/Macaíba/SGA: 12/13/16. SMG: 30/29/28.',
+    fields: [
+      { key: 'nome',          label: 'Nome completo',         placeholder: 'João da Silva',           required: true },
+      { key: 'cpf',           label: 'CPF',                   placeholder: '12345678900',             required: true },
+      { key: 'datanasc',      label: 'Nascimento (AAAA-MM-DD)', placeholder: '1990-05-20',            required: true },
+      { key: 'email',         label: 'E-mail',                placeholder: 'joao@exemplo.com',        required: true },
+      { key: 'celular',       label: 'Celular',               placeholder: '84988776655',             required: true },
+      { key: 'logradouro',    label: 'Logradouro',            placeholder: 'Av. Engenheiro Roberto Freire', required: true },
+      { key: 'numero',        label: 'Número',                placeholder: '100',                     required: true },
+      { key: 'complemento',   label: 'Complemento',           placeholder: 'Apto 201' },
+      { key: 'bairro',        label: 'Bairro',                placeholder: 'Capim Macio',             required: true },
+      { key: 'cidade',        label: 'Cidade',                placeholder: 'Natal',                   required: true },
+      { key: 'cep',           label: 'CEP',                   placeholder: '59082000' },
+      { key: 'plano_id',      label: 'ID do Plano',           placeholder: '12',                      required: true },
+      { key: 'vencimento_id', label: 'ID do Vencimento',      placeholder: '1',                       required: true },
+    ],
+    warn: true,
+  },
 ];
 
-const CATEGORY_ORDER = ['SGP — Clientes','SGP — Diagnóstico','SGP — Financeiro','SGP — Atendimento'];
+const CATEGORY_ORDER = ['SGP — Clientes','SGP — Diagnóstico','SGP — Financeiro','SGP — Atendimento','SGP — Comercial'];
 
 // ── COMPONENTE PRINCIPAL ──────────────────────────────────────────
 export default function PromptsIA() {

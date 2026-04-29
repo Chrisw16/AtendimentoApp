@@ -431,7 +431,89 @@ export async function consultarRadius(cpfcnpj) {
   }
 }
 
-// ── ANTHROPIC ─────────────────────────────────────────────────────
+// ── SGP: PRÉ-CADASTRO PF ──────────────────────────────────────────
+// POST /api/precadastro/F — cadastra novo cliente Pessoa Física no SGP.
+// Inspirado na implementação do sistema de referência (services/erp.js).
+//
+// IDs de plano (NetGo):
+//   Macaíba / São Gonçalo / Natal: Essencial=12 (300M R$59,90), Avançado=13 (450M R$99,90), Premium=16 (600M R$119,90)
+//   São Miguel do Gostoso:         Essencial=30 (200M R$69,90), Avançado=29 (300M R$99,90), Premium=28 (500M R$119,90)
+// IDs de POP:        Macaíba/Natal=1 | São Miguel do Gostoso=3 | São Gonçalo=4
+// IDs de portador:   Macaíba/Natal/SGA=16 | São Miguel=18
+//
+// Campos obrigatórios mínimos: nome, cpf, datanasc, email, celular,
+// logradouro, numero, bairro, cidade, plano_id, vencimento_id.
+// Os demais usam defaults sensatos (uf=RN, pais=BR, formacobranca=1, etc).
+export async function precadastrarCliente(d = {}) {
+  if (!d.nome)        throw new Error('nome é obrigatório');
+  if (!d.cpf && !d.cpfcnpj) throw new Error('cpf é obrigatório');
+  if (!d.celular)     throw new Error('celular é obrigatório');
+  if (!d.cidade)      throw new Error('cidade é obrigatória');
+  if (!d.plano_id)    throw new Error('plano_id é obrigatório');
+  if (!d.vencimento_id) throw new Error('vencimento_id é obrigatório');
+
+  const cpfDigits = String(d.cpf || d.cpfcnpj).replace(/\D/g, '');
+  const celDigits = String(d.celular).replace(/\D/g, '');
+  const cidade    = String(d.cidade || '').toLowerCase();
+
+  // Defaults inteligentes por cidade (NetGo opera em RN)
+  const popPadrao = (() => {
+    if (cidade.includes('gostoso'))                            return 3;
+    if (cidade.includes('gonçalo') || cidade.includes('goncalo')) return 4;
+    return 1; // Natal e Macaíba
+  })();
+  const portadorPadrao = cidade.includes('gostoso') ? 18 : 16;
+
+  const params = {
+    nome: d.nome,
+    cpfcnpj: cpfDigits,
+    datanasc: d.datanasc || '',
+    email: d.email || '',
+    celular: celDigits,
+    logradouro: d.logradouro || '',
+    numero: String(d.numero || ''),
+    complemento: d.complemento || '',
+    bairro: d.bairro || '',
+    cidade: d.cidade,
+    cep: String(d.cep || '').replace(/\D/g, ''),
+    pontoreferencia: d.pontoreferencia || '',
+    plano_id: String(d.plano_id),
+    vencimento_id: String(d.vencimento_id),
+    uf: d.uf || 'RN',
+    pais: d.pais || 'BR',
+    login: d.login || cpfDigits,
+    senha: d.senha || '123456',
+    pop_id: String(d.pop_id || popPadrao),
+    portador_id: String(d.portador_id || portadorPadrao),
+    nas_id: String(d.nas_id || 2),
+    os_instalacao: d.os_instalacao === false ? 'False' : 'True',
+    formacobranca_id: String(d.formacobranca_id || 1),
+    precadastro_ativar: String(d.precadastro_ativar ?? 1),
+    observacao: d.observacao || 'Pré-cadastro via IA GoCHAT',
+    ...(d.rg ? { rg: d.rg } : {}),
+    ...(d.rg_emissor ? { rg_emissor: d.rg_emissor } : {}),
+    ...(d.map_ll ? { map_ll: d.map_ll } : {}),
+    ...(d.condominio ? { condominio: String(d.condominio) } : {}),
+    ...(d.vendedor_id ? { vendedor_id: String(d.vendedor_id) } : {}),
+    ...(d.midia_id ? { midia_id: String(d.midia_id) } : {}),
+  };
+
+  const raw = await sgpPost('/api/precadastro/F', params);
+
+  // Normalização de resposta — SGP costuma retornar { message, id } ou erros variados
+  const ok = !raw?.error && !raw?.errors && (
+    String(raw?.message || '').toLowerCase().includes('sucesso') ||
+    raw?.id || raw?.cliente_id
+  );
+  return {
+    sucesso: !!ok,
+    mensagem: raw?.message || (ok ? 'Pré-cadastro criado com sucesso' : 'Falha no pré-cadastro'),
+    id: raw?.id || raw?.cliente_id || null,
+    raw,
+  };
+}
+
+
 export async function getAnthropicClient() {
   const key = await getKV('anthropic_api_key');
   if (!key) throw new Error('Anthropic API Key não configurada. Acesse Configurações → Integrações de IA.');

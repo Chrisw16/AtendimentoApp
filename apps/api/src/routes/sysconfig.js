@@ -48,7 +48,7 @@ sysconfigRouter.get('/:chave', asyncHandler(async (req, res) => {
 // ── ROTA DE TESTE DE TOOLS SGP ────────────────────────────────────────────
 import { consultarClientes, segundaViaBoleto, promessaPagamento, criarChamado,
   verificarConexao, consultarManutencao, historicoOcorrencias, consultarRadius,
-  statusRede } from '../services/integrations.js';
+  statusRede, precadastrarCliente } from '../services/integrations.js';
 
 sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandler(async (req, res) => {
   const { tool, params = {} } = req.body;
@@ -78,6 +78,8 @@ sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandle
           params.conteudo || 'Teste via painel',
           { contato_nome: params.contato_nome, contato_telefone: params.contato_telefone }
         ); break;
+      case 'precadastrar_cliente':
+        result = await precadastrarCliente(params); break;
       default:
         return res.status(400).json({ error: `Tool desconhecida: ${tool}` });
     }

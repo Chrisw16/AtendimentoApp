@@ -7,6 +7,7 @@ import {
   criarChamado, verificarConexao, consultarManutencao,
   historicoOcorrencias,
   statusRede, consultarOnuAcs, reiniciarOnuAcs, consultarRadius,
+  precadastrarCliente,
 } from './integrations.js';
 
 // ── DEFINIÇÃO DAS FERRAMENTAS ──────────────────────────────────────────────
@@ -112,6 +113,33 @@ export const IA_TOOLS = [
         cpfcnpj: { type: 'string', description: 'CPF ou CNPJ do cliente (com ou sem formatação)' },
       },
       required: ['cpfcnpj'],
+    },
+  },
+  {
+    name: 'precadastrar_cliente',
+    description: 'Cadastra um novo cliente PF (Pessoa Física) no SGP via pré-cadastro. Use APENAS no contexto comercial, depois de coletar TODOS os dados obrigatórios e confirmar com o cliente. Planos Natal/Macaíba/SGA: Essencial=12, Avançado=13, Premium=16. São Miguel do Gostoso: Essencial=30, Avançado=29, Premium=28. POPs: Macaíba/Natal=1, São Miguel=3, São Gonçalo=4. Portadores: Natal/Macaíba/SGA=16, São Miguel=18.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nome:            { type: 'string',  description: 'Nome completo do cliente' },
+        cpf:             { type: 'string',  description: 'CPF (com ou sem formatação)' },
+        datanasc:        { type: 'string',  description: 'Data de nascimento no formato AAAA-MM-DD' },
+        email:           { type: 'string',  description: 'E-mail do cliente' },
+        celular:         { type: 'string',  description: 'Celular com DDD, ex: 84988776644' },
+        logradouro:      { type: 'string',  description: 'Rua/Avenida do endereço' },
+        numero:          { type: 'string',  description: 'Número do endereço' },
+        complemento:     { type: 'string',  description: 'Complemento (apto, bloco, etc.) — opcional' },
+        bairro:          { type: 'string',  description: 'Bairro' },
+        cidade:          { type: 'string',  description: 'Cidade. Define automaticamente pop_id e portador_id se não forem passados.' },
+        cep:             { type: 'string',  description: 'CEP (com ou sem formatação)' },
+        pontoreferencia: { type: 'string',  description: 'Ponto de referência — opcional' },
+        plano_id:        { type: 'integer', description: 'ID do plano escolhido (ver descrição da tool)' },
+        vencimento_id:   { type: 'integer', description: 'ID do vencimento — pergunte ao cliente o melhor dia' },
+        pop_id:          { type: 'integer', description: 'Opcional. Auto-detectado pela cidade quando omitido.' },
+        portador_id:     { type: 'integer', description: 'Opcional. Auto-detectado pela cidade quando omitido.' },
+        observacao:      { type: 'string',  description: 'Observação adicional para a equipe — opcional' },
+      },
+      required: ['nome', 'cpf', 'datanasc', 'email', 'celular', 'logradouro', 'numero', 'bairro', 'cidade', 'plano_id', 'vencimento_id'],
     },
   },
   {
@@ -224,6 +252,29 @@ export async function executarTool(name, input, ctx) {
       if (!cpf) return 'CPF não disponível para consultar Radius.';
       const r = await consultarRadius(cpf).catch(e => ({ sessao_ativa: false, mensagem: e.message }));
       return r.mensagem;
+    }
+
+    case 'precadastrar_cliente': {
+      // CPF tem prioridade: input.cpf > input.cpfcnpj > ctx.cliente.cpf
+      const cpfFinal = input.cpf || input.cpfcnpj || ctx?.cliente?.cpf || ctx?.cliente?.cpfcnpj;
+      if (!cpfFinal) return '❌ CPF não informado. Pergunte ao cliente antes de cadastrar.';
+      const dados = {
+        ...input,
+        cpf: cpfFinal,
+        // Se a IA não passou nome mas existe no contexto, usa
+        nome: input.nome || ctx?.cliente?.nome,
+      };
+      const r = await precadastrarCliente(dados).catch(e => ({ sucesso: false, mensagem: e.message }));
+      if (!r.sucesso) {
+        // Erros típicos: CPF duplicado, e-mail inválido, plano inexistente
+        const msg = String(r.mensagem || '').toLowerCase();
+        if (msg.includes('cpf') && (msg.includes('exist') || msg.includes('duplicad') || msg.includes('cadastrad'))) {
+          return `⚠️ Este CPF já está cadastrado no sistema. ${r.mensagem}`;
+        }
+        return `❌ Não consegui finalizar o cadastro: ${r.mensagem}`;
+      }
+      const idTxt = r.id ? ` (ID: ${r.id})` : '';
+      return `✅ Cadastro criado com sucesso${idTxt}! Em breve nossa equipe entrará em contato para agendar a instalação.`;
     }
 
     case 'transferir_para_humano':

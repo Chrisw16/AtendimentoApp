@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Panel,
   addEdge, useNodesState, useEdgesState, MarkerType,
-  Handle, Position, useReactFlow,
+  Handle, Position, useReactFlow, useUpdateNodeInternals,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../store';
@@ -82,6 +82,27 @@ const VARS = [
   '{{chamado.protocolo}}','{{promessa.dias}}','{{promessa.data}}',
   '{{localizacao_lat}}','{{localizacao_lng}}','{{resposta}}',
 ];
+
+// ── TOOLS DISPONÍVEIS PARA O NÓ IA RESPONDE ──────────────────────
+// Lista exibida como checkbox no painel de propriedades do nó ia_responde.
+// Default (quando cfg.tools_ativas não estiver definido): tudo menos
+// `precadastrar_cliente` (sensível: cria cliente real no SGP).
+const IA_TOOLS_LIST = [
+  { id: 'verificar_conexao',     label: '📡 Verificar conexão',       cat: 'Diagnóstico' },
+  { id: 'consultar_manutencao',  label: '🔧 Consultar manutenção',    cat: 'Diagnóstico' },
+  { id: 'status_rede',           label: '🌐 Status da rede',          cat: 'Diagnóstico' },
+  { id: 'consultar_radius',      label: '🔌 Consultar Radius',        cat: 'Diagnóstico' },
+  { id: 'consultar_onu_acs',     label: '📶 Consultar ONU (ACS)',     cat: 'Diagnóstico' },
+  { id: 'reiniciar_onu_acs',     label: '🔄 Reiniciar ONU (ACS)',     cat: 'Diagnóstico' },
+  { id: 'criar_chamado',         label: '🎫 Criar chamado',           cat: 'Atendimento' },
+  { id: 'historico_ocorrencias', label: '📋 Histórico de ocorrências',cat: 'Atendimento' },
+  { id: 'segunda_via_boleto',    label: '💳 2ª via de boleto',        cat: 'Financeiro' },
+  { id: 'promessa_pagamento',    label: '🤝 Promessa de pagamento',   cat: 'Financeiro' },
+  { id: 'precadastrar_cliente',  label: '📝 Pré-cadastro de cliente', cat: 'Comercial'   },
+  { id: 'transferir_para_humano',label: '👤 Transferir para humano',  cat: 'Controle'    },
+  { id: 'encerrar_atendimento',  label: '✅ Encerrar atendimento',    cat: 'Controle'    },
+];
+const IA_TOOLS_DEFAULT = IA_TOOLS_LIST.map(t => t.id).filter(id => id !== 'precadastrar_cliente');
 
 // ── ESTILOS BASE ──────────────────────────────────────────────────
 const IS  = { width:'100%', background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:6, padding:'6px 9px', color:'#fff', fontSize:12, outline:'none', fontFamily:'DM Sans,sans-serif', boxSizing:'border-box' };
@@ -179,11 +200,22 @@ function getPortas(tipo, cfg = {}) {
 }
 
 // ── FLOW NODE — visual idêntico ao sistema de inspiração ─────────
-const FlowNode = memo(({ data, selected }) => {
+const FlowNode = memo(({ id, data, selected }) => {
   const def    = NODE_TYPES[data.tipo] || { label:data.tipo, color:'#888', group:'logica', portas:['saida'] };
   const cfg    = data.config || {};
   const portas = getPortas(data.tipo, cfg);
   const isSingle = portas.length === 1 && portas[0].id === 'saida';
+
+  // CRÍTICO no @xyflow/react v12: quando o número de portas muda dinamicamente
+  // (ex.: usuário adiciona/remove botão no nó enviar_botoes), precisamos avisar
+  // o React Flow para re-medir as posições dos handles. Sem isto, novos handles
+  // ficam visualmente presentes mas com hitbox inválida — drag não inicia.
+  // Ref: https://reactflow.dev/api-reference/hooks/use-update-node-internals
+  const updateNodeInternals = useUpdateNodeInternals();
+  const portasKey = portas.map(p => p.id).join(',');
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, portasKey, updateNodeInternals]);
 
   // Listas inline para enviar_lista
   const itensList = data.tipo === 'enviar_lista'
@@ -342,7 +374,55 @@ function PropsPanel({ node, onChange, onDelete }) {
 
         {node.data.tipo==='listar_planos'&&<Fld label="Cidade" hint="Preenche: planos.lista"><input value={cfg.cidade||''} onChange={e=>set('cidade',e.target.value)} placeholder="{{cliente.cidade}}" style={IS}/></Fld>}
 
-        {node.data.tipo==='ia_responde'&&<><Fld label="Contexto/assunto"><input value={cfg.contexto||''} onChange={e=>set('contexto',e.target.value)} placeholder="suporte, comercial, geral..." style={IS}/></Fld><Fld label="Instrução extra"><textarea value={cfg.prompt||''} onChange={e=>set('prompt',e.target.value)} rows={3} placeholder="O cliente já está identificado. Ajude com suporte técnico." style={TA}/></Fld><Fld label="Modelo"><select value={cfg.modelo||'haiku'} onChange={e=>set('modelo',e.target.value)} style={{...IS,cursor:'pointer'}}><option value="haiku">⚡ Claude Haiku — rápido</option><option value="sonnet">🧠 Claude Sonnet — capaz</option></select></Fld><Fld label="Máx. turnos" hint="Após este número → porta max_turnos"><input type="number" value={cfg.max_turns||5} onChange={e=>set('max_turns',parseInt(e.target.value)||5)} style={{...IS,width:80}}/></Fld><div style={{padding:'8px',background:'rgba(244,114,182,.05)',borderRadius:6,border:'1px solid rgba(244,114,182,.12)',fontSize:10.5,color:'rgba(255,255,255,.5)',lineHeight:1.7}}><b style={{color:'rgba(244,114,182,.8)'}}>Saídas:</b><br/><span style={{color:'#00c896'}}>●</span> resolvido · <span style={{color:'#ff6b35'}}>●</span> transferir · <span style={{color:'#f5c518'}}>●</span> max_turnos</div></>}
+        {node.data.tipo==='ia_responde' && (() => {
+          const toolsAtivas = Array.isArray(cfg.tools_ativas) ? cfg.tools_ativas : IA_TOOLS_DEFAULT;
+          const toggleTool = (id) => {
+            const novas = toolsAtivas.includes(id)
+              ? toolsAtivas.filter(t => t !== id)
+              : [...toolsAtivas, id];
+            set('tools_ativas', novas);
+          };
+          const cats = [...new Set(IA_TOOLS_LIST.map(t => t.cat))];
+          return (
+            <>
+              <Fld label="Contexto/assunto"><input value={cfg.contexto||''} onChange={e=>set('contexto',e.target.value)} placeholder="suporte, comercial, geral..." style={IS}/></Fld>
+              <Fld label="Instrução extra"><textarea value={cfg.prompt||''} onChange={e=>set('prompt',e.target.value)} rows={3} placeholder="O cliente já está identificado. Ajude com suporte técnico." style={TA}/></Fld>
+              <Fld label="Modelo">
+                <select value={cfg.modelo||'haiku'} onChange={e=>set('modelo',e.target.value)} style={{...IS,cursor:'pointer'}}>
+                  <option value="haiku">⚡ Claude Haiku — rápido</option>
+                  <option value="sonnet">🧠 Claude Sonnet — capaz</option>
+                </select>
+              </Fld>
+              <Fld label="Máx. turnos" hint="Após este número → porta max_turnos">
+                <input type="number" value={cfg.max_turns||5} onChange={e=>set('max_turns',parseInt(e.target.value)||5)} style={{...IS,width:80}}/>
+              </Fld>
+              <Fld label="Tools ativas" hint="Marque quais ferramentas a IA pode usar neste nó">
+                <div style={{display:'flex',flexDirection:'column',gap:4,padding:'6px',background:'rgba(255,255,255,.03)',borderRadius:6,border:'1px solid rgba(255,255,255,.06)'}}>
+                  {cats.map(cat => (
+                    <div key={cat} style={{marginBottom:3}}>
+                      <div style={{fontSize:9.5,color:'rgba(255,255,255,.4)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3,marginTop:3}}>{cat}</div>
+                      {IA_TOOLS_LIST.filter(t => t.cat === cat).map(t => {
+                        const ativa = toolsAtivas.includes(t.id);
+                        const sensivel = t.id === 'precadastrar_cliente';
+                        return (
+                          <label key={t.id} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 5px',cursor:'pointer',borderRadius:4,fontSize:11,color:ativa?'rgba(255,255,255,.85)':'rgba(255,255,255,.45)'}}>
+                            <input type="checkbox" checked={ativa} onChange={()=>toggleTool(t.id)} style={{cursor:'pointer',accentColor:'#3ecfff'}}/>
+                            <span>{t.label}</span>
+                            {sensivel && <span style={{fontSize:8.5,color:'#f59e0b',fontWeight:700,marginLeft:'auto'}}>SENSÍVEL</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </Fld>
+              <div style={{padding:'8px',background:'rgba(244,114,182,.05)',borderRadius:6,border:'1px solid rgba(244,114,182,.12)',fontSize:10.5,color:'rgba(255,255,255,.5)',lineHeight:1.7}}>
+                <b style={{color:'rgba(244,114,182,.8)'}}>Saídas:</b><br/>
+                <span style={{color:'#00c896'}}>●</span> resolvido · <span style={{color:'#ff6b35'}}>●</span> transferir · <span style={{color:'#f5c518'}}>●</span> max_turnos
+              </div>
+            </>
+          );
+        })()}
 
         {node.data.tipo==='ia_roteador'&&(()=>{const rotas=Array.isArray(cfg.rotas)?cfg.rotas:[];const setR=r=>set('rotas',r);return(<><Fld label="Mensagem inicial"><textarea value={cfg.mensagem||''} onChange={e=>set('mensagem',e.target.value)} rows={2} placeholder="Posso te ajudar com mais alguma coisa? 😊" style={TA}/></Fld><Fld label="Rotas (intenções)" hint="Cada rota = uma porta de saída">{rotas.map((r,i)=><div key={i} style={{marginBottom:8,padding:'8px',background:'rgba(232,121,249,.05)',borderRadius:7,border:'1px solid rgba(232,121,249,.15)'}}><div style={{display:'flex',gap:5,marginBottom:5}}><div style={{flex:1}}><div style={{fontSize:9.5,color:'rgba(255,255,255,.3)',marginBottom:2}}>ID da porta</div><input value={r.id||''} onChange={e=>{const n=[...rotas];n[i]={...n[i],id:e.target.value.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'')};setR(n);}} placeholder="boleto" style={{...IS,fontSize:11,fontFamily:'monospace'}}/></div><div style={{flex:2}}><div style={{fontSize:9.5,color:'rgba(255,255,255,.3)',marginBottom:2}}>Label</div><input value={r.label||''} onChange={e=>{const n=[...rotas];n[i]={...n[i],label:e.target.value};setR(n);}} placeholder="2ª via de boleto" style={{...IS,fontSize:11}}/></div><button onClick={()=>{const n=[...rotas];n.splice(i,1);setR(n);}} style={{background:'none',border:'none',color:'#ff4757',cursor:'pointer',fontSize:15,padding:'0 4px',flexShrink:0,alignSelf:'flex-end',marginBottom:2}}>×</button></div><div style={{fontSize:9.5,color:'rgba(255,255,255,.3)',marginBottom:2}}>Descrição para a IA</div><input value={r.descricao||''} onChange={e=>{const n=[...rotas];n[i]={...n[i],descricao:e.target.value};setR(n);}} placeholder="quando o cliente quer ver ou pagar boleto" style={{...IS,fontSize:10.5}}/></div>)}<button onClick={()=>setR([...rotas,{id:'',label:'',descricao:''}])} style={{width:'100%',padding:'6px 0',background:'rgba(232,121,249,.06)',border:'1px dashed rgba(232,121,249,.3)',borderRadius:6,color:'#e879f9',fontSize:11,cursor:'pointer'}}>+ Adicionar rota</button></Fld></>);})()}
 

@@ -618,6 +618,9 @@ async function processarIAResponde(no, ctx) {
 
   // Carrega tools disponíveis
   const { IA_TOOLS, executarTool } = await import('./iaTools.js');
+  // Lista padrão (suporte/atendimento). Tools sensíveis como `precadastrar_cliente`
+  // ficam fora do default — devem ser ativadas explicitamente em cfg.tools_ativas
+  // (ex.: no nó IA Responde do fluxo comercial).
   const toolsAtivas = cfg.tools_ativas || [
     'verificar_conexao', 'consultar_manutencao', 'status_rede',
     'consultar_onu_acs', 'reiniciar_onu_acs', 'consultar_radius',
