@@ -54,6 +54,26 @@ async function processarMensagemTelegram(chatId, nome, texto, externalId, tipo =
   const existe = await mensagemRepo.porExternalId(externalId);
   if (existe) return;
 
+  // Verifica se há conversa encerrada aguardando avaliação
+  const { getDb } = await import('../../config/db.js');
+  const conversaAv = await getDb()('conversas')
+    .where({ telefone: chatId, canal: 'telegram', aguardando_avaliacao: true })
+    .orderBy('atualizado', 'desc')
+    .first();
+
+  if (conversaAv) {
+    const nota = parseInt((texto || '').trim(), 10);
+    if (nota >= 1 && nota <= 5) {
+      await getDb()('conversas').where({ id: conversaAv.id }).update({ aguardando_avaliacao: false });
+      const [av] = await getDb()('avaliacoes')
+        .insert({ conversa_id: conversaAv.id, agente_id: conversaAv.agente_id || null, nota })
+        .returning('*');
+      broadcast('nova_avaliacao', av);
+    }
+    // Nota inválida OU válida — nunca cria novo atendimento; flag mantido para nova tentativa
+    return;
+  }
+
   let conversa = await conversaRepo.porTelefoneCanal(chatId, 'telegram');
   if (!conversa) {
     conversa = await conversaRepo.criar({ canal: 'telegram', telefone: chatId, nome, status: 'ia' });

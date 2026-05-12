@@ -52,10 +52,9 @@ async function processarMensagemMeta(msg, value) {
         .returning('*');
       const { broadcast: bcast } = await import('../sseManager.js');
       bcast('nova_avaliacao', av).catch(() => {});
-      return; // não processa como mensagem normal
     }
-    // Nota inválida — cancela a espera para evitar loop
-    await getDb()('conversas').where({ id: conversaAv.id }).update({ aguardando_avaliacao: false });
+    // Nota inválida OU válida — nunca cria novo atendimento; flag mantido para nova tentativa
+    return;
   }
 
   // Encontra ou cria conversa
