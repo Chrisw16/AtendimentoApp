@@ -107,13 +107,18 @@ function ConvDetalhe({ conv, onClose }) {
 
 // ── HISTORICO PAGE ────────────────────────────────────────────────
 export default function Historico() {
-  const [busca,   setBusca]   = useState('');
-  const [canal,   setCanal]   = useState('todos');
-  const [status,  setStatus]  = useState('encerrada');
-  const [selected,setSelected]= useState(null);
+  const [busca,      setBusca]      = useState('');
+  const [buscaAtiva, setBuscaAtiva] = useState('');
+  const [canal,      setCanal]      = useState('todos');
+  const [status,     setStatus]     = useState('encerrada');
+  const [selected,   setSelected]   = useState(null);
+
+  function pesquisar() {
+    setBuscaAtiva(busca.trim());
+  }
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['historico', { canal, status, busca }],
+    queryKey: ['historico', { canal, status, buscaAtiva }],
     queryFn:  () => chatApi.conversas({
       status: status === 'todos' ? undefined : status,
       canal:  canal  === 'todos' ? undefined : canal,
@@ -121,8 +126,8 @@ export default function Historico() {
     }),
     select: (d) => {
       const list = d.conversas || [];
-      if (!busca.trim()) return list;
-      const q = busca.toLowerCase();
+      if (!buscaAtiva.trim()) return list;
+      const q = buscaAtiva.toLowerCase();
       return list.filter(c =>
         c.nome?.toLowerCase().includes(q)   ||
         c.telefone?.includes(q)             ||
@@ -146,8 +151,12 @@ export default function Historico() {
             placeholder="Buscar por nome, telefone, protocolo..."
             value={busca}
             onChange={e => setBusca(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && pesquisar()}
             aria-label="Buscar conversa"
           />
+          <button className={styles.searchBtn} onClick={pesquisar} aria-label="Pesquisar">
+            Pesquisar
+          </button>
         </div>
 
         <div className={styles.filterGroup}>

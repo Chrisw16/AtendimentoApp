@@ -7,7 +7,6 @@ const FILTROS = [
   { key: 'ia',        label: 'IA' },
   { key: 'aguardando',label: 'Fila' },
   { key: 'ativa',     label: 'Agente' },
-  { key: 'encerrada', label: 'Encerradas' },
 ];
 
 const STATUS_META = {
