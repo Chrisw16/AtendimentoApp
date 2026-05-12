@@ -202,7 +202,7 @@ export default function Historico() {
             <div className={styles.empty}>
               <Clock size={32} className={styles.emptyIcon} />
               <p>Nenhuma conversa encontrada</p>
-              {busca && <p className={styles.emptyHint}>Tente outros termos de busca</p>}
+              {buscaAtiva && <p className={styles.emptyHint}>Tente outros termos de busca</p>}
             </div>
           ) : (
             conversas.map(c => (

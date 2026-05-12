@@ -37,7 +37,10 @@ chatRouter.get('/sse', (req, res) => {
 // ── CONVERSAS ─────────────────────────────────────────────────────
 chatRouter.get('/conversas', asyncHandler(async (req, res) => {
   const { status, canal, limit, offset } = req.query;
-  const agenteId = req.agente.role !== 'admin' ? req.agente.id : undefined;
+  // Encerradas são histórico compartilhado — não filtra por agente independente do role
+  const agenteId = req.agente.role !== 'admin' && status !== 'encerrada'
+    ? req.agente.id
+    : undefined;
 
   const conversas = await conversaRepo.listar({ status, canal, agenteId, limit: Number(limit) || 100, offset: Number(offset) || 0 });
   const db = getDb();
