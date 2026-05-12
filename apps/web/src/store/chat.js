@@ -60,13 +60,21 @@ export const useChatStore = create((set, get) => ({
 
   /* ── MODO ─────────────────────────────────────────────────── */
   modo: 'bot',   // 'bot' | 'humano'
-  setModo: (modo) => set({ modo }),
+  setModo: (modo) => set({ modo, filtro: 'todas' }),
 
   /* ── COMPUTED ─────────────────────────────────────────────── */
   conversasFiltradas: () => {
-    const { conversas, filtro, busca } = get();
+    const { conversas, filtro, busca, modo } = get();
     let list = conversas;
 
+    // Filtro de modo — aplicado primeiro
+    if (modo === 'bot') {
+      list = list.filter(c => c.status === 'ia');
+    } else if (modo === 'humano') {
+      list = list.filter(c => c.status === 'ativa' || c.status === 'aguardando');
+    }
+
+    // Sub-filtro por aba de status (dentro do modo ativo)
     if (filtro !== 'todas') {
       list = list.filter(c => c.status === filtro);
     }
