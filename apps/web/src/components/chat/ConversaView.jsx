@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import {
   Send, Paperclip, Smile, Bot, User, MoreVertical,
-  CheckCheck, Check, Clock, AlertCircle, ChevronDown,
+  CheckCheck, Check, Clock, AlertCircle, ChevronDown, XCircle,
 } from 'lucide-react';
 import Button from '../ui/Button';
 import styles from './ConversaView.module.css';
@@ -123,12 +123,63 @@ function MessageInput({ onEnviar, disabled }) {
   );
 }
 
+/* ── MODAL ENCERRAR ──────────────────────────────────────────── */
+function ModalEncerrar({ onConfirmar, onCancelar }) {
+  const [motivo, setMotivo]             = useState('');
+  const [solicitarAv, setSolicitarAv]   = useState(true);
+
+  return (
+    <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-label="Encerrar conversa">
+      <div className={styles.modal}>
+        <div className={styles.modalHeader}>
+          <XCircle size={16} className={styles.modalIcon} />
+          <span className={styles.modalTitle}>Encerrar conversa</span>
+        </div>
+
+        <label className={styles.modalLabel}>
+          Motivo (opcional)
+          <input
+            className={styles.modalInput}
+            type="text"
+            value={motivo}
+            onChange={e => setMotivo(e.target.value)}
+            placeholder="Ex: Problema resolvido"
+            autoFocus
+          />
+        </label>
+
+        <label className={styles.checkboxLabel}>
+          <input
+            type="checkbox"
+            checked={solicitarAv}
+            onChange={e => setSolicitarAv(e.target.checked)}
+            className={styles.checkbox}
+          />
+          Solicitar avaliação do cliente (1–5)
+        </label>
+
+        <div className={styles.modalActions}>
+          <Button variant="ghost" size="sm" onClick={onCancelar}>Cancelar</Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => onConfirmar({ motivo: motivo.trim() || undefined, solicitar_avaliacao: solicitarAv })}
+          >
+            Encerrar
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── CONVERSA VIEW ───────────────────────────────────────────── */
 export default function ConversaView({ chat, conversa }) {
-  const { mensagens, conversaAtiva, enviarMensagem, assumir, devolverIA } = chat;
+  const { mensagens, conversaAtiva, enviarMensagem, assumir, devolverIA, encerrar } = chat;
   const listRef    = useRef(null);
   const atBottom   = useRef(true);
-  const [showScroll, setShowScroll] = useState(false);
+  const [showScroll,   setShowScroll]   = useState(false);
+  const [modalEncerrar, setModalEncerrar] = useState(false);
 
   const msgs = (mensagens[conversaAtiva] || []);
 
@@ -172,7 +223,13 @@ export default function ConversaView({ chat, conversa }) {
 
   const podeAssumir  = conversa.status === 'aguardando' || conversa.status === 'ia';
   const podeDevolver = conversa.status === 'ativa';
+  const podeEncerrar = conversa.status !== 'encerrada';
   const encerrada    = conversa.status === 'encerrada';
+
+  function handleEncerrar(opcoes) {
+    encerrar?.(conversa.id, opcoes);
+    setModalEncerrar(false);
+  }
 
   return (
     <div className={styles.root}>
@@ -196,6 +253,11 @@ export default function ConversaView({ chat, conversa }) {
           {podeDevolver && (
             <Button variant="ghost" size="sm" icon={Bot} onClick={() => devolverIA(conversa.id)}>
               Devolver IA
+            </Button>
+          )}
+          {podeEncerrar && (
+            <Button variant="danger" size="sm" icon={XCircle} onClick={() => setModalEncerrar(true)}>
+              Encerrar
             </Button>
           )}
           <Button variant="ghost" size="sm" icon={MoreVertical} aria-label="Mais opções" />
@@ -226,6 +288,14 @@ export default function ConversaView({ chat, conversa }) {
         />
       ) : (
         <div className={styles.encerrada}>Conversa encerrada</div>
+      )}
+
+      {/* ── MODAL ENCERRAR ── */}
+      {modalEncerrar && (
+        <ModalEncerrar
+          onConfirmar={handleEncerrar}
+          onCancelar={() => setModalEncerrar(false)}
+        />
       )}
     </div>
   );

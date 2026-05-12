@@ -36,6 +36,28 @@ async function processarMensagemMeta(msg, value) {
   const existe = await mensagemRepo.porExternalId(msg.id);
   if (existe) return;
 
+  // Verifica se há conversa encerrada aguardando avaliação
+  const { getDb } = await import('../../config/db.js');
+  const conversaAv = await getDb()('conversas')
+    .where({ telefone, canal, aguardando_avaliacao: true })
+    .orderBy('atualizado', 'desc')
+    .first();
+
+  if (conversaAv) {
+    const nota = parseInt(msg.text?.body?.trim(), 10);
+    if (nota >= 1 && nota <= 5) {
+      await getDb()('conversas').where({ id: conversaAv.id }).update({ aguardando_avaliacao: false });
+      const [av] = await getDb()('avaliacoes')
+        .insert({ conversa_id: conversaAv.id, agente_id: conversaAv.agente_id || null, nota })
+        .returning('*');
+      const { broadcast: bcast } = await import('../sseManager.js');
+      bcast('nova_avaliacao', av).catch(() => {});
+      return; // não processa como mensagem normal
+    }
+    // Nota inválida — cancela a espera para evitar loop
+    await getDb()('conversas').where({ id: conversaAv.id }).update({ aguardando_avaliacao: false });
+  }
+
   // Encontra ou cria conversa
   let conversa = await conversaRepo.porTelefoneCanal(telefone, canal);
 

@@ -137,10 +137,39 @@ chatRouter.post('/conversas/:id/devolver-ia', asyncHandler(async (req, res) => {
 }));
 
 chatRouter.post('/conversas/:id/encerrar', asyncHandler(async (req, res) => {
-  const { motivo } = req.body;
+  const { motivo, solicitar_avaliacao = false } = req.body;
+  const db = getDb();
+
+  // Busca a conversa antes de encerrar para ter canal/telefone/agente_id
+  const convAntes = await conversaRepo.porId(req.params.id);
+  if (!convAntes) throw new HttpError(404, 'Conversa não encontrada');
+
   const conv = await conversaRepo.encerrar(req.params.id);
-  if (!conv) throw new HttpError(404, 'Conversa não encontrada');
-  if (motivo) await mensagemRepo.criar({ conversa_id: conv.id, origem: 'sistema', tipo: 'texto', texto: `🔴 Conversa encerrada: ${motivo}` });
+
+  if (motivo) {
+    await mensagemRepo.criar({ conversa_id: conv.id, origem: 'sistema', tipo: 'texto', texto: `🔴 Conversa encerrada: ${motivo}` });
+  }
+
+  if (solicitar_avaliacao && convAntes.telefone) {
+    const texto = '⭐ Como foi o seu atendimento? Responda com um número de 1 a 5\n(1 = Muito ruim  |  5 = Excelente)';
+
+    // Marca a conversa como aguardando avaliação antes de enviar a msg
+    await db('conversas').where({ id: conv.id }).update({ aguardando_avaliacao: true });
+
+    // Registra como mensagem interna (visível no histórico)
+    await mensagemRepo.criar({ conversa_id: conv.id, origem: 'sistema', tipo: 'texto', texto });
+
+    // Envia para o canal externo
+    if (convAntes.canal === 'whatsapp') {
+      const instancia = convAntes.canal_instancia || 'default';
+      evolutionEnviarTexto(instancia, convAntes.telefone, texto)
+        .catch(err => console.error('[Chat] Avaliação Evolution send failed:', err.message));
+    } else if (convAntes.canal === 'telegram') {
+      tgEnviarTexto(convAntes.telefone, texto)
+        .catch(err => console.error('[Chat] Avaliação Telegram send failed:', err.message));
+    }
+  }
+
   broadcast('conversa_atualizada', conv);
   res.json(conv);
 }));

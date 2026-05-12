@@ -128,9 +128,11 @@ export function useChat() {
     }
   }, []);
 
-  const encerrar = useCallback(async (conversaId, motivo) => {
+  const encerrar = useCallback(async (conversaId, opcoes = {}) => {
     try {
-      const conv = await chatApi.encerrar(conversaId, { motivo });
+      // opcoes pode ser string (legado) ou { motivo, solicitar_avaliacao }
+      const body = typeof opcoes === 'string' ? { motivo: opcoes } : opcoes;
+      const conv = await chatApi.encerrar(conversaId, body);
       store.upsertConversa(conv);
       if (store.conversaAtiva === conversaId) store.setConversaAtiva(null);
     } catch (err) {

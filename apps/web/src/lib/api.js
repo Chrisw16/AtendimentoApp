@@ -184,6 +184,13 @@ export const canaisApi = {
   update: (tipo, body) => api.put(`/canais/${tipo}`, body),
 };
 
+// ── ENDPOINTS — SATISFAÇÃO ───────────────────────────────────────
+export const satisfacaoApi = {
+  resumo:     (params = {}) => api.get('/satisfacao/resumo?' + new URLSearchParams(params)),
+  avaliacoes: (params = {}) => api.get('/satisfacao/avaliacoes?' + new URLSearchParams(params)),
+  criar:      (body)        => api.post('/satisfacao/avaliacoes', body),
+};
+
 // ── ENDPOINTS — FINANCEIRO ────────────────────────────────────────
 export const financeiroApi = {
   resumo:   (params)   => api.get('/financeiro/resumo?' + new URLSearchParams(params)),
