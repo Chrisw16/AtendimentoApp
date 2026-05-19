@@ -17,7 +17,6 @@ export function useChat() {
     try {
       const data = await chatApi.conversas();
       store.setConversas(data.conversas || data);
-      store.setModo(data.modo || 'bot');
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -55,8 +54,8 @@ export function useChat() {
       mensagem_removida: (data) => {
         store.removeMensagem(data.conversa_id, data.id);
       },
-      modo_alterado: (data) => {
-        store.setModo(data.modo);
+      modo_alterado: (_data) => {
+        // modo global do sistema — sem efeito na UI das abas
       },
       sla_critico: (data) => {
         toast(`🚨 Fila crítica: ${data.nome} aguarda ${data.minutos}min`, 'error', 8000);

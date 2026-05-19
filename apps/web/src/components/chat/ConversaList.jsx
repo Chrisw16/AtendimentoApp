@@ -1,12 +1,11 @@
 import { useRef, useEffect } from 'react';
-import { Search, Bot, User, RefreshCw } from 'lucide-react';
+import { Search, RefreshCw } from 'lucide-react';
 import styles from './ConversaList.module.css';
 
 const FILTROS = [
-  { key: 'todas',     label: 'Todas' },
-  { key: 'ia',        label: 'IA' },
-  { key: 'aguardando',label: 'Fila' },
-  { key: 'ativa',     label: 'Agente' },
+  { key: 'todas',      label: 'Todas' },
+  { key: 'ia',         label: 'IA' },
+  { key: 'aguardando', label: 'Fila' },
 ];
 
 const STATUS_META = {
@@ -89,7 +88,7 @@ function ConversaItem({ conv, ativa, onClick }) {
 
 export default function ConversaList({ chat }) {
   const { conversasFiltradas, conversaAtiva, filtro, busca,
-          setFiltro, setBusca, selecionarConversa, modo, setModo } = chat;
+          setFiltro, setBusca, selecionarConversa } = chat;
 
   const searchRef = useRef(null);
 
@@ -111,17 +110,6 @@ export default function ConversaList({ chat }) {
       <div className={styles.header}>
         <div className={styles.headerTop}>
           <span className={styles.title}>Conversas</span>
-          <div className={styles.headerActions}>
-            {/* Toggle modo bot/humano */}
-            <button
-              className={[styles.modeBtn, modo === 'bot' && styles.modeBot].join(' ')}
-              onClick={() => setModo(modo === 'bot' ? 'humano' : 'bot')}
-              title={modo === 'bot' ? 'Modo IA ativo — clique para modo humano' : 'Modo humano ativo — clique para IA'}
-            >
-              {modo === 'bot' ? <Bot size={13} /> : <User size={13} />}
-              <span>{modo === 'bot' ? 'IA' : 'Humano'}</span>
-            </button>
-          </div>
         </div>
 
         {/* Busca */}
