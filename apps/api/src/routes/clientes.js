@@ -39,9 +39,9 @@ clientesRouter.get('/', asyncHandler(async (req, res) => {
 
   if (q) {
     query = query.where(b =>
-      b.whereLike('nome', `%${q}%`)
-       .orWhereLike('telefone', `%${q}%`)
-       .orWhereLike('email', `%${q}%`)
+      b.whereILike('nome', `%${q}%`)
+       .orWhereILike('telefone', `%${q}%`)
+       .orWhereILike('email', `%${q}%`)
     );
   }
 
@@ -68,7 +68,7 @@ clientesRouter.get('/buscar', asyncHandler(async (req, res) => {
 
   const db = getDb();
   const r = await db('conversas').whereNotNull('nome')
-    .where(b => b.whereLike('nome', `%${q}%`).orWhereLike('telefone', `%${q}%`))
+    .where(b => b.whereILike('nome', `%${q}%`).orWhereILike('telefone', `%${q}%`))
     .select(['id','nome','telefone','email','contrato_id']).limit(10);
   res.json(r);
 }));
