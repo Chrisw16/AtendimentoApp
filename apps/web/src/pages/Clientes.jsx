@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { clientesApi } from '../lib/api';
 import {
@@ -8,15 +8,14 @@ import {
 } from 'lucide-react';
 import styles from './Clientes.module.css';
 
-// ── DEBOUNCE HOOK ─────────────────────────────────────────────────
-function useDebounce(value, delay = 400) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useState(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(timer);
-  });
-  return debouncedValue;
-}
+const CANAL_EMOJI = {
+  whatsapp: '📱',
+  telegram: '✈️',
+  widget:   '💬',
+  email:    '✉️',
+  voip:     '📞',
+  sms:      '📨',
+};
 
 // ── STATUS CONEXÃO ────────────────────────────────────────────────
 function StatusConexao({ status }) {
@@ -46,7 +45,10 @@ function ClienteRow({ cliente, onClick, selecionado }) {
       <div className={styles.rowAvatar}>{initial}</div>
       <div className={styles.rowInfo}>
         <div className={styles.rowTop}>
-          <span className={styles.rowNome}>{cliente.nome}</span>
+          <span className={styles.rowNome}>
+            {CANAL_EMOJI[cliente.canal] || '💬'}{' '}
+            {cliente.nome}
+          </span>
           {cliente.contrato_status && <StatusConexao status={cliente.contrato_status} />}
         </div>
         <div className={styles.rowBottom}>
@@ -170,12 +172,16 @@ function InfoRow({ icon: Icon, label, value, children }) {
 // ── CLIENTES PAGE ─────────────────────────────────────────────────
 export default function Clientes() {
   const [busca,      setBusca]      = useState('');
+  const [buscaAtiva, setBuscaAtiva] = useState('');
   const [selecionado,setSelecionado]= useState(null);
-  const buscaDebounced = useDebounce(busca);
+
+  function pesquisar() {
+    setBuscaAtiva(busca.trim());
+  }
 
   const { data: clientes = [], isLoading, isFetching } = useQuery({
-    queryKey: ['clientes', buscaDebounced],
-    queryFn:  () => clientesApi.list({ q: buscaDebounced, limit: 50 }),
+    queryKey: ['clientes', buscaAtiva],
+    queryFn:  () => clientesApi.list({ q: buscaAtiva || undefined, limit: 50 }),
     select:   d => d.clientes || d,
     enabled:  true,
   });
@@ -192,9 +198,13 @@ export default function Clientes() {
             placeholder="Buscar por nome, CPF, telefone..."
             value={busca}
             onChange={e => setBusca(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && pesquisar()}
             autoFocus
           />
           {isFetching && <Loader size={12} className={styles.searchLoading} />}
+          <button className={styles.searchBtn} onClick={pesquisar} aria-label="Pesquisar">
+            Pesquisar
+          </button>
         </div>
         <span className={styles.counter}>{clientes.length} cliente{clientes.length !== 1 ? 's' : ''}</span>
       </div>

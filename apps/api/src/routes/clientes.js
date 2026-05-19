@@ -28,13 +28,12 @@ clientesRouter.get('/', asyncHandler(async (req, res) => {
     } catch { /* fallback local */ }
   }
 
-  // Fallback: conversas no banco local
+  // Fallback: conversas no banco local — uma linha por telefone (mais recente)
   const db = getDb();
   let query = db('conversas')
     .whereNotNull('nome')
-    .select(['id','nome','telefone','email','cidade','canal','contrato_id'])
-    .groupBy(['id','nome','telefone','email','cidade','canal','contrato_id'])
-    .orderBy('nome')
+    .select(db.raw('DISTINCT ON (COALESCE(telefone, id::text)) id, nome, telefone, email, cidade, canal, contrato_id'))
+    .orderByRaw('COALESCE(telefone, id::text), atualizado DESC')
     .limit(Number(limit))
     .offset(Number(offset));
 
