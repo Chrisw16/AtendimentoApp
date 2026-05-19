@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, MessageSquare, Clock, User, Bot, ChevronRight, Filter } from 'lucide-react';
-import { chatApi } from '../lib/api';
+import { chatApi, agentesApi } from '../lib/api';
+import { useStore } from '../store';
 import styles from './Historico.module.css';
 
 const STATUS_META = {
@@ -107,22 +108,36 @@ function ConvDetalhe({ conv, onClose }) {
 
 // ── HISTORICO PAGE ────────────────────────────────────────────────
 export default function Historico() {
-  const [busca,      setBusca]      = useState('');
-  const [buscaAtiva, setBuscaAtiva] = useState('');
-  const [canal,      setCanal]      = useState('todos');
-  const [status,     setStatus]     = useState('encerrada');
-  const [selected,   setSelected]   = useState(null);
+  const [busca,        setBusca]        = useState('');
+  const [buscaAtiva,   setBuscaAtiva]   = useState('');
+  const [canal,        setCanal]        = useState('todos');
+  const [status,       setStatus]       = useState('encerrada');
+  const [dataInicio,   setDataInicio]   = useState('');
+  const [dataFim,      setDataFim]      = useState('');
+  const [agenteFiltro, setAgenteFiltro] = useState('');
+  const [selected,     setSelected]     = useState(null);
+
+  const role = useStore(s => s.role);
 
   function pesquisar() {
     setBuscaAtiva(busca.trim());
   }
 
+  const { data: listaAgentes } = useQuery({
+    queryKey: ['agentes'],
+    queryFn:  () => agentesApi.list(),
+    staleTime: 60_000,
+  });
+
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['historico', { canal, status, buscaAtiva }],
+    queryKey: ['historico', { canal, status, buscaAtiva, dataInicio, dataFim, agenteFiltro }],
     queryFn:  () => {
       const params = { limit: 80 };
-      if (status !== 'todos') params.status = status;
-      if (canal  !== 'todos') params.canal  = canal;
+      if (status !== 'todos') params.status    = status;
+      if (canal  !== 'todos') params.canal     = canal;
+      if (dataInicio)         params.dataInicio = dataInicio;
+      if (dataFim)            params.dataFim    = dataFim;
+      if (agenteFiltro)       params.agenteId   = agenteFiltro;
       return chatApi.conversas(params);
     },
     select: (d) => {
@@ -174,6 +189,30 @@ export default function Historico() {
               <option key={c} value={c}>{c === 'todos' ? 'Todos os canais' : c}</option>
             ))}
           </select>
+          <input
+            type="date"
+            className={styles.select}
+            value={dataInicio}
+            onChange={e => setDataInicio(e.target.value)}
+            aria-label="Data início"
+            title="Data início"
+          />
+          <input
+            type="date"
+            className={styles.select}
+            value={dataFim}
+            onChange={e => setDataFim(e.target.value)}
+            aria-label="Data fim"
+            title="Data fim"
+          />
+          {role === 'admin' && (
+            <select className={styles.select} value={agenteFiltro} onChange={e => setAgenteFiltro(e.target.value)} aria-label="Filtrar por agente">
+              <option value="">Todos os agentes</option>
+              {(listaAgentes || []).map(a => (
+                <option key={a.id} value={a.id}>{a.nome}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 

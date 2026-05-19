@@ -11,7 +11,7 @@ const CONVERSA_FIELDS = [
 
 export const conversaRepo = {
   // ── LISTAGEM ─────────────────────────────────────────────────
-  async listar({ status, canal, agenteId, limit = 100, offset = 0 } = {}) {
+  async listar({ status, canal, agenteId, dataInicio, dataFim, limit = 100, offset = 0 } = {}) {
     const db = getDb();
     let q = db('conversas')
       .leftJoin('agentes', 'conversas.agente_id', 'agentes.id')
@@ -20,9 +20,11 @@ export const conversaRepo = {
       .limit(limit)
       .offset(offset);
 
-    if (status)   q = q.where('conversas.status', status);
-    if (canal)    q = q.where('conversas.canal', canal);
-    if (agenteId) q = q.where('conversas.agente_id', agenteId);
+    if (status)     q = q.where('conversas.status', status);
+    if (canal)      q = q.where('conversas.canal', canal);
+    if (agenteId)   q = q.where('conversas.agente_id', agenteId);
+    if (dataInicio) q = q.where('conversas.criado_em', '>=', dataInicio);
+    if (dataFim)    q = q.where('conversas.criado_em', '<=', `${dataFim} 23:59:59`);
 
     return q;
   },
