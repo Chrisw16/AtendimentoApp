@@ -63,7 +63,9 @@ export const useChatStore = create((set, get) => ({
     const { conversas, filtro, busca } = get();
     let list = conversas;
 
-    if (filtro !== 'todas') {
+    if (filtro === 'todas') {
+      list = list.filter(c => c.status !== 'encerrada');
+    } else {
       list = list.filter(c => c.status === filtro);
     }
 
