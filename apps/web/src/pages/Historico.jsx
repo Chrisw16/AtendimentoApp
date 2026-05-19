@@ -119,11 +119,12 @@ export default function Historico() {
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['historico', { canal, status, buscaAtiva }],
-    queryFn:  () => chatApi.conversas({
-      status: status === 'todos' ? undefined : status,
-      canal:  canal  === 'todos' ? undefined : canal,
-      limit: 80,
-    }),
+    queryFn:  () => {
+      const params = { limit: 80 };
+      if (status !== 'todos') params.status = status;
+      if (canal  !== 'todos') params.canal  = canal;
+      return chatApi.conversas(params);
+    },
     select: (d) => {
       const list = d.conversas || [];
       if (!buscaAtiva.trim()) return list;
