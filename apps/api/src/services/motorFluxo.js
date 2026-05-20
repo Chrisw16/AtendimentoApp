@@ -28,7 +28,15 @@ export async function processarConversa(conversa, mensagemCliente) {
 
   // Busca fluxo ativo — usa campo dados (editor visual) com fallback para nos/conexoes
   const fluxo = await db('fluxos').where({ ativo: true }).first();
-  if (!fluxo) return processarIADireta(conversa, mensagemCliente);
+  if (!fluxo) {
+    await conversaRepo.atualizar(conversa.id, {
+      status: 'aguardando',
+      aguardando_desde: new Date().toISOString(),
+      agente_id: null,
+    });
+    broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));
+    return;
+  }
 
   const dados = parseDados(fluxo);
   console.log(`[Motor] Fluxo "${fluxo.nome}": ${dados.nodes?.length || 0} nós, ${dados.edges?.length || 0} edges`);

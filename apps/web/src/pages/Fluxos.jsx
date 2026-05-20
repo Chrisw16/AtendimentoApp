@@ -72,7 +72,7 @@ function FluxoModal({ fluxo, onClose, onSave }) {
 }
 
 // ── FLUXO CARD ────────────────────────────────────────────────────
-function FluxoCard({ fluxo, onEdit, onAtivar, onDelete, onOpenEditor }) {
+function FluxoCard({ fluxo, onEdit, onAtivar, onDesativar, onDelete, onOpenEditor }) {
   // dados pode ser string JSON ou objeto — editor salva em dados.nodes
   const dadosParsed = (() => {
     try { return typeof fluxo.dados === 'string' ? JSON.parse(fluxo.dados) : (fluxo.dados || {}); }
@@ -113,7 +113,7 @@ function FluxoCard({ fluxo, onEdit, onAtivar, onDelete, onOpenEditor }) {
           variant={fluxo.ativo ? 'ghost' : 'accent'}
           size="sm"
           icon={fluxo.ativo ? ZapOff : Zap}
-          onClick={() => onAtivar(fluxo)}
+          onClick={() => fluxo.ativo ? onDesativar(fluxo) : onAtivar(fluxo)}
         >
           {fluxo.ativo ? 'Desativar' : 'Ativar'}
         </Button>
@@ -154,6 +154,12 @@ export default function Fluxos() {
   const ativarMut = useMutation({
     mutationFn: (id) => fluxosApi.ativar(id),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: ['fluxos'] }); toast('Fluxo ativado', 'success'); },
+    onError:    err => toast(err.message, 'error'),
+  });
+
+  const despublicarMut = useMutation({
+    mutationFn: (id) => fluxosApi.despublicar(id),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['fluxos'] }); toast('Fluxo desativado', 'info'); },
     onError:    err => toast(err.message, 'error'),
   });
 
@@ -214,7 +220,8 @@ export default function Fluxos() {
               key={f.id}
               fluxo={f}
               onEdit={setModal}
-              onAtivar={(f) => ativarMut.mutate(f.id)}
+              onAtivar={(f)    => ativarMut.mutate(f.id)}
+              onDesativar={(f) => despublicarMut.mutate(f.id)}
               onDelete={handleDelete}
               onOpenEditor={f => navigate(`/fluxos/${f.id}`)}
             />

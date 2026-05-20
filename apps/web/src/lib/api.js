@@ -175,7 +175,8 @@ export const fluxosApi = {
   create:  (body)      => api.post('/fluxos', body),
   update:  (id, body)  => api.put(`/fluxos/${id}`, body),
   delete:  (id)        => api.delete(`/fluxos/${id}`),
-  ativar:  (id)        => api.post(`/fluxos/${id}/ativar`),
+  ativar:       (id)   => api.post(`/fluxos/${id}/ativar`),
+  despublicar:  (id)   => api.post(`/fluxos/${id}/despublicar`),
 };
 
 // ── ENDPOINTS — CANAIS ───────────────────────────────────────────
