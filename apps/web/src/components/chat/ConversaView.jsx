@@ -281,13 +281,15 @@ export default function ConversaView({ chat, conversa }) {
       )}
 
       {/* ── INPUT ── */}
-      {!encerrada ? (
+      {conversa.status === 'ativa' ? (
         <MessageInput
           onEnviar={(texto) => enviarMensagem(conversa.id, texto)}
           disabled={false}
         />
-      ) : (
+      ) : conversa.status === 'encerrada' ? (
         <div className={styles.encerrada}>Conversa encerrada</div>
+      ) : (
+        <div className={styles.encerrada}>Assuma o atendimento para enviar mensagens</div>
       )}
 
       {/* ── MODAL ENCERRAR ── */}

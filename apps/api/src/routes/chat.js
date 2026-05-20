@@ -79,6 +79,7 @@ chatRouter.post('/conversas/:id/mensagens', asyncHandler(async (req, res) => {
   const conv = await conversaRepo.porId(req.params.id);
   if (!conv) throw new HttpError(404, 'Conversa não encontrada');
   if (conv.status === 'encerrada') throw new HttpError(400, 'Conversa encerrada');
+  if (conv.status !== 'ativa')    throw new HttpError(403, 'Assuma o atendimento para enviar mensagens');
 
   const msg = await mensagemRepo.criar({
     conversa_id: req.params.id,
