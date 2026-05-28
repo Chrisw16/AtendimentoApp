@@ -112,6 +112,10 @@ chatRouter.post('/conversas/:id/mensagens', asyncHandler(async (req, res) => {
     } else if (conv.canal === 'telegram') {
       tgEnviarTexto(conv.telefone, texto)
         .catch(err => console.error('[Chat] Telegram send failed:', err.message));
+    } else if (conv.canal === 'whatsapp_qr') {
+      const { QR_INSTANCE_NAME } = await import('../services/whatsappQR.js');
+      evolutionEnviarTexto(QR_INSTANCE_NAME, conv.telefone, texto)
+        .catch(err => console.error('[Chat] WhatsApp QR send failed:', err.message));
     }
   }
 
@@ -172,6 +176,10 @@ chatRouter.post('/conversas/:id/encerrar', asyncHandler(async (req, res) => {
     } else if (convAntes.canal === 'telegram') {
       tgEnviarTexto(convAntes.telefone, texto)
         .catch(err => console.error('[Chat] Avaliação Telegram send failed:', err.message));
+    } else if (convAntes.canal === 'whatsapp_qr') {
+      const { QR_INSTANCE_NAME } = await import('../services/whatsappQR.js');
+      evolutionEnviarTexto(QR_INSTANCE_NAME, convAntes.telefone, texto)
+        .catch(err => console.error('[Chat] Avaliação WhatsApp QR send failed:', err.message));
     }
   }
 

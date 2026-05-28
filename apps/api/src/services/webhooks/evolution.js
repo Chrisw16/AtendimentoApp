@@ -5,6 +5,7 @@
 import { conversaRepo } from '../../repositories/conversaRepository.js';
 import { mensagemRepo } from '../../repositories/mensagemRepository.js';
 import { broadcast }    from '../sseManager.js';
+import { QR_INSTANCE_NAME } from '../whatsappQR.js';
 
 export async function handleEvolution(body) {
   const event = body?.event;
@@ -31,6 +32,9 @@ async function processarMensagem(body) {
   // Evolution v2 envia o nome da instância no body — essencial para enviar respostas de volta
   const instancia = body?.instance || body?.instanceName || body?.data?.instance || null;
 
+  // Instância dedicada ao canal QR de testes usa canal diferente
+  const canal = instancia === QR_INSTANCE_NAME ? 'whatsapp_qr' : 'whatsapp';
+
   const external_id = msg.key?.id;
 
   const existe = await mensagemRepo.porExternalId(external_id);
@@ -39,7 +43,7 @@ async function processarMensagem(body) {
   // Verifica se há conversa encerrada aguardando avaliação
   const { getDb } = await import('../../config/db.js');
   const conversaAv = await getDb()('conversas')
-    .where({ telefone, canal: 'whatsapp', aguardando_avaliacao: true })
+    .where({ telefone, canal, aguardando_avaliacao: true })
     .orderBy('atualizado', 'desc')
     .first();
 
@@ -58,12 +62,12 @@ async function processarMensagem(body) {
     return;
   }
 
-  let conversa = await conversaRepo.porTelefoneCanal(telefone, 'whatsapp');
+  let conversa = await conversaRepo.porTelefoneCanal(telefone, canal);
 
   if (!conversa) {
     const nome = data?.pushName || null;
     conversa   = await conversaRepo.criar({
-      canal: 'whatsapp',
+      canal,
       telefone,
       nome,
       status: 'ia',

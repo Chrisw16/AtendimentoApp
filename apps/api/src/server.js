@@ -29,6 +29,7 @@ import { ordensRouter }      from './routes/ordens.js';
 import { financeiroRouter }  from './routes/financeiro.js';
 import { sysconfigRouter }   from './routes/sysconfig.js';
 import { planosRouter }      from './routes/planos.js';
+import { whatsappQRRouter }  from './routes/whatsappQR.js';
 import { errorHandler }      from './middlewares/errorHandler.js';
 
 const app  = express();
@@ -65,6 +66,7 @@ app.use('/api/ordens',      ordensRouter);
 app.use('/api/financeiro',  financeiroRouter);
 app.use('/api/sysconfig',   sysconfigRouter);
 app.use('/api/planos',      planosRouter);
+app.use('/api/whatsapp-qr', whatsappQRRouter);
 
 // Frontend estático
 if (existsSync(frontendDist)) {

@@ -185,6 +185,14 @@ export const canaisApi = {
   update: (tipo, body) => api.put(`/canais/${tipo}`, body),
 };
 
+// ── ENDPOINTS — WHATSAPP QR CODE ─────────────────────────────────
+export const whatsappQRApi = {
+  status:     ()  => api.get('/whatsapp-qr/status'),
+  connect:    ()  => api.post('/whatsapp-qr/connect'),
+  refresh:    ()  => api.post('/whatsapp-qr/refresh'),
+  disconnect: ()  => api.delete('/whatsapp-qr/disconnect'),
+};
+
 // ── ENDPOINTS — SATISFAÇÃO ───────────────────────────────────────
 export const satisfacaoApi = {
   resumo:     (params = {}) => api.get('/satisfacao/resumo?' + new URLSearchParams(params)),

@@ -1,13 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { canaisApi } from '../lib/api';
+import { canaisApi, whatsappQRApi } from '../lib/api';
 import { useStore } from '../store';
-import { Settings, CheckCircle, XCircle, ChevronDown, ChevronUp, Save } from 'lucide-react';
+import { Settings, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input  from '../components/ui/Input';
 import styles from './Canais.module.css';
 
 const CANAL_META = {
+  whatsapp_qr: {
+    nome:  'WhatsApp QR Code',
+    icone: '📲',
+    desc:  'Canal para testes — conecte escaneando o QR Code com seu celular.',
+    campos: [],
+  },
   whatsapp: {
     nome:  'WhatsApp',
     icone: '📱',
@@ -73,6 +79,173 @@ const CANAL_META = {
     ],
   },
 };
+
+// ── CARD ESPECIAL: WhatsApp QR Code ───────────────────────────────
+function CanalQRCard({ canal }) {
+  const toast = useStore(s => s.toast);
+  const meta  = CANAL_META['whatsapp_qr'];
+
+  const [qrStatus, setQrStatus]   = useState({ status: 'disconnected', qrcode: null });
+  const [loading, setLoading]     = useState(false);
+  const pollRef                   = useRef(null);
+
+  const fetchStatus = async () => {
+    try {
+      const data = await whatsappQRApi.status();
+      setQrStatus(data);
+      return data.status;
+    } catch {
+      return 'disconnected';
+    }
+  };
+
+  // Polling enquanto status for 'connecting' ou 'qr'
+  useEffect(() => {
+    fetchStatus();
+    return () => clearInterval(pollRef.current);
+  }, []);
+
+  useEffect(() => {
+    clearInterval(pollRef.current);
+    if (qrStatus.status === 'qr' || qrStatus.status === 'connecting') {
+      pollRef.current = setInterval(async () => {
+        const s = await fetchStatus();
+        if (s === 'connected' || s === 'disconnected') clearInterval(pollRef.current);
+      }, 3000);
+    }
+    return () => clearInterval(pollRef.current);
+  }, [qrStatus.status]);
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      const data = await whatsappQRApi.connect();
+      setQrStatus(data);
+      toast('Gerando QR Code na Evolution API…', 'info');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      const data = await whatsappQRApi.refresh();
+      setQrStatus(data);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    setLoading(true);
+    try {
+      await whatsappQRApi.disconnect();
+      setQrStatus({ status: 'disconnected', qrcode: null });
+      toast('WhatsApp QR desconectado', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const STATUS_LABEL = {
+    disconnected: 'Desconectado',
+    connecting:   'Conectando…',
+    qr:           'Aguardando leitura',
+    connected:    'Conectado',
+  };
+
+  const isConnected   = qrStatus.status === 'connected';
+  const isQR          = qrStatus.status === 'qr';
+  const isConnecting  = qrStatus.status === 'connecting';
+
+  return (
+    <div className={[styles.card, isConnected && styles.cardAtivo].join(' ')}>
+      <div className={styles.cardHeader}>
+        <div className={styles.cardLeft}>
+          <span className={styles.cardIcon}>{meta.icone}</span>
+          <div>
+            <p className={styles.cardNome}>{meta.nome}</p>
+            <p className={styles.cardDesc}>{meta.desc}</p>
+          </div>
+        </div>
+        <div className={styles.cardRight}>
+          <div className={[styles.statusBadge, isConnected ? styles.statusAtivo : styles.statusInativo].join(' ')}>
+            {isConnected
+              ? <><CheckCircle size={11} /> {STATUS_LABEL.connected}</>
+              : <><XCircle size={11} /> {STATUS_LABEL[qrStatus.status] || 'Desconectado'}</>
+            }
+          </div>
+
+          {!isConnected && !isQR && (
+            <Button
+              variant="accent"
+              size="sm"
+              icon={isConnecting ? RefreshCw : Wifi}
+              loading={loading || isConnecting}
+              onClick={handleConnect}
+              disabled={isConnecting || loading}
+            >
+              Conectar
+            </Button>
+          )}
+          {isQR && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={RefreshCw}
+              loading={loading}
+              onClick={handleRefresh}
+            >
+              Novo QR
+            </Button>
+          )}
+          {isConnected && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={WifiOff}
+              loading={loading}
+              onClick={handleDisconnect}
+            >
+              Desconectar
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {isQR && qrStatus.qrcode && (
+        <div className={styles.configArea} style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Abra o WhatsApp no seu celular → Dispositivos conectados → Conectar dispositivo
+          </p>
+          <img
+            src={qrStatus.qrcode}
+            alt="QR Code WhatsApp"
+            style={{ width: 200, height: 200, borderRadius: 8, border: '1px solid var(--border)' }}
+          />
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+            O QR expira em ~60 segundos. Clique em "Novo QR" se expirar.
+          </p>
+        </div>
+      )}
+
+      {isConnecting && (
+        <div className={styles.configArea} style={{ textAlign: 'center', padding: '1.5rem' }}>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            Inicializando conexão, aguarde…
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CanalCard({ canal }) {
   const toast = useStore(s => s.toast);
@@ -227,7 +400,11 @@ export default function Canais() {
         </div>
       ) : (
         <div className={styles.lista}>
-          {canaisMerge.map(c => <CanalCard key={c.tipo} canal={c} />)}
+          {canaisMerge.map(c =>
+            c.tipo === 'whatsapp_qr'
+              ? <CanalQRCard key={c.tipo} canal={c} />
+              : <CanalCard   key={c.tipo} canal={c} />
+          )}
         </div>
       )}
     </div>
