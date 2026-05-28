@@ -357,6 +357,13 @@ function CanalCard({ canal }) {
               </div>
             ))}
           </div>
+          {canal.tipo === 'whatsapp' && config.provider === 'evolution' && config.evolution_url && config.evolution_key && (
+            <div style={{ fontSize: 12, color: 'var(--brand-blue)', background: 'rgba(32,80,184,0.06)', border: '1px solid rgba(32,80,184,0.15)', borderRadius: 8, padding: '10px 12px', marginBottom: 10, lineHeight: 1.6 }}>
+              Webhook para receber mensagens:<br/>
+              <code style={{ fontSize: 11 }}>/api/webhooks/evolution</code>
+              <br/>Configure este URL no painel da Evolution API → Instâncias → Webhook.
+            </div>
+          )}
           <div className={styles.configActions}>
             <Button
               variant="accent"

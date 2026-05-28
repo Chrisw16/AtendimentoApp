@@ -21,6 +21,20 @@ canaisRouter.put('/:tipo', adminMiddleware, asyncHandler(async (req, res) => {
     .onConflict('tipo')
     .merge(['nome','icone','ativo','config','atualizado']);
 
+  // Propaga credenciais Evolution para sistema_kv (onde o backend as lê)
+  if (req.params.tipo === 'whatsapp' && config) {
+    const updates = [];
+    if (config.evolution_url != null)
+      updates.push(db('sistema_kv')
+        .insert({ chave: 'evolution_url', valor: JSON.stringify(config.evolution_url) })
+        .onConflict('chave').merge(['valor']));
+    if (config.evolution_key != null)
+      updates.push(db('sistema_kv')
+        .insert({ chave: 'evolution_key', valor: JSON.stringify(config.evolution_key) })
+        .onConflict('chave').merge(['valor']));
+    if (updates.length) await Promise.all(updates);
+  }
+
   const canal = await db('canais').where({ tipo: req.params.tipo }).first();
   res.json(canal);
 }));

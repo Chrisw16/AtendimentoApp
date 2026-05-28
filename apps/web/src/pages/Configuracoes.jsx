@@ -114,9 +114,7 @@ export default function Configuracoes() {
   const [sgpUrl,       setSgpUrl]       = useState('');
   const [sgpApp,       setSgpApp]       = useState('');
   const [sgpToken,     setSgpToken]     = useState('');
-  const [evoUrl,       setEvoUrl]       = useState('');
   const [tgToken,      setTgToken]      = useState('');
-  const [evoKey,       setEvoKey]       = useState('');
 
   const { data: kv, isLoading } = useQuery({
     queryKey: ['sysconfig'],
@@ -137,9 +135,7 @@ export default function Configuracoes() {
     setSgpUrl(      kv.sgp_url            || '');
     setSgpApp(      kv.sgp_app            || '');
     setSgpToken(    kv.sgp_token          || '');
-    setEvoUrl(      kv.evolution_url      || '');
     setTgToken(     kv.telegram_bot_token  || '');
-    setEvoKey(      kv.evolution_key      || '');
   }, [kv]);
 
   const saveMut = useMutation({
@@ -157,7 +153,6 @@ export default function Configuracoes() {
     horario, mensagem_fora_hora: msgFora, notificacoes: notifs,
     anthropic_api_key: anthropicKey, openai_api_key: openaiKey,
     sgp_url: sgpUrl, sgp_app: sgpApp, sgp_token: sgpToken,
-    evolution_url: evoUrl, evolution_key: evoKey,
     telegram_bot_token: tgToken,
   });
 
@@ -171,7 +166,6 @@ export default function Configuracoes() {
     anthropic: anthropicKey ? 'ok' : 'off',
     openai:    openaiKey    ? 'ok' : 'off',
     sgp:       sgpUrl && sgpToken && sgpApp ? 'ok' : (sgpUrl || sgpToken || sgpApp) ? 'pending' : 'off',
-    evolution: evoUrl && evoKey   ? 'ok' : evoUrl || evoKey   ? 'pending' : 'off',
     telegram:  tgToken ? 'ok' : 'off',
   };
 
@@ -403,40 +397,6 @@ export default function Configuracoes() {
                   💡 As credenciais são enviadas como headers <code>app</code> e <code>token</code> em cada requisição ao SGP.
                 </p>
               </div>
-            </IntegrationCard>
-
-            {/* Evolution API */}
-            <IntegrationCard title="Evolution API — WhatsApp" color="#25D366" status={integStatus.evolution}
-              logo={<span style={{ color: '#fff', fontWeight: 700, fontSize: 11 }}>WA</span>}>
-              <p className={styles.integDesc}>
-                Necessário para <strong>enviar mensagens de volta</strong> ao cliente no WhatsApp.
-                As instâncias (números conectados) são configuradas individualmente em{' '}
-                <strong>Canais</strong>. Aqui você configura apenas a conexão global.
-              </p>
-              <div className={styles.fieldRow}>
-                <div className={styles.field} style={{ flex: 2 }}>
-                  <label className={styles.fieldLabel}>URL do servidor</label>
-                  <input className={styles.input} value={evoUrl} onChange={e => setEvoUrl(e.target.value)}
-                    placeholder="https://evolution.netgo.com.br"/>
-                  <p className={styles.fieldHint}>URL base da sua instância Evolution API</p>
-                </div>
-              </div>
-              <ApiKeyField label="API Key global"
-                value={evoKey} onChange={setEvoKey}
-                placeholder="B6D711FCDE4D4FD5936544120E713976"
-                hint="Chave de autenticação global. Encontrada em Settings → Authentication no painel da Evolution API."/>
-
-              {evoUrl && evoKey && (
-                <div className={styles.infoBox}>
-                  <p style={{ fontSize: 12, color: 'var(--brand-blue)', margin: 0, lineHeight: 1.5 }}>
-                    ✅ Webhook para receber mensagens:<br/>
-                    <code style={{ fontSize: 11, background: 'rgba(32,80,184,0.08)', padding: '2px 6px', borderRadius: 4 }}>
-                      {`https://gochat.netgo.net.br/api/webhooks/evolution`}
-                    </code><br/>
-                    Configure este URL no painel da Evolution API → Instâncias → Webhook.
-                  </p>
-                </div>
-              )}
             </IntegrationCard>
 
           </div>
