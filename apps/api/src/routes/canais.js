@@ -22,7 +22,7 @@ canaisRouter.put('/:tipo', adminMiddleware, asyncHandler(async (req, res) => {
     .merge(['nome','icone','ativo','config','atualizado']);
 
   // Propaga credenciais Evolution para sistema_kv (onde o backend as lê)
-  if (req.params.tipo === 'whatsapp' && config) {
+  if (['whatsapp', 'whatsapp_qr'].includes(req.params.tipo) && config) {
     const updates = [];
     if (config.evolution_url != null)
       updates.push(db('sistema_kv')

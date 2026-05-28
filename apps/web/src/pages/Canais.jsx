@@ -83,11 +83,24 @@ const CANAL_META = {
 // ── CARD ESPECIAL: WhatsApp QR Code ───────────────────────────────
 function CanalQRCard({ canal }) {
   const toast = useStore(s => s.toast);
+  const qc    = useQueryClient();
   const meta  = CANAL_META['whatsapp_qr'];
 
   const [qrStatus, setQrStatus]   = useState({ status: 'disconnected', qrcode: null });
   const [loading, setLoading]     = useState(false);
   const pollRef                   = useRef(null);
+
+  const [expanded, setExpanded]   = useState(false);
+  const [config, setConfig]       = useState(canal.config || {});
+  const setConf = (k, v) => setConfig(c => ({ ...c, [k]: v }));
+
+  const updateMut = useMutation({
+    mutationFn: (d) => canaisApi.update('whatsapp_qr', d),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['canais'] }); toast('Configurações salvas', 'success'); },
+    onError:    e  => toast(e.message, 'error'),
+  });
+
+  const salvarConfig = () => updateMut.mutate({ ativo: canal.ativo, config });
 
   const fetchStatus = async () => {
     try {
@@ -217,8 +230,64 @@ function CanalQRCard({ canal }) {
               Desconectar
             </Button>
           )}
+
+          <button
+            className={styles.expandBtn}
+            onClick={() => setExpanded(v => !v)}
+            aria-label="Configurações"
+          >
+            <Settings size={14} />
+            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
         </div>
       </div>
+
+      {expanded && (
+        <div className={styles.configArea}>
+          <div className={styles.configGrid}>
+            <div className={styles.configField}>
+              <Input
+                label="URL da Evolution API"
+                type="text"
+                size="sm"
+                value={config.evolution_url || ''}
+                onChange={e => setConf('evolution_url', e.target.value)}
+                placeholder="https://evolution.seuservidor.com.br"
+                autoComplete="off"
+              />
+            </div>
+            <div className={styles.configField}>
+              <Input
+                label="API Key"
+                type="password"
+                size="sm"
+                value={config.evolution_key || ''}
+                onChange={e => setConf('evolution_key', e.target.value)}
+                placeholder="B6D711FCDE4D4FD5936544120E713976"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+          {config.evolution_url && config.evolution_key && (
+            <div style={{ fontSize: 12, color: 'var(--brand-blue)', background: 'rgba(32,80,184,0.06)', border: '1px solid rgba(32,80,184,0.15)', borderRadius: 8, padding: '10px 12px', marginBottom: 10, lineHeight: 1.6 }}>
+              Webhook para receber mensagens:<br/>
+              <code style={{ fontSize: 11 }}>/api/webhooks/evolution</code>
+              <br/>Configure este URL no painel da Evolution API → Instâncias → Webhook.
+            </div>
+          )}
+          <div className={styles.configActions}>
+            <Button
+              variant="accent"
+              size="sm"
+              icon={Save}
+              loading={updateMut.isPending}
+              onClick={salvarConfig}
+            >
+              Salvar configurações
+            </Button>
+          </div>
+        </div>
+      )}
 
       {isQR && qrStatus.qrcode && (
         <div className={styles.configArea} style={{ textAlign: 'center' }}>
