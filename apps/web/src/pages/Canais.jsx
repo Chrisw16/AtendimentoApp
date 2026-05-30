@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { canaisApi, whatsappQRApi } from '../lib/api';
 import { useStore } from '../store';
-import { Settings, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Settings, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Wifi, WifiOff, RefreshCw, AlertCircle, Smartphone, Clock } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input  from '../components/ui/Input';
 import styles from './Canais.module.css';
@@ -81,6 +81,8 @@ const CANAL_META = {
 };
 
 // ── CARD ESPECIAL: WhatsApp QR Code ───────────────────────────────
+const QR_TTL = 60; // segundos antes de expirar
+
 function CanalQRCard({ canal }) {
   const toast = useStore(s => s.toast);
   const qc    = useQueryClient();
@@ -88,11 +90,15 @@ function CanalQRCard({ canal }) {
 
   const [qrStatus, setQrStatus]   = useState({ status: 'disconnected', qrcode: null });
   const [loading, setLoading]     = useState(false);
+  const [countdown, setCountdown] = useState(0);
   const pollRef                   = useRef(null);
+  const cdRef                     = useRef(null);
 
   const [expanded, setExpanded]   = useState(false);
   const [config, setConfig]       = useState(canal.config || {});
   const setConf = (k, v) => setConfig(c => ({ ...c, [k]: v }));
+
+  const isConfigured = !!(config.evolution_url && config.evolution_key);
 
   const updateMut = useMutation({
     mutationFn: (d) => canaisApi.update('whatsapp_qr', d),
@@ -102,7 +108,7 @@ function CanalQRCard({ canal }) {
 
   const salvarConfig = () => updateMut.mutate({ ativo: canal.ativo, config });
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       const data = await whatsappQRApi.status();
       setQrStatus(data);
@@ -110,13 +116,13 @@ function CanalQRCard({ canal }) {
     } catch {
       return 'disconnected';
     }
-  };
+  }, []);
 
   // Polling enquanto status for 'connecting' ou 'qr'
   useEffect(() => {
     fetchStatus();
-    return () => clearInterval(pollRef.current);
-  }, []);
+    return () => { clearInterval(pollRef.current); clearInterval(cdRef.current); };
+  }, [fetchStatus]);
 
   useEffect(() => {
     clearInterval(pollRef.current);
@@ -127,9 +133,31 @@ function CanalQRCard({ canal }) {
       }, 3000);
     }
     return () => clearInterval(pollRef.current);
-  }, [qrStatus.status]);
+  }, [qrStatus.status, fetchStatus]);
+
+  // Countdown regressivo quando QR estiver visível
+  useEffect(() => {
+    clearInterval(cdRef.current);
+    if (qrStatus.status === 'qr') {
+      setCountdown(QR_TTL);
+      cdRef.current = setInterval(() => {
+        setCountdown(v => {
+          if (v <= 1) { clearInterval(cdRef.current); return 0; }
+          return v - 1;
+        });
+      }, 1000);
+    } else {
+      setCountdown(0);
+    }
+    return () => clearInterval(cdRef.current);
+  }, [qrStatus.status, qrStatus.qrcode]);
 
   const handleConnect = async () => {
+    if (!isConfigured) {
+      setExpanded(true);
+      toast('Configure a URL e a API Key da Evolution antes de conectar.', 'error');
+      return;
+    }
     setLoading(true);
     try {
       const data = await whatsappQRApi.connect();
@@ -147,6 +175,7 @@ function CanalQRCard({ canal }) {
     try {
       const data = await whatsappQRApi.refresh();
       setQrStatus(data);
+      setCountdown(QR_TTL);
     } catch (e) {
       toast(e.message, 'error');
     } finally {
@@ -174,12 +203,14 @@ function CanalQRCard({ canal }) {
     connected:    'Conectado',
   };
 
-  const isConnected   = qrStatus.status === 'connected';
-  const isQR          = qrStatus.status === 'qr';
-  const isConnecting  = qrStatus.status === 'connecting';
+  const isConnected  = qrStatus.status === 'connected';
+  const isQR         = qrStatus.status === 'qr';
+  const isConnecting = qrStatus.status === 'connecting';
+  const cdUrgent     = countdown > 0 && countdown <= 15;
 
   return (
-    <div className={[styles.card, isConnected && styles.cardAtivo].join(' ')}>
+    <div className={[styles.qrCard, isConnected && styles.cardAtivo].join(' ')}>
+      {/* ── HEADER ── */}
       <div className={styles.cardHeader}>
         <div className={styles.cardLeft}>
           <span className={styles.cardIcon}>{meta.icone}</span>
@@ -196,14 +227,14 @@ function CanalQRCard({ canal }) {
             }
           </div>
 
-          {!isConnected && !isQR && (
+          {!isConnected && !isQR && !isConnecting && (
             <Button
               variant="accent"
               size="sm"
-              icon={isConnecting ? RefreshCw : Wifi}
-              loading={loading || isConnecting}
+              icon={Wifi}
+              loading={loading}
               onClick={handleConnect}
-              disabled={isConnecting || loading}
+              disabled={loading}
             >
               Conectar
             </Button>
@@ -242,6 +273,18 @@ function CanalQRCard({ canal }) {
         </div>
       </div>
 
+      {/* ── AVISO: sem configuração ── */}
+      {!isConfigured && !expanded && (
+        <div className={styles.qrWarning}>
+          <AlertCircle size={14} />
+          <span>Configure a Evolution API antes de conectar.</span>
+          <button className={styles.qrWarningLink} onClick={() => setExpanded(true)}>
+            Configurar agora
+          </button>
+        </div>
+      )}
+
+      {/* ── CONFIG EXPANDIDA ── */}
       {expanded && (
         <div className={styles.configArea}>
           <div className={styles.configGrid}>
@@ -269,10 +312,10 @@ function CanalQRCard({ canal }) {
             </div>
           </div>
           {config.evolution_url && config.evolution_key && (
-            <div style={{ fontSize: 12, color: 'var(--brand-blue)', background: 'rgba(32,80,184,0.06)', border: '1px solid rgba(32,80,184,0.15)', borderRadius: 8, padding: '10px 12px', marginBottom: 10, lineHeight: 1.6 }}>
-              Webhook para receber mensagens:<br/>
-              <code style={{ fontSize: 11 }}>/api/webhooks/evolution</code>
-              <br/>Configure este URL no painel da Evolution API → Instâncias → Webhook.
+            <div className={styles.webhookInfo}>
+              Webhook para receber mensagens:&nbsp;
+              <code>/api/webhooks/evolution</code>
+              <br/>Configure no painel da Evolution API → Instâncias → Webhook.
             </div>
           )}
           <div className={styles.configActions}>
@@ -289,27 +332,53 @@ function CanalQRCard({ canal }) {
         </div>
       )}
 
+      {/* ── CONECTANDO ── */}
+      {isConnecting && (
+        <div className={styles.qrConnecting}>
+          <RefreshCw size={22} className={styles.qrSpinner} />
+          <p>Inicializando instância na Evolution API…</p>
+          <span>Aguarde, isso pode levar alguns segundos.</span>
+        </div>
+      )}
+
+      {/* ── QR CODE ── */}
       {isQR && qrStatus.qrcode && (
-        <div className={styles.configArea} style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-            Abra o WhatsApp no seu celular → Dispositivos conectados → Conectar dispositivo
-          </p>
-          <img
-            src={qrStatus.qrcode}
-            alt="QR Code WhatsApp"
-            style={{ width: 200, height: 200, borderRadius: 8, border: '1px solid var(--border)' }}
-          />
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-            O QR expira em ~60 segundos. Clique em "Novo QR" se expirar.
+        <div className={styles.qrSection}>
+          <div className={styles.qrInstructions}>
+            <Smartphone size={15} />
+            <span>
+              Abra o WhatsApp → <strong>Dispositivos conectados</strong> → <strong>Conectar dispositivo</strong>
+            </span>
+          </div>
+          <div className={styles.qrImageWrap}>
+            <img
+              src={qrStatus.qrcode}
+              alt="QR Code WhatsApp"
+              className={styles.qrImage}
+            />
+            {countdown > 0 && (
+              <div className={[styles.qrCountdown, cdUrgent && styles.qrCountdownUrgent].join(' ')}>
+                <Clock size={11} />
+                <span>{countdown}s</span>
+              </div>
+            )}
+          </div>
+          <p className={styles.qrHint}>
+            {countdown === 0
+              ? 'QR expirado — clique em "Novo QR" para gerar outro.'
+              : 'Este QR expira em breve. Escaneie agora ou clique em "Novo QR".'}
           </p>
         </div>
       )}
 
-      {isConnecting && (
-        <div className={styles.configArea} style={{ textAlign: 'center', padding: '1.5rem' }}>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            Inicializando conexão, aguarde…
-          </p>
+      {/* ── CONECTADO ── */}
+      {isConnected && (
+        <div className={styles.qrConnected}>
+          <CheckCircle size={18} />
+          <div>
+            <p>WhatsApp conectado com sucesso via Evolution API.</p>
+            <span>As mensagens recebidas neste número serão tratadas como conversas neste canal.</span>
+          </div>
         </div>
       )}
     </div>
@@ -462,6 +531,9 @@ export default function Canais() {
     return existente || { tipo, nome: CANAL_META[tipo].nome, ativo: false, config: {} };
   });
 
+  const canalQR      = canaisMerge.find(c => c.tipo === 'whatsapp_qr');
+  const outrosCanais = canaisMerge.filter(c => c.tipo !== 'whatsapp_qr');
+
   return (
     <div className={styles.root}>
       <p className={styles.intro}>
@@ -475,13 +547,14 @@ export default function Canais() {
           ))}
         </div>
       ) : (
-        <div className={styles.lista}>
-          {canaisMerge.map(c =>
-            c.tipo === 'whatsapp_qr'
-              ? <CanalQRCard key={c.tipo} canal={c} />
-              : <CanalCard   key={c.tipo} canal={c} />
-          )}
-        </div>
+        <>
+          {canalQR && <CanalQRCard canal={canalQR} />}
+          <div className={styles.gridCanais}>
+            {outrosCanais.map(c => (
+              <CanalCard key={c.tipo} canal={c} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
