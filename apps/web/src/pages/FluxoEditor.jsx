@@ -88,6 +88,7 @@ const VARS = [
 // Default (quando cfg.tools_ativas não estiver definido): tudo menos
 // `precadastrar_cliente` (sensível: cria cliente real no SGP).
 const IA_TOOLS_LIST = [
+  { id: 'consultar_clientes',    label: '🔍 Consultar cliente (SGP)',  cat: 'Atendimento' },
   { id: 'verificar_conexao',     label: '📡 Verificar conexão',       cat: 'Diagnóstico' },
   { id: 'consultar_manutencao',  label: '🔧 Consultar manutenção',    cat: 'Diagnóstico' },
   { id: 'status_rede',           label: '🌐 Status da rede',          cat: 'Diagnóstico' },

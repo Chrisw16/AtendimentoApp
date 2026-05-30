@@ -626,14 +626,14 @@ async function processarIAResponde(no, ctx) {
 
   // Carrega tools disponíveis
   const { IA_TOOLS, executarTool } = await import('./iaTools.js');
-  // Lista padrão (suporte/atendimento). Tools sensíveis como `precadastrar_cliente`
-  // ficam fora do default — devem ser ativadas explicitamente em cfg.tools_ativas
-  // (ex.: no nó IA Responde do fluxo comercial).
+  // Padrão alinhado com IA_TOOLS_DEFAULT do FluxoEditor (tudo menos precadastrar_cliente).
+  // precadastrar_cliente deve ser habilitado explicitamente no nó comercial via cfg.tools_ativas.
   const toolsAtivas = cfg.tools_ativas || [
     'verificar_conexao', 'consultar_manutencao', 'status_rede',
     'consultar_onu_acs', 'reiniciar_onu_acs', 'consultar_radius',
     'criar_chamado', 'segunda_via_boleto',
     'promessa_pagamento', 'historico_ocorrencias',
+    'listar_planos_ativos', 'listar_vencimentos',
     'transferir_para_humano', 'encerrar_atendimento',
   ];
   const tools = IA_TOOLS.filter(t => toolsAtivas.includes(t.name));
@@ -690,6 +690,9 @@ async function processarIAResponde(no, ctx) {
             content: typeof result === 'string' ? result : JSON.stringify(result),
           });
         }
+
+        // Se ação especial foi detectada, sai do loop preservando o texto já definido
+        if (transferiu || resolveu) break;
 
         // Adiciona assistant turn + tool results e continua o loop
         loopMessages = [

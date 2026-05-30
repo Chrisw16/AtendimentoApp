@@ -14,6 +14,17 @@ import { getDb } from '../config/db.js';
 // ── DEFINIÇÃO DAS FERRAMENTAS ──────────────────────────────────────────────
 export const IA_TOOLS = [
   {
+    name: 'consultar_clientes',
+    description: 'Consulta dados do cliente no SGP pelo CPF ou CNPJ. Use SEMPRE ao início do atendimento quando tiver CPF disponível, antes de discutir dados do contrato, boletos ou planos do cliente.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cpfcnpj: { type: 'string', description: 'CPF ou CNPJ do cliente (com ou sem formatação)' },
+      },
+      required: ['cpfcnpj'],
+    },
+  },
+  {
     name: 'verificar_conexao',
     description: 'Verifica se o cliente está online/offline. Use SEMPRE no início do suporte técnico.',
     input_schema: {
@@ -188,6 +199,18 @@ export async function executarTool(name, input, ctx) {
   const cpfcnpj  = ctx?.cliente?.cpf || ctx?.cliente?.cpfcnpj || input.cpfcnpj;
 
   switch (name) {
+    case 'consultar_clientes': {
+      const cpf = input.cpfcnpj || cpfcnpj;
+      if (!cpf) return 'CPF não disponível. Pergunte ao cliente antes de consultar.';
+      const r = await consultarClientes(cpf).catch(e => ({ erro: e.message }));
+      if (r?.erro) return `Não consegui consultar o cliente: ${r.erro}`;
+      if (!r?.contratos?.length) return `Nenhum cliente encontrado para o CPF ${cpf}.`;
+      const contratos = r.contratos.map(c =>
+        `• Contrato ${c.id}: ${c.plano || '—'} — ${c.status || '—'}${c.cidade ? ` (${c.cidade})` : ''}`
+      ).join('\n');
+      return `✅ Cliente encontrado:\nNome: ${r.nome || '—'}\nCPF: ${cpf}\n${contratos}`;
+    }
+
     case 'verificar_conexao': {
       const r = await verificarConexao(contrato).catch(e => ({ erro: e.message }));
       if (r?.erro) return `Não consegui verificar a conexão: ${r.erro}`;
