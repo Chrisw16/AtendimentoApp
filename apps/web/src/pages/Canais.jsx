@@ -318,17 +318,21 @@ function CanalQRCard({ canal }) {
               <br/>Configure no painel da Evolution API → Instâncias → Webhook.
             </div>
           )}
-          <div className={styles.configActions}>
-            <Button
-              variant="accent"
-              size="sm"
-              icon={Save}
-              loading={updateMut.isPending}
-              onClick={salvarConfig}
-            >
-              Salvar configurações
-            </Button>
-          </div>
+        </div>
+      )}
+
+      {/* ── SALVAR — sempre visível quando a área está aberta ── */}
+      {expanded && (
+        <div className={styles.configSave}>
+          <Button
+            variant="accent"
+            size="sm"
+            icon={Save}
+            loading={updateMut.isPending}
+            onClick={salvarConfig}
+          >
+            Salvar configurações
+          </Button>
         </div>
       )}
 

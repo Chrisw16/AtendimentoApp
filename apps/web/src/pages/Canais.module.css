@@ -76,6 +76,8 @@
   align-items: center;
   gap: var(--space-3);
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* ── STATUS BADGE ────────────────────────────────────────────── */
@@ -189,6 +191,15 @@
 .colorVal { font-size: var(--text-xs); font-family: var(--font-mono); color: var(--text-secondary); }
 
 .configActions { display: flex; justify-content: flex-end; }
+
+/* Salvar fora da configArea — sempre visível, sem risco de ser cortado */
+.configSave {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+}
 
 /* ── SKELETON ────────────────────────────────────────────────── */
 .skelList { display: flex; flex-direction: column; gap: var(--space-3); }
