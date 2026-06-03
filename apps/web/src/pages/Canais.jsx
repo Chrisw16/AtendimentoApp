@@ -94,7 +94,7 @@ function CanalQRCard({ canal }) {
   const pollRef                   = useRef(null);
   const cdRef                     = useRef(null);
 
-  const [expanded, setExpanded]   = useState(false);
+  const [expanded, setExpanded]   = useState(!(canal.config?.evolution_url && canal.config?.evolution_key)); // abre se ainda não configurado
   const [config, setConfig]       = useState(canal.config || {});
   const setConf = (k, v) => setConfig(c => ({ ...c, [k]: v }));
 
