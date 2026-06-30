@@ -34,7 +34,9 @@ São três campos com papéis distintos (fonte de confusão comum):
 
 **Armadilha real (vista no fluxo de produção):** alguns nós põem o prompt inteiro em `instrucao` e setam `contexto` para um valor que **não é um slug válido** (ex.: `"Suporte Técnico"` com espaço/maiúscula ≠ slug `suporte`). Resultado: a base vira o **genérico de fallback** e editar o prompt "Suporte técnico" na tela **não afeta o nó**. Para a tela Prompts IA ser a fonte da verdade, o `contexto` precisa bater **exatamente** com o slug e a `instrucao` ficar curta/vazia.
 
-> Mitigação no editor (PropsPanel): o campo **Contexto** agora é um **dropdown** que puxa os slugs de `prompts_ia` (menos `regras`/`estilo`), eliminando o erro de digitação. Valores legados inválidos aparecem marcados com `⚠` pra serem trocados. O campo **Instruções extras** mostra o `cfg.prompt` legado como fallback (`cfg.instrucao ?? cfg.prompt`) pra o prompt antigo ficar visível e migrável.
+> Mitigação no editor: o campo **Contexto** virou um **dropdown** que puxa os slugs de `prompts_ia` (menos `regras`/`estilo`), eliminando o erro de digitação; valores legados inválidos aparecem com `⚠` pra serem trocados. A **instrução extra** salva em `cfg.prompt` (o motor lê `cfg.instrucao ?? cfg.prompt`).
+>
+> ⚠️ **Detalhe de arquitetura:** o painel de propriedades do editor é uma função `PropsPanel` **inline dentro de `apps/web/src/pages/FluxoEditor.jsx`** (usada na linha do `<PropsPanel .../>`). O arquivo `apps/web/src/components/fluxo/PropsPanel.jsx` é **código morto** (não é importado em lugar nenhum) — mexer nele não afeta o editor. Edite sempre o inline do `FluxoEditor`.
 
 ## Tela Prompts IA — 3 abas
 

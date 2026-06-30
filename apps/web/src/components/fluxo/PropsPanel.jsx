@@ -1,7 +1,5 @@
 import { X, Trash2 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { NODE_TYPES } from '../../lib/nodeTypes';
-import { api } from '../../lib/api';
 
 const iStyle = {
   width: '100%', background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)',
@@ -97,15 +95,11 @@ function RotaEditor({ rotas, onChange }) {
 }
 
 export default function PropsPanel({ node, onChange, onDelete, onClose }) {
-  // Prompts da aba "Prompts IA" — alimentam o select de contexto do nó ia_responde.
-  const { data: promptsIA = [] } = useQuery({ queryKey: ['prompts-ia'], queryFn: () => api.get('/prompts'), staleTime: 60_000 });
   if (!node) return null;
 
   const def = NODE_TYPES[node.data.tipo] || {};
   const cfg = node.data.config || {};
   const set = (k, v) => onChange({ ...node.data, config: { ...cfg, [k]: v } });
-  // Contextos selecionáveis = prompts existentes, menos os blocos injetáveis (regras/estilo).
-  const contextos = promptsIA.filter(p => !['regras', 'estilo'].includes(p.slug));
 
   return (
     <div style={{
@@ -348,21 +342,13 @@ export default function PropsPanel({ node, onChange, onDelete, onClose }) {
         {/* ── IA RESPONDE ── */}
         {node.data.tipo === 'ia_responde' && (
           <>
-            <Field label="Contexto (prompt base)" hint="Puxa o prompt da aba Prompts IA — é o coração da IA neste nó.">
-              <select value={cfg.contexto || ''} onChange={e => set('contexto', e.target.value)} style={iStyle}>
-                <option value="">— padrão (Outros/Fallback) —</option>
-                {contextos.map(p => (
-                  <option key={p.slug} value={p.slug}>{p.nome} ({p.slug})</option>
-                ))}
-                {/* mostra o valor atual quando ele NÃO bate com nenhum slug, pra você ver que está errado */}
-                {cfg.contexto && !contextos.some(p => p.slug === cfg.contexto) && (
-                  <option value={cfg.contexto}>⚠ atual (não é um prompt válido): {cfg.contexto}</option>
-                )}
-              </select>
+            <Field label="Contexto / especialidade" hint="Define o foco da IA neste nó">
+              <input value={cfg.contexto || ''} onChange={e => set('contexto', e.target.value)}
+                placeholder="suporte técnico, financeiro, geral..." style={iStyle} />
             </Field>
-            <Field label="Instruções extras (opcional)" hint="Texto somado por cima do prompt do contexto. Vazio = usa só o prompt da aba Prompts.">
-              <textarea value={cfg.instrucao ?? cfg.prompt ?? ''} onChange={e => set('instrucao', e.target.value)} rows={4}
-                placeholder="Ex.: Neste nó, foque só em queda total de conexão." style={taStyle} />
+            <Field label="Instrução adicional" hint="Complementa o prompt base">
+              <textarea value={cfg.instrucao || ''} onChange={e => set('instrucao', e.target.value)} rows={3}
+                placeholder="Foque em resolver problemas de conexão..." style={taStyle} />
             </Field>
             <Field label="Máx turnos sem resolver">
               <input type="number" value={cfg.max_turnos || 5} onChange={e => set('max_turnos', Number(e.target.value))}

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Panel,
   addEdge, useNodesState, useEdgesState, MarkerType,
@@ -9,6 +9,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../store';
 import { NODE_TYPES, NODE_GROUPS, PORTA_META } from '../lib/nodeTypes';
+import { api } from '../lib/api';
 
 // ── CSS OVERRIDE — apenas ajustes visuais que NÃO interferem na detecção
 //    de eventos do @xyflow/react v12. Não mexer no posicionamento/transform
@@ -319,11 +320,15 @@ const NODE_TYPES_MAP = { fluxo: FlowNode };
 
 // ── PROPS PANEL ───────────────────────────────────────────────────
 function PropsPanel({ node, onChange, onDelete }) {
+  // Prompts da aba "Prompts IA" — alimentam o select de contexto do nó ia_responde.
+  const { data: promptsIA = [] } = useQuery({ queryKey: ['prompts-ia'], queryFn: () => api.get('/prompts'), staleTime: 60000 });
   if (!node) return null;
   const def = NODE_TYPES[node.data.tipo] || {};
   const cfg = node.data.config || {};
   const set = (k, v) => onChange({ ...node.data, config:{ ...cfg, [k]:v } });
   const bts = Array.isArray(cfg.botoes)?cfg.botoes:[];
+  // Contextos selecionáveis = prompts existentes, menos os blocos injetáveis (regras/estilo).
+  const contextos = promptsIA.filter(p => !['regras', 'estilo'].includes(p.slug));
 
   return (
     <div style={{width:270,background:'rgba(6,10,18,.98)',border:'1px solid rgba(255,255,255,.1)',borderRadius:12,display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 8px 32px rgba(0,0,0,.6)'}}>
@@ -387,8 +392,18 @@ function PropsPanel({ node, onChange, onDelete }) {
           const cats = [...new Set(IA_TOOLS_LIST.map(t => t.cat))];
           return (
             <>
-              <Fld label="Contexto/assunto"><input value={cfg.contexto||''} onChange={e=>set('contexto',e.target.value)} placeholder="suporte, comercial, geral..." style={IS}/></Fld>
-              <Fld label="Instrução extra"><textarea value={cfg.prompt||''} onChange={e=>set('prompt',e.target.value)} rows={3} placeholder="O cliente já está identificado. Ajude com suporte técnico." style={TA}/></Fld>
+              <Fld label="Contexto (prompt base)" hint="Puxa o prompt da aba Prompts IA — o coração da IA neste nó">
+                <select value={cfg.contexto||''} onChange={e=>set('contexto',e.target.value)} style={{...IS,cursor:'pointer'}}>
+                  <option value="">— padrão (Outros/Fallback) —</option>
+                  {contextos.map(p => <option key={p.slug} value={p.slug}>{p.nome} ({p.slug})</option>)}
+                  {cfg.contexto && !contextos.some(p=>p.slug===cfg.contexto) && (
+                    <option value={cfg.contexto}>⚠ atual (não é um prompt válido): {cfg.contexto}</option>
+                  )}
+                </select>
+              </Fld>
+              <Fld label="Instruções extras (opcional)" hint="Somado por cima do prompt do contexto. Vazio = usa só o prompt da aba Prompts.">
+                <textarea value={cfg.prompt||''} onChange={e=>set('prompt',e.target.value)} rows={4} placeholder="Ex.: Neste nó, foque só em queda total de conexão." style={TA}/>
+              </Fld>
               <Fld label="Modelo">
                 <select value={cfg.modelo||'haiku'} onChange={e=>set('modelo',e.target.value)} style={{...IS,cursor:'pointer'}}>
                   <option value="haiku">⚡ Claude Haiku — rápido</option>
