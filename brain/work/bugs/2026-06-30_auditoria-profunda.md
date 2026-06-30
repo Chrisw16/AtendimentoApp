@@ -5,6 +5,7 @@ created: 2026-06-30
 last_updated: 2026-06-30
 status: active
 priority: p1
+progress: "mismatches editor↔motor: 1ª leva corrigida (enviar_lista/abrir_chamado/ia_responde/nps_inline)"
 knowledge_refs: ["systems/maxxi/components/motor-fluxo", "systems/maxxi/components/catalogo-de-nos", "systems/maxxi/components/canais-e-webhooks", "systems/maxxi/components/integracoes-sgp"]
 related: ["[[Achados de código (2026-06-30)]]", "[[Motor de Fluxo]]", "[[Catálogo de Nós]]", "[[Canais e Webhooks]]", "[[Integração SGP]]", "[[Frontend Maxxi]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
@@ -18,6 +19,8 @@ Resultado de uma auditoria pesada (4 agentes paralelos lendo o código + verific
 
 O grupo mais importante é o de **mismatches editor↔motor**: o painel de propriedades ([[Catálogo de Nós|PropsPanel]]) salva campos com nomes que o [[Motor de Fluxo|motor]] não lê, então **configuração feita no editor é silenciosamente ignorada na execução** — afeta diretamente o motor de fluxo.
 
+> **Atualização (2026-06-30):** primeira leva de correções aplicada (commit do fix em `motorFluxo.js` + `fluxoHelpers.js` com testes). **Corrigidos:** `enviar_lista`, `abrir_chamado`, `ia_responde`, `nps_inline` (marcados ✅ abaixo). O resto dos mismatches e das portas mortas continua aberto. Ver [[Motor de Fluxo]] → "Funções puras testáveis".
+
 ## Crítico
 
 - **Race de estado do fluxo** `[CONFIRMADO]` — os webhooks chamam `processarConversa(...)` **sem `await`** e o `estadosExecucao` é um `Map` mutável compartilhado por referência; duas mensagens do mesmo cliente em sequência rápida intercalam (há `await` SGP/IA no meio) e corrompem o estado (saltos de nó, respostas duplicadas). Serializar por `conversa_id` (fila/lock) ou persistir estado.
@@ -29,12 +32,12 @@ O grupo mais importante é o de **mismatches editor↔motor**: o painel de propr
 
 - **Mensagens em `aguardando` ignoradas** `[CONFIRMADO]` — os webhooks só acionam o motor (`status==='ia'`) ou a supervisora (`'ativa'`); cliente na fila esperando agente que escreve "PROCON/cancelar" não dispara análise de palavra crítica nem re-escala SLA.
 - **Mismatches editor↔motor (config ignorada)** `[CONFIRMADO]`:
-  - `enviar_lista`: editor salva `botao`/`secao`, motor lê `label_botao`/`titulo_secao` → lista sai sem texto de botão e sem título de seção.
-  - `ia_responde`: editor salva `instrucao`, motor lê `cfg.prompt` → "instrução adicional" nunca entra no system prompt.
-  - `abrir_chamado`: editor salva `tipo` (string `tecnico/financeiro/comercial`), motor lê `tipo_id` → todo chamado abre como tipo 5 (Outros).
-  - `gatilho_keyword`: editor salva `palavras`/`exato`, motor só faz `avancar('saida')` → filtro de palavra-chave é inerte.
-  - `aguardar_resposta`: editor salva `timeout`/`max_tentativas`, motor ignora os dois.
-  - `nps_inline`: editor oferece escala "1 a 5", mas o motor hardcoda 1-10 → nota 5 vira detrator.
+  - ✅ `enviar_lista`: editor salva `botao`/`secao`, motor lê `label_botao`/`titulo_secao` → lista sai sem texto de botão e sem título de seção. **Corrigido** (`camposLista`).
+  - ✅ `ia_responde`: editor salva `instrucao`, motor lê `cfg.prompt` → "instrução adicional" nunca entra no system prompt. **Corrigido** (`montarSystemPrompt`, com fallback `cfg.instrucao ?? cfg.prompt`).
+  - ✅ `abrir_chamado`: editor salva `tipo` (string `tecnico/financeiro/comercial`), motor lê `tipo_id` → todo chamado abre como tipo 5 (Outros). **Corrigido** (`resolverTipoChamado`).
+  - `gatilho_keyword`: editor salva `palavras`/`exato`, motor só faz `avancar('saida')` → filtro de palavra-chave é inerte. **Aberto** (precisa implementar o matching).
+  - `aguardar_resposta`: editor salva `timeout`/`max_tentativas`, motor ignora os dois. **Aberto** (precisa scheduler/job).
+  - ✅ `nps_inline`: editor oferece escala "1 a 5", mas o motor hardcoda 1-10 → nota 5 vira detrator. **Corrigido** (`avaliarNps` respeita a escala).
 - **Portas declaradas que o motor nunca emite (ramos mortos)** `[CONFIRMADO]`:
   - `solicitar_localizacao`: só emite `localizacao_recebida` (nunca `sem_localizacao`/`erro`); não valida se veio localização.
   - `transferir_agente`: só `fora_horario` ou `fim()` no sucesso — nunca `transferido`/`sem_agente`.
@@ -74,7 +77,7 @@ O grupo mais importante é o de **mismatches editor↔motor**: o painel de propr
 
 ## Top correções recomendadas
 
-1. **Mismatches editor↔motor** (alto, fácil): alinhar nomes de campo (`botao→label_botao`, `secao→titulo_secao`, `instrucao→prompt`, `tipo→tipo_id`) e portas mortas — restaura funcionalidade do motor de fluxo de imediato.
+1. ✅ **Mismatches editor↔motor** (alto, fácil): alinhar nomes de campo (`botao→label_botao`, `secao→titulo_secao`, `instrucao→prompt`, `tipo→tipo_id`) e portas mortas — restaura funcionalidade do motor de fluxo de imediato. **Primeira leva feita** (4 campos via `fluxoHelpers.js` + testes); faltam `gatilho_keyword`, `aguardar_resposta` (timeout), `condicao_multipla` e as portas mortas.
 2. **Race + dedup de webhook** (crítico): unique em `mensagens.external_id` + serializar `processarConversa` por conversa.
 3. **URL do SGP + Canais config** (crítico): corrigir `onChange` e a inicialização de estado — hoje impedem configurar SGP e podem apagar credenciais.
 4. **NPS** (alto): unificar tabela/escala (`avaliacoes` 1-5 vs `satisfacao` 0-10).

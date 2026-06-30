@@ -62,9 +62,22 @@ O `contexto` da conversa acumula dados ao longo do fluxo. Textos dos nós aceita
 
 As respostas são **agnósticas de canal** (`{tipo, texto, botoes, url…}`) e traduzidas só na borda (`enviarResposta`): **Telegram** (texto, botões inline, imagem; lista vira botões ≤8 ou texto numerado) e **WhatsApp/Evolution** (texto, CTA, botões, lista, imagem, áudio, arquivo). Toda resposta é persistida em `mensagens` e transmitida via [[Realtime SSE|SSE]] ao painel.
 
+## Funções puras testáveis (`fluxoHelpers.js`)
+
+`motorFluxo.js` não é importável em teste unitário (no topo puxa `config/db.js`, que instancia Knex). Por isso a lógica que dá pra testar sem banco/IA foi extraída para `apps/api/src/services/fluxoHelpers.js`, com `fluxoHelpers.test.js` (runner nativo `node --test`, `cd apps/api && npm test`). Foram os **primeiros testes do projeto**. As 4 funções resolvem mismatches editor↔motor (ver [[Auditoria profunda (2026-06-30)]]):
+
+| Função | Resolve | Regra |
+|---|---|---|
+| `resolverTipoChamado(cfg)` | `abrir_chamado` salvava `tipo` (string), motor lia `tipo_id` | `tecnico→200`, `financeiro→22`, `comercial→5`; `tipo_id` numérico tem prioridade; default 5 |
+| `avaliarNps(nota, escala)` | `nps_inline` oferecia escala 5, motor hardcodava 0-10 | escala 5: ≥4 promotor / 3 neutro / ≤2 detrator · escala 10: ≥9 / ≥7 / resto |
+| `montarSystemPrompt({...})` | `ia_responde` salvava `instrucao`, motor lia `cfg.prompt` | compõe base + instrução específica + dados do cliente + regras de tool |
+| `camposLista(cfg)` | `enviar_lista` salvava `botao`/`secao`, motor lia `label_botao`/`titulo_secao` | lê o nome do editor com **fallback** pro antigo (fluxos já salvos seguem funcionando) |
+
+Padrão a manter: nova lógica de leitura de config do editor entra aqui **com teste primeiro** (TDD), e o motor só chama o helper.
+
 ## Limitações e melhorias conhecidas
 
-Persistir o estado de execução; `aguardar_tempo` é simulado (avança na hora — falta scheduler/job); `enviar_email` só loga; ACS é stub. Padronizar o formato de aresta. Nota: a branch `dev` alterou o comportamento "sem fluxo" e o break do loop agêntico — revalidar ao alinhar branches. Bugs em [[Achados de código (2026-06-30)]].
+Persistir o estado de execução; `aguardar_tempo` é simulado (avança na hora — falta scheduler/job); `enviar_email` só loga; ACS é stub. Padronizar o formato de aresta. Nota: a branch `dev` alterou o comportamento "sem fluxo" e o break do loop agêntico — revalidar ao alinhar branches. Mismatches editor↔motor parcialmente corrigidos (ver tabela acima); restam `gatilho_keyword`, `aguardar_resposta` (timeout), `condicao_multipla`, portas mortas. Bugs em [[Achados de código (2026-06-30)]] e [[Auditoria profunda (2026-06-30)]].
 
 ## See Also
 

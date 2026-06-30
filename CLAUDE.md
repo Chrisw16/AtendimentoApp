@@ -33,6 +33,7 @@ apps/api/src/
   routes/                auth, chat, webhooks (públicas) + agentes, fluxos, prompts, dashboard, ... (autenticadas)
   services/
     motorFluxo.js        ★ motor de execução do fluxo (1032 LOC) — o coração
+    fluxoHelpers.js      funções puras do motor (normaliza campos editor↔motor, escala NPS) + testes
     integrations.js      ★ SGP (URA/precadastro) + Evolution + getAnthropicClient
     iaTools.js           15 tools Anthropic (executarTool)
     promptService.js     resolverPrompt(slug) — compõe system prompt do banco
@@ -57,6 +58,8 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 
 **Dev (sem Docker):** precisa Postgres 16 + Redis 7 + Node 20. Em `apps/api`: `cp .env.example .env`, `npm install`, `npm run seed`, `npm run dev`. Em `apps/web`: `npm install`, `npm run dev`.
 
+**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps). A lógica pura do motor (resolução de campos, escala NPS) fica em `fluxoHelpers.js` com `fluxoHelpers.test.js` — ao mexer em como o motor lê config do editor, escreva o teste lá primeiro (TDD). `motorFluxo.js` em si não é importável em teste unitário (puxa `config/db.js` → Knex no topo); por isso a lógica testável foi extraída para `fluxoHelpers.js`.
+
 **Produção (Coolify):** o **Dockerfile raiz** é multi-stage — builda `apps/web` e copia `dist` para `apps/api/apps/web/dist`; a API serve frontend + API no **mesmo container** (porta 4000). Migrations rodam em background no boot. Runbook: [brain/systems/maxxi/runbooks/](brain/systems/maxxi/runbooks/). Webhook Evolution de produção: `https://gochat.netgo.net.br/api/webhooks/evolution`.
 
 ## Convenções e regras (não-óbvias — leia antes de mexer)
@@ -64,12 +67,13 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 - **Credenciais de integração vivem no BANCO (`sistema_kv`), não em env.** SGP, Evolution, Anthropic, OpenAI, Telegram são configurados pela tela admin (**Configurações** / **Canais**) e gravados em `sistema_kv`. Só **infra** vem de env: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `PORT`, `CORS_ORIGIN`, `META_VERIFY_TOKEN`, `ERP_URL`/`ERP_API_KEY`. Muitas vars do `.env.example` (IMAP/SMTP/ASTERISK/VAPID/META_ACCESS_TOKEN) **não são lidas pelo código** — são aspiracionais.
 - **Migrations:** cada mudança de schema é um arquivo novo em `apps/api/src/migrations/versions/NNN_nome.js` com `up(db)`/`down(db)`. Runner próprio (tabela `_migrations`, transacional, ordenado por nome). Nunca rode `ALTER TABLE` direto.
 - **Estado do fluxo é em memória** (`estadosExecucao` Map em `motorFluxo.js`) — **perde no restart**. Conversas em meio de fluxo recomeçam.
-- **Catálogo de nós tem duas faces:** `apps/web/src/lib/nodeTypes.js` (visual, ~32 tipos) deve espelhar o `switch` de `processarNo` em `motorFluxo.js` (backend). Ao adicionar um nó, atualize os dois + `PropsPanel.jsx`.
+- **Catálogo de nós tem duas faces:** `apps/web/src/lib/nodeTypes.js` (visual, ~32 tipos) deve espelhar o `switch` de `processarNo` em `motorFluxo.js` (backend). Ao adicionar um nó, atualize os dois + `PropsPanel.jsx`. **Cuidado com o nome dos campos:** o `PropsPanel` historicamente salvou campos com nomes que o motor não lia (`botao`/`secao`/`instrucao`/`tipo`), então a config era ignorada na execução. Hoje `fluxoHelpers.js` normaliza esses casos (lê o nome do editor com fallback pro antigo) — mas **a regra é manter os nomes iguais nas duas faces**; o helper é rede de segurança, não desculpa pra divergir.
 - **Prompts da IA são editáveis em runtime** (tabela `prompts_ia`, tela Prompts IA). Placeholders `[REGRAS]/[ESTILO]/[PLANOS]/[TIPOS_OCORRENCIA]` resolvidos por `promptService`. Cuidado: há **dois caches** (`integrations.invalidateConfigCache` e `promptService` TTL 3min) — editar prompt invalida só um.
 - **Acoplamento NetGo:** IDs de plano/POP/portador e textos estão hardcoded em `integrations.js` e nos prompts seed. Qualquer revenda exige parametrizar isso por instância.
 
 ## Armadilhas conhecidas (bugs/dívidas — ver [brain/work/](brain/work/))
 
+- **Mismatches editor↔motor (parcialmente corrigidos):** 4 já resolvidos via `fluxoHelpers.js` (`enviar_lista`, `abrir_chamado`, `ia_responde`, `nps_inline`). **Ainda abertos:** `gatilho_keyword` (filtro de palavra inerte), `aguardar_resposta` (`timeout`/`max_tentativas` ignorados — falta scheduler), `condicao_multipla` (sem editor no PropsPanel + porta por `ramo.id`×`ramo.porta`), portas mortas (`solicitar_localizacao`, `transferir_agente`), `enviar_cta` `rodape`. Detalhe em [brain/work/bugs/2026-06-30_auditoria-profunda.md](brain/work/bugs/2026-06-30_auditoria-profunda.md).
 - `sseManager.js` importa `redis` mas o pacote é `ioredis` → Redis SSE provavelmente nunca conecta (cai em modo local; broadcast não cruza instâncias).
 - `GET /api/sysconfig` retorna **API keys em texto plano** (sem mascaramento).
 - Mass-assignment em PUT de `ocorrencias`/`ordens`/`tarefas`; `tarefas` sem ownership-check.
