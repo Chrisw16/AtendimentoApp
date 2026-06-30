@@ -44,7 +44,9 @@ chatTesteRouter.post('/:token', asyncHandler(async (req, res) => {
   const SID = `share:${f.id}`;
   const estados = new Map();
   if (estado) estados.set(SID, estado);
-  const conversa = { id: SID, canal: 'sandbox', canal_instancia: 'sandbox', telefone: '0', nome: 'Visitante' };
+  const h = new Date();
+  const protocolo = `${h.getFullYear()}${String(h.getMonth() + 1).padStart(2, '0')}${String(h.getDate()).padStart(2, '0')}-TESTE`;
+  const conversa = { id: SID, canal: 'sandbox', canal_instancia: 'sandbox', telefone: '0', nome: 'Visitante', protocolo };
   const respostas = [];
 
   await processarConversa(conversa, { texto: mensagem, tipo: 'texto' }, {

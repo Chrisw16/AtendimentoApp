@@ -721,13 +721,14 @@ async function processarIAResponde(no, ctx) {
 
     if (texto) ctx.respostas.push({ tipo: 'texto', texto });
 
-    // Atualiza histórico (últimos 20 turns)
+    // Atualiza histórico (últimas 50 mensagens ≈ 25 trocas — cadastro comercial
+    // longo precisa lembrar cidade/plano/dados coletados no começo da conversa)
     ctx.estado.contexto[turnosKey] = turnosUsados + 1;
     ctx.estado.contexto[histKey]   = [
       ...histSessao,
       { role: 'user',      content: ctx.mensagem.texto || '' },
       { role: 'assistant', content: texto },
-    ].slice(-20);
+    ].slice(-50);
 
     if (transferiu) {
       ctx.estado.contexto[turnosKey] = 0;
