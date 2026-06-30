@@ -4,7 +4,7 @@ type: component
 created: 2026-06-30
 last_updated: 2026-06-30
 status: active
-related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Design System Maxxi]]", "[[Motor de Fluxo]]", "[[Realtime SSE]]", "[[API Backend Maxxi]]"]
+related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Telas e Navegação]]", "[[Design System Maxxi]]", "[[Motor de Fluxo]]", "[[Realtime SSE]]", "[[API Backend Maxxi]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
 aliases: ["frontend", "apps/web", "React", "painel", "useChat", "Zustand"]
 tags: [frontend, react, vite, zustand]
@@ -26,6 +26,8 @@ Painel em **React 19 + Vite** (`apps/web`). Roteamento React Router 6 com lazy l
 Núcleo de atendimento **usável**: Login, Chat (3 colunas, realtime), Dashboard ("Relatórios", gráficos SVG custom), Agentes (CRUD + permissões), Fluxos + **FluxoEditor** (editor visual `@xyflow/react`, ~32 nós, paleta arrastável, import/export JSON, Ctrl+S — espelha o [[Motor de Fluxo]]), Histórico, MonitorRede, Canais, Configurações (6 abas + integrações + planos), Prompts IA (editor + catálogo de tools + testador SGP), Ocorrências, Ordens de Serviço, Satisfação.
 
 Parciais/incompletas: **Tarefas** e **Financeiro** (implementadas mas **sem rota** em `App.jsx`), **Cobertura** (só lê/deleta zonas, sem desenho), **Clientes** (busca quebrada por `useDebounce`). Stubs vazios: Analytics, Dispositivos, Email, VoIP, Frota. Bugs detalhados em [[Achados de código (2026-06-30)]].
+
+O detalhe de cada aba (propósito, funcionamento e integração entre telas) está em [[Telas e Navegação]] e nas páginas [[Abas de Atendimento]], [[Abas de Configuração]] e [[Abas de Operações e Infraestrutura]].
 
 ## See Also
 

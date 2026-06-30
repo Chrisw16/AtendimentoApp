@@ -24,6 +24,12 @@ Last rebuilt: 2026-06-30
 - **Design System Maxxi** (tokens, tema light) — paleta navy+laranja, fontes — `systems/maxxi/components/design-system.md`
 - **API Backend Maxxi** (Express, rotas) — superfície REST (~62 endpoints) — `systems/maxxi/components/api-backend.md`
 
+### Telas (abas)
+- **Telas e Navegação** (abas, menu, sidebar, rotas) — mapa das telas, guards e integração entre abas — `systems/maxxi/telas/telas-e-navegacao.md`
+- **Abas de Atendimento** (Chat, Histórico, Satisfação) — telas do agente no dia a dia — `systems/maxxi/telas/atendimento.md`
+- **Abas de Configuração** (Dashboard, Agentes, Fluxos, Canais, Prompts IA, Configurações) — montagem e parametrização (admin) — `systems/maxxi/telas/configuracao.md`
+- **Abas de Operações e Infraestrutura** (Clientes, Ocorrências, Ordens, Cobertura, Monitor) — operação ISP + telas sem rota e stubs — `systems/maxxi/telas/operacoes.md`
+
 ## Domains
 - **SGP** (Sistema de Gestão de Provedores, ERP ISP) — domínio do ERP e vocabulário ISP — `domains/sgp.md`
 
