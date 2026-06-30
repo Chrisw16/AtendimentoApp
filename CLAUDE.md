@@ -1,0 +1,86 @@
+# CLAUDE.md — Maxxi v2 / GoCHAT
+
+Guia operacional para trabalhar neste repositório. Documentação detalhada (memória institucional) fica no **brain** em [brain/](brain/) — comece por [brain/systems/maxxi/overview.md](brain/systems/maxxi/overview.md).
+
+## O que é
+
+**Maxxi v2** (marca **GoCHAT**) é um sistema de **atendimento omnichannel com IA para provedores de internet (ISP)**. Mensagem entra por WhatsApp/Telegram/etc. → vira conversa → um **motor de fluxo** visual executa o atendimento → a **IA (Claude) com tool calling** resolve consultas no **SGP** (ERP de ISP: boleto, conexão, chamado, planos, pré-cadastro) → se precisar, transfere para um **agente humano** com chat em tempo real (SSE).
+
+Decisão estratégica de base do produto: [brain/strategy/decisions/2026-06-30_adotar-maxxi-base.md](brain/strategy/decisions/2026-06-30_adotar-maxxi-base.md). **Multi-tenancy é por instância** (um deploy isolado por provedor revendido), não row-level — o código é **single-tenant** (zero `company_id`) e fortemente acoplado à NetGo Internet (Natal/RN).
+
+## Stack
+
+| Camada | Tecnologia |
+|---|---|
+| Backend | Node 20 + Express (ESM, `"type":"module"`) |
+| Banco | PostgreSQL 16 + Knex (migrations próprias) |
+| Realtime | SSE (+ Redis pub/sub opcional) |
+| IA | Anthropic Claude (`@anthropic-ai/sdk`, modelo `claude-haiku-4-5-20251001`) |
+| Frontend | React 19 + Vite + React Router 6 |
+| Estado FE | TanStack Query (server) + Zustand (auth/chat) |
+| Editor de fluxo | `@xyflow/react` v12 |
+| Auth | JWT (30 dias) + bcrypt |
+
+## Layout
+
+```
+apps/api/src/
+  server.js              entrypoint (monta rotas /api/*, serve o frontend, inicia migrations+monitores)
+  config/db.js           pool Knex (singleton via getDb()/db proxy)
+  middlewares/           auth.js (JWT, adminMiddleware), errorHandler.js (asyncHandler, HttpError)
+  migrations/versions/   001..007 — modelo de dados (rode em ordem; NUNCA ALTER TABLE solto)
+  repositories/          conversaRepository.js, mensagemRepository.js (toda query de conversa/msg)
+  routes/                auth, chat, webhooks (públicas) + agentes, fluxos, prompts, dashboard, ... (autenticadas)
+  services/
+    motorFluxo.js        ★ motor de execução do fluxo (1032 LOC) — o coração
+    integrations.js      ★ SGP (URA/precadastro) + Evolution + getAnthropicClient
+    iaTools.js           15 tools Anthropic (executarTool)
+    promptService.js     resolverPrompt(slug) — compõe system prompt do banco
+    supervisoraIA.js     sentimento + SLA do agente + sugestões
+    filaService.js       fila/SLA (monitor 60s)
+    sseManager.js        broadcast/sendToAgente
+    telegram.js          envio Telegram
+    webhooks/            evolution.js, meta.js, telegram.js (entrada das mensagens)
+  seed.js                admin/admin123, agente01/agente123, canais, fluxo padrão
+apps/web/src/
+  pages/ components/ hooks/useChat.js store/ lib/api.js lib/nodeTypes.js styles/tokens.css
+```
+
+## Como rodar
+
+**Dev (docker-compose):**
+```bash
+docker-compose up -d            # postgres:5432, redis:6379, api:4000, web:3000
+docker-compose exec api npm run seed   # migrations + dados iniciais
+# Front http://localhost:3000  ·  API http://localhost:4000  ·  /health sempre responde
+```
+
+**Dev (sem Docker):** precisa Postgres 16 + Redis 7 + Node 20. Em `apps/api`: `cp .env.example .env`, `npm install`, `npm run seed`, `npm run dev`. Em `apps/web`: `npm install`, `npm run dev`.
+
+**Produção (Coolify):** o **Dockerfile raiz** é multi-stage — builda `apps/web` e copia `dist` para `apps/api/apps/web/dist`; a API serve frontend + API no **mesmo container** (porta 4000). Migrations rodam em background no boot. Runbook: [brain/systems/maxxi/runbooks/](brain/systems/maxxi/runbooks/). Webhook Evolution de produção: `https://gochat.netgo.net.br/api/webhooks/evolution`.
+
+## Convenções e regras (não-óbvias — leia antes de mexer)
+
+- **Credenciais de integração vivem no BANCO (`sistema_kv`), não em env.** SGP, Evolution, Anthropic, OpenAI, Telegram são configurados pela tela admin (**Configurações** / **Canais**) e gravados em `sistema_kv`. Só **infra** vem de env: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `PORT`, `CORS_ORIGIN`, `META_VERIFY_TOKEN`, `ERP_URL`/`ERP_API_KEY`. Muitas vars do `.env.example` (IMAP/SMTP/ASTERISK/VAPID/META_ACCESS_TOKEN) **não são lidas pelo código** — são aspiracionais.
+- **Migrations:** cada mudança de schema é um arquivo novo em `apps/api/src/migrations/versions/NNN_nome.js` com `up(db)`/`down(db)`. Runner próprio (tabela `_migrations`, transacional, ordenado por nome). Nunca rode `ALTER TABLE` direto.
+- **Estado do fluxo é em memória** (`estadosExecucao` Map em `motorFluxo.js`) — **perde no restart**. Conversas em meio de fluxo recomeçam.
+- **Catálogo de nós tem duas faces:** `apps/web/src/lib/nodeTypes.js` (visual, ~32 tipos) deve espelhar o `switch` de `processarNo` em `motorFluxo.js` (backend). Ao adicionar um nó, atualize os dois + `PropsPanel.jsx`.
+- **Prompts da IA são editáveis em runtime** (tabela `prompts_ia`, tela Prompts IA). Placeholders `[REGRAS]/[ESTILO]/[PLANOS]/[TIPOS_OCORRENCIA]` resolvidos por `promptService`. Cuidado: há **dois caches** (`integrations.invalidateConfigCache` e `promptService` TTL 3min) — editar prompt invalida só um.
+- **Acoplamento NetGo:** IDs de plano/POP/portador e textos estão hardcoded em `integrations.js` e nos prompts seed. Qualquer revenda exige parametrizar isso por instância.
+
+## Armadilhas conhecidas (bugs/dívidas — ver [brain/work/](brain/work/))
+
+- `sseManager.js` importa `redis` mas o pacote é `ioredis` → Redis SSE provavelmente nunca conecta (cai em modo local; broadcast não cruza instâncias).
+- `GET /api/sysconfig` retorna **API keys em texto plano** (sem mascaramento).
+- Mass-assignment em PUT de `ocorrencias`/`ordens`/`tarefas`; `tarefas` sem ownership-check.
+- `Tarefas.jsx` e `Financeiro.jsx` existem mas **não têm rota** em `App.jsx`. `Clientes.jsx` tem `useDebounce` quebrado.
+- Meta gera mídia em `/api/media/:id` mas **não há rota `/api/media`** montada.
+- Resíduos do provedor de inspiração ("CITmax") em `seed.js` e na tool `status_rede`. Fluxo padrão do seed é legado e não roda no motor atual.
+
+## Design system
+
+Tema **LIGHT** (atual): branco predominante, acentos **navy `#2050B8`** + **laranja `#E8572A`**. Fontes Plus Jakarta Sans (corpo), JetBrains Mono (código), Syne (display). Tokens em [apps/web/src/styles/tokens.css](apps/web/src/styles/tokens.css). (O README descreve um tema escuro `#00E5A0` **antigo/desatualizado** — `#00E5A0` hoje só aparece nas cores de nó do editor de fluxo.)
+
+## Estado do produto (auditoria estática 2026-06-30, ainda não validado rodando)
+
+Atendimento ponta-a-ponta ~95% (Evolution/WhatsApp e Telegram melhores que Meta); núcleo e frontend de atendimento usáveis; SGP+IA prontos (faltam credenciais). Pendências: validar rodando, endurecer segurança, fechar endpoints de Canais/Config, automatizar deploy-por-cliente. Detalhe por módulo em [brain/systems/maxxi/overview.md](brain/systems/maxxi/overview.md).

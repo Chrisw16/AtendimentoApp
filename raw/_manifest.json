@@ -1,0 +1,21 @@
+{
+  "sources": [
+    {
+      "id": "2026-06-30_decisao-base-maxxi",
+      "type": "strategy",
+      "path": "raw/sources/strategy/2026-06-30_decisao-base-maxxi.md",
+      "date": "2026-06-30",
+      "title": "Decisão de base do produto: adotar o Maxxi v2 (handoff)",
+      "status": "absorbed"
+    },
+    {
+      "id": "2026-06-30_estudo-codigo-maxxi",
+      "type": "code",
+      "path": "raw/sources/code/2026-06-30_estudo-codigo-maxxi.md",
+      "date": "2026-06-30",
+      "title": "Estudo linha-por-linha do código do Maxxi v2",
+      "status": "absorbed"
+    }
+  ],
+  "last_updated": "2026-06-30"
+}
