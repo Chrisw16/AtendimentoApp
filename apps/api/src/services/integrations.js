@@ -569,10 +569,10 @@ export async function evolutionEnviarBotoes(instancia, numero, { corpo, botoes }
     buttons: botoes.map((b, i) => ({ buttonId: b.id||`btn${i}`, buttonText: { displayText: b.label||b }, type: 1 })),
   }, 'POST');
 }
-export async function evolutionEnviarLista(instancia, numero, { corpo, labelBotao, tituloSecao, itens }) {
+export async function evolutionEnviarLista(instancia, numero, { corpo, label_botao, titulo_secao, itens }) {
   return evolutionRequest(`/message/sendList/${instancia}`, {
-    number: numero, title: corpo, buttonText: labelBotao || 'Ver opções',
-    sections: [{ title: tituloSecao || 'Opções', rows: itens.map(it => ({ rowId: it.id, title: it.titulo })) }],
+    number: numero, title: corpo, buttonText: label_botao || 'Ver opções',
+    sections: [{ title: titulo_secao || 'Opções', rows: itens.map(it => ({ rowId: it.id, title: it.titulo })) }],
   }, 'POST');
 }
 export async function evolutionEnviarCTA(instancia, numero, { corpo, label, url }) {

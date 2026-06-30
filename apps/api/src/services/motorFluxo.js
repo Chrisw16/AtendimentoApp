@@ -18,6 +18,7 @@ import {
   evolutionEnviarCTA, evolutionEnviarImagem, evolutionEnviarAudio,
   evolutionEnviarArquivo,
 } from './integrations.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista } from './fluxoHelpers.js';
 
 // Estado de execução em memória (por conversa_id)
 const estadosExecucao = new Map();
@@ -175,7 +176,7 @@ async function processarNo(no, ctx) {
         || (num >= 0 && num < itens.length ? itens[num] : null);
       return avancar(match ? match.id : 'saida');
       }
-      ctx.respostas.push({ tipo: 'lista', corpo: interpolar(cfg.corpo || '', ctx), label_botao: cfg.label_botao, titulo_secao: cfg.titulo_secao, itens });
+      ctx.respostas.push({ tipo: 'lista', corpo: interpolar(cfg.corpo || '', ctx), ...camposLista(cfg), itens });
       ctx.estado.aguardando = no.id;
       return aguardar();
     }
@@ -400,7 +401,7 @@ async function processarNo(no, ctx) {
         // criarChamado(contrato, tipo, descricao) — fiel ao erp.js original
         const data = await criarChamado(
           contrato,
-          cfg.tipo_id || 5,
+          resolverTipoChamado(cfg),
           interpolar(cfg.descricao || 'Chamado aberto via GoCHAT', ctx)
         );
         ctx.estado.contexto.chamado = {
@@ -538,11 +539,11 @@ async function processarNo(no, ctx) {
     case 'nps_inline': {
       if (ctx.estado.aguardando === no.id) {
         ctx.estado.aguardando = null;
-        const nota = parseInt(ctx.mensagem.texto || '0');
-        if (nota >= 1 && nota <= 10) {
+        const aval = avaliarNps(ctx.mensagem.texto, cfg.escala);
+        if (aval.valida) {
+          const nota = parseInt(ctx.mensagem.texto, 10);
           await ctx.db('satisfacao').insert({ conversa_id: ctx.conversa.id, nota, canal: ctx.conversa.canal }).catch(() => {});
-          const porta = nota >= 9 ? 'promotor' : nota >= 7 ? 'neutro' : 'detrator';
-          return avancar(porta);
+          return avancar(aval.porta);
         }
         ctx.estado.aguardando = no.id;
         return aguardar();
@@ -594,20 +595,22 @@ async function processarIAResponde(no, ctx) {
     .map(([k, v]) => `cliente.${k}: ${v}`)
     .join('\n');
 
-  const system = [
-    systemBase || cfg.prompt,
-    cfg.prompt && systemBase ? `\nInstrução específica: ${cfg.prompt}` : '',
-    ctxCliente ? `\n📋 Dados do cliente identificado:\n${ctxCliente}` : '',
-    `\n## REGRAS CRÍTICAS DE FERRAMENTAS
+  // O editor salva a instrução extra em cfg.instrucao; mantém cfg.prompt por compatibilidade.
+  const instrucao = cfg.instrucao ?? cfg.prompt;
+  const system = montarSystemPrompt({
+    systemBase,
+    instrucao,
+    ctxCliente,
+    regrasTools: `## REGRAS CRÍTICAS DE FERRAMENTAS
 - Você tem acesso a ferramentas reais (tool_use). Use-as diretamente — NUNCA escreva o nome delas no texto.
-- ERRADO: "Deixa eu verificar... verificar_conexao" 
+- ERRADO: "Deixa eu verificar... verificar_conexao"
 - CERTO: [executa a tool silenciosamente e responde com o resultado]
 - Execute a ferramenta PRIMEIRO, depois responda ao cliente com o resultado.
 - Não peça dados que já estão no contexto acima.
 - Não diga "vou verificar" ou "aguarde" — apenas execute e responda.
 - NUNCA invente ou suponha números de contrato, CPF ou protocolo. Use APENAS os dados do contexto acima.
 - Ao chamar criar_chamado, NÃO passe o campo "contrato" no input — ele é preenchido automaticamente pelo sistema com o contrato correto do cliente.`,
-  ].filter(Boolean).join('\n');
+  });
 
   // Histórico
   const histSessao = ctx.estado.contexto[histKey] || [];
