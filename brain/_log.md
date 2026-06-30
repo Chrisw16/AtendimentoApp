@@ -58,3 +58,13 @@ Correção dos mismatches mais diretos da auditoria, em worktree isolada + TDD (
 - Brain atualizado: `Motor de Fluxo` (seção "Funções puras testáveis") e `Auditoria profunda (2026-06-30)` (itens ✅). CLAUDE.md ganhou seção de Testes + nota dos mismatches.
 - **Aberto ainda:** `gatilho_keyword` (matching), `aguardar_resposta` (timeout/scheduler), `condicao_multipla` (editor + portas), portas mortas (`solicitar_localizacao`, `transferir_agente`), `enviar_cta` rodapé.
 - Próximo passo decidido com o Christian: **ambiente de testes de fluxo** (detectar trava/limbo/cliente perdido).
+
+## [2026-06-30 18:30] WORK | Ambiente de testes de fluxo (validador estático + simulador)
+
+Construído em branch separada (`worktree-ambiente-testes-fluxo`) — Christian trabalha com outro dev e só passa pra main quando estiver 100%. Tudo TDD, sem subir banco/IA (o motor não importa em teste pois puxa knex e as deps não ficam instaladas localmente).
+
+- **`fluxoValidador.js`** (+CLI +exemplo): análise estática do grafo. Catálogo `NOS` (tipo→portas que o motor emite, extraído do `processarNo`) + checagens `sem_entrada`/`beco_sem_saida`/`porta_nao_conectada`/`no_inalcancavel`/`aresta_orfa`/`loop_sem_espera`. 38 testes.
+- **`motorLoop.js`**: loop real do motor extraído como função pura (`executarLoop`, `encontrarProximo` byte-a-byte), classifica desfecho (concluido/aguardando/perdido/travado/erro). Espelho fiel, **pronto pra religar** no `processarConversa` (deferido: precisa Docker p/ validar). 9 testes.
+- **`motorSimulador.js`** (+CLI +cenário): conversa multi-turno sobre o `executarLoop`, executor fiel p/ determinísticos (reusa `avaliarNps`) + decisões roteirizadas p/ IO/IA/SGP. 9 testes.
+- Insight registrado: o 3º fallback do `encontrarProximo` (qualquer aresta) faz ramo não-ligado **mandar pro nó errado** (não perder o cliente) → no validador é `aviso`, não `erro`; "perdido" de runtime só com **zero arestas**.
+- Brain: nova página `Testes de Fluxo`; `_index` (15 componentes) e See Also de `Motor de Fluxo` atualizados. Total na branch: **77 testes verdes**.

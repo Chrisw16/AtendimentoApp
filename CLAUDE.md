@@ -58,7 +58,13 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 
 **Dev (sem Docker):** precisa Postgres 16 + Redis 7 + Node 20. Em `apps/api`: `cp .env.example .env`, `npm install`, `npm run seed`, `npm run dev`. Em `apps/web`: `npm install`, `npm run dev`.
 
-**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps). A lógica pura do motor (resolução de campos, escala NPS) fica em `fluxoHelpers.js` com `fluxoHelpers.test.js` — ao mexer em como o motor lê config do editor, escreva o teste lá primeiro (TDD). `motorFluxo.js` em si não é importável em teste unitário (puxa `config/db.js` → Knex no topo); por isso a lógica testável foi extraída para `fluxoHelpers.js`.
+**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps). `motorFluxo.js` **não é importável em teste** (puxa `config/db.js` → Knex no topo e as deps não ficam instaladas localmente); por isso toda lógica testável vive em **módulos puros** ao lado dele — escreva o teste primeiro (TDD):
+- `fluxoHelpers.js` — resolução de campos editor↔motor + escala NPS.
+- `fluxoValidador.js` (+`.cli.js`) — **validador estático** do grafo do fluxo: pega beco sem saída (cliente perdido), porta não conectada, nó inalcançável, aresta órfã, loop sem espera (trava). `node src/services/fluxoValidador.cli.js examples/fluxo-exemplo.json`.
+- `motorLoop.js` — o **loop real** do motor extraído como função pura (`executarLoop`), espelho byte-a-byte; pronto pra religar no `processarConversa` (deferido: precisa Docker pra validar).
+- `motorSimulador.js` (+`.cli.js`) — **simulador** de conversa multi-turno sobre o `executarLoop` (passo a passo, detecta concluido/travado/perdido/aguardando). `node src/services/motorSimulador.cli.js <fluxo.json> [cenario.json]`.
+
+Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/maxxi/components/testes-de-fluxo.md).
 
 **Produção (Coolify):** o **Dockerfile raiz** é multi-stage — builda `apps/web` e copia `dist` para `apps/api/apps/web/dist`; a API serve frontend + API no **mesmo container** (porta 4000). Migrations rodam em background no boot. Runbook: [brain/systems/maxxi/runbooks/](brain/systems/maxxi/runbooks/). Webhook Evolution de produção: `https://gochat.netgo.net.br/api/webhooks/evolution`.
 

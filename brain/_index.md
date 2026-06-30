@@ -23,6 +23,7 @@ Last rebuilt: 2026-06-30
 - **Frontend Maxxi** (apps/web, React, Zustand, useChat) — painel e suas 21 páginas — `systems/maxxi/components/frontend.md`
 - **Design System Maxxi** (tokens, tema light) — paleta navy+laranja, fontes — `systems/maxxi/components/design-system.md`
 - **API Backend Maxxi** (Express, rotas) — superfície REST (~62 endpoints) — `systems/maxxi/components/api-backend.md`
+- **Testes de Fluxo** (validador estático, simulador de conversa, motorLoop) — pega trava/limbo/cliente perdido sem subir nada — `systems/maxxi/components/testes-de-fluxo.md`
 
 ### Telas (abas)
 - **Telas e Navegação** (abas, menu, sidebar, rotas) — mapa das telas, guards e integração entre abas — `systems/maxxi/telas/telas-e-navegacao.md`
