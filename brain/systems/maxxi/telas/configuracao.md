@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Telas e Navegação]]", "[[Motor de Fluxo]]", "[[Catálogo de Nós]]", "[[IA com Tool Calling]]", "[[Integração SGP]]", "[[Canais e Webhooks]]", "[[Auth e Segurança]]", "[[Modelo de Dados]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["Dashboard", "Agentes", "Fluxos", "Editor de Fluxo", "Canais", "Prompts IA", "Configurações", "Analytics"]
+aliases: ["Abas de Configuração", "Dashboard", "Agentes", "Fluxos", "Editor de Fluxo", "Canais", "Prompts IA", "Configurações", "Analytics"]
 tags: [frontend, telas, configuracao, admin]
 ---
 

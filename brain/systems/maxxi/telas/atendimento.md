@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Telas e Navegação]]", "[[Realtime SSE]]", "[[Supervisora IA]]", "[[Fila e SLA]]", "[[Motor de Fluxo]]", "[[Canais e Webhooks]]", "[[Modelo de Dados]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["Chat", "Histórico", "Satisfação", "aba Chat", "aba Histórico", "NPS"]
+aliases: ["Abas de Atendimento", "Chat", "Histórico", "Satisfação", "aba Chat", "aba Histórico", "NPS"]
 tags: [frontend, telas, atendimento, chat]
 ---
 

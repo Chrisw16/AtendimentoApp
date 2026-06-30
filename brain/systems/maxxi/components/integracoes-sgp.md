@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Catálogo de Nós]]", "[[IA com Tool Calling]]", "[[Motor de Fluxo]]", "[[Canais e Webhooks]]", "[[SGP]]", "[[Auth e Segurança]]"]
 sources: ["2026-06-30_integrations-referencia", "2026-06-30_estudo-codigo-maxxi"]
-aliases: ["integrations.js", "SGP integração", "Evolution", "precadastro", "URA"]
+aliases: ["Integração SGP", "integrations.js", "SGP integração", "Evolution", "precadastro", "URA"]
 tags: [backend, sgp, erp, evolution, integracao]
 ---
 

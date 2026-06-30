@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Telas e Navegação]]", "[[Integração SGP]]", "[[Abas de Atendimento]]", "[[Modelo de Dados]]", "[[API Backend Maxxi]]", "[[Achados de código (2026-06-30)]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["Clientes", "Ocorrências", "Ordens de Serviço", "Cobertura", "Monitor de Rede", "Tarefas", "Financeiro"]
+aliases: ["Abas de Operações e Infraestrutura", "Clientes", "Ocorrências", "Ordens de Serviço", "Cobertura", "Monitor de Rede", "Tarefas", "Financeiro"]
 tags: [frontend, telas, operacoes, infraestrutura]
 ---
 

@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Supervisora IA]]", "[[Realtime SSE]]", "[[API Backend Maxxi]]", "[[Modelo de Dados]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["filaService", "fila", "SLA", "urgência", "agente fantasma"]
+aliases: ["Fila e SLA", "filaService", "fila", "SLA", "urgência", "agente fantasma"]
 tags: [backend, fila, sla]
 ---
 

@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Motor de Fluxo]]", "[[IA com Tool Calling]]", "[[Integração SGP]]", "[[Frontend Maxxi]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 sources: ["2026-06-30_motor-fluxo-catalogo", "2026-06-30_estudo-codigo-maxxi"]
-aliases: ["nós", "catálogo de nós", "node catalog", "tipos de nó", "etapas do fluxo", "nodeTypes"]
+aliases: ["Catálogo de Nós", "nós", "catálogo de nós", "node catalog", "tipos de nó", "etapas do fluxo", "nodeTypes"]
 tags: [backend, fluxo, nós, referencia, chatbot]
 ---
 

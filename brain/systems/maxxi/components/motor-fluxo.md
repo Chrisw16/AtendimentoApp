@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Catálogo de Nós]]", "[[IA com Tool Calling]]", "[[Integração SGP]]", "[[Canais e Webhooks]]", "[[Frontend Maxxi]]", "[[Modelo de Dados]]"]
 sources: ["2026-06-30_motor-fluxo-catalogo", "2026-06-30_estudo-codigo-maxxi"]
-aliases: ["motorFluxo", "motor de fluxo", "fluxo", "chatbot engine", "execução de fluxo"]
+aliases: ["Motor de Fluxo", "motorFluxo", "motor de fluxo", "fluxo", "chatbot engine", "execução de fluxo"]
 tags: [backend, fluxo, motor, chatbot]
 ---
 

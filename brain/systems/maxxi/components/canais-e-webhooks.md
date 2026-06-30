@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Motor de Fluxo]]", "[[Realtime SSE]]", "[[Integração SGP]]", "[[Supervisora IA]]", "[[Modelo de Dados]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["webhooks", "canais", "Evolution webhook", "Meta webhook", "Telegram webhook", "ingestão"]
+aliases: ["Canais e Webhooks", "webhooks", "canais", "Evolution webhook", "Meta webhook", "Telegram webhook", "ingestão"]
 tags: [backend, canais, webhooks, whatsapp, telegram]
 ---
 

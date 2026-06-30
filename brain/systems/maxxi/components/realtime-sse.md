@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Canais e Webhooks]]", "[[Fila e SLA]]", "[[Supervisora IA]]", "[[Frontend Maxxi]]", "[[Achados de código (2026-06-30)]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["sseManager", "SSE", "realtime", "Redis pub/sub", "broadcast"]
+aliases: ["Realtime SSE", "sseManager", "SSE", "realtime", "Redis pub/sub", "broadcast"]
 tags: [backend, realtime, sse, redis]
 ---
 

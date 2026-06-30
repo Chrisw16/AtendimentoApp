@@ -8,7 +8,7 @@ relationship: team
 role: Dono do produto / desenvolvedor
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Adotar o Maxxi v2 como base]]"]
 sources: ["2026-06-30_decisao-base-maxxi"]
-aliases: ["Chrisw16", "Chrisdev", "Christian Araujo"]
+aliases: ["Christian", "Chrisw16", "Chrisdev", "Christian Araujo"]
 tags: [pessoa, time]
 ---
 

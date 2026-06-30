@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Motor de Fluxo]]", "[[Integração SGP]]", "[[Auth e Segurança]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["schema", "banco", "migrations", "tabelas"]
+aliases: ["Modelo de Dados", "schema", "banco", "migrations", "tabelas"]
 tags: [backend, banco, postgres, knex]
 ---
 

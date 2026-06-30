@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Fila e SLA]]", "[[Realtime SSE]]", "[[Canais e Webhooks]]", "[[IA com Tool Calling]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["supervisoraIA", "supervisora", "sentimento", "sugestão de resposta"]
+aliases: ["Supervisora IA", "supervisoraIA", "supervisora", "sentimento", "sugestão de resposta"]
 tags: [backend, ia, sentimento, sla, supervisora]
 ---
 

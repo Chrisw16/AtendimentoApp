@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Frontend Maxxi]]", "[[Abas de Atendimento]]", "[[Abas de Configuração]]", "[[Abas de Operações e Infraestrutura]]", "[[Auth e Segurança]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["telas", "abas", "navegação", "menu", "sidebar", "rotas", "páginas"]
+aliases: ["Telas e Navegação", "telas", "abas", "navegação", "menu", "sidebar", "rotas", "páginas"]
 tags: [frontend, navegacao, telas, ux]
 ---
 

@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Telas e Navegação]]", "[[Design System Maxxi]]", "[[Motor de Fluxo]]", "[[Realtime SSE]]", "[[API Backend Maxxi]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["frontend", "apps/web", "React", "painel", "useChat", "Zustand"]
+aliases: ["Frontend Maxxi", "frontend", "apps/web", "React", "painel", "useChat", "Zustand"]
 tags: [frontend, react, vite, zustand]
 ---
 

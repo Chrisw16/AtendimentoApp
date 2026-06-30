@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Auth e Segurança]]", "[[Modelo de Dados]]", "[[Canais e Webhooks]]", "[[Fila e SLA]]", "[[Achados de código (2026-06-30)]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["API", "rotas", "endpoints", "Express", "server.js"]
+aliases: ["API Backend Maxxi", "API", "rotas", "endpoints", "Express", "server.js"]
 tags: [backend, api, express, rotas]
 ---
 

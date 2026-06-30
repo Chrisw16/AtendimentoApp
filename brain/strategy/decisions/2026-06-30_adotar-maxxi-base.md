@@ -9,7 +9,7 @@ stakeholders: ["[[Christian]]"]
 impact: critical
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]"]
 sources: ["2026-06-30_decisao-base-maxxi"]
-aliases: ["decisão base Maxxi", "Maxxi vs Atendechat", "multi-tenancy por instância"]
+aliases: ["Adotar o Maxxi v2 como base", "decisão base Maxxi", "Maxxi vs Atendechat", "multi-tenancy por instância"]
 tags: [estrategia, produto, decisao]
 ---
 

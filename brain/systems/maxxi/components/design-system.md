@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Frontend Maxxi]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["design system", "tokens", "tema", "cores", "paleta", "fontes"]
+aliases: ["Design System Maxxi", "design system", "tokens", "tema", "cores", "paleta", "fontes"]
 tags: [frontend, design, css, tokens]
 ---
 

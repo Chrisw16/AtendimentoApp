@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Canais e Webhooks]]", "[[Modelo de Dados]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi", "2026-06-30_decisao-base-maxxi"]
-aliases: ["runbook", "subir Maxxi", "deploy", "Coolify", "rodar"]
+aliases: ["Runbooks Maxxi", "runbook", "subir Maxxi", "deploy", "Coolify", "rodar"]
 tags: [runbook, deploy, operacao]
 ---
 

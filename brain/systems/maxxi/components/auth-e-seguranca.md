@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[API Backend Maxxi]]", "[[Modelo de Dados]]", "[[Achados de código (2026-06-30)]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["auth", "JWT", "segurança", "permissões", "RBAC"]
+aliases: ["Auth e Segurança", "auth", "JWT", "segurança", "permissões", "RBAC"]
 tags: [backend, seguranca, auth, jwt]
 ---
 

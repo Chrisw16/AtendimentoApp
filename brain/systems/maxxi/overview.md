@@ -6,7 +6,7 @@ last_updated: 2026-06-30
 status: active
 related: ["[[Adotar o Maxxi v2 como base]]", "[[Motor de Fluxo]]", "[[IA com Tool Calling]]", "[[Integração SGP]]", "[[Canais e Webhooks]]", "[[Modelo de Dados]]", "[[Frontend Maxxi]]", "[[Design System Maxxi]]", "[[Supervisora IA]]", "[[Fila e SLA]]", "[[Realtime SSE]]", "[[Auth e Segurança]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi", "2026-06-30_decisao-base-maxxi"]
-aliases: ["Maxxi", "GoCHAT", "GoChat", "Maxxi v2", "AtendimentoApp"]
+aliases: ["Maxxi v2 / GoCHAT — Visão geral", "Maxxi", "GoCHAT", "GoChat", "Maxxi v2", "AtendimentoApp"]
 tags: [produto, isp, atendimento, omnichannel]
 ---
 

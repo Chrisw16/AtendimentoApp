@@ -8,3 +8,8 @@ dist/
 
 # Obsidian UI state (ruido)
 brain/.obsidian/workspace.json
+
+# Stubs soltos que o Obsidian cria na raiz do brain (links nao resolvidos)
+brain/*.md
+!brain/_*.md
+brain/*.canvas

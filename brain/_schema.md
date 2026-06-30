@@ -27,6 +27,10 @@ Brain do produto **Maxxi v2 / GoCHAT** — sistema de atendimento omnichannel co
 - Decisões: `YYYY-MM-DD_slug.md`.
 - Sources de código: `raw/sources/code/YYYY-MM-DD_{escopo}.md`.
 
+## Convenção crítica — wikilinks no Obsidian
+
+O Obsidian resolve `[[wikilinks]]` pelo **nome do arquivo ou por um alias**, NÃO pelo campo `title` do frontmatter. Como os arquivos são kebab-case (`fila-e-sla.md`) e os links usam o título (`[[Fila e SLA]]`), **toda página deve incluir o próprio `title` na lista `aliases`**. Sem isso, clicar num link no Obsidian cria um arquivo vazio na raiz do brain. Stubs soltos em `brain/*.md` (fora os `_*`) e `brain/*.canvas` estão no `.gitignore` como rede de segurança.
+
 ## Convenção de estudo de código
 
 Cada lote de estudo do código vira uma source imutável em `raw/sources/code/` e alimenta as páginas de `systems/maxxi/components/`. As páginas descrevem o que o componente É e por que existe (memória institucional), não como usar (isso fica no CLAUDE.md).

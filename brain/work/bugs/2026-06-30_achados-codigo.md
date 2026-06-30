@@ -8,7 +8,7 @@ priority: p1
 knowledge_refs: ["systems/maxxi/components/auth-e-seguranca", "systems/maxxi/components/realtime-sse", "systems/maxxi/components/api-backend"]
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Auth e Segurança]]", "[[Realtime SSE]]", "[[API Backend Maxxi]]", "[[Frontend Maxxi]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["achados", "bugs", "dívida técnica", "findings"]
+aliases: ["Achados de código (2026-06-30)", "achados", "bugs", "dívida técnica", "findings"]
 tags: [work, bug, seguranca, divida-tecnica]
 ---
 
