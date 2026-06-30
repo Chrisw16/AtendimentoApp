@@ -64,6 +64,8 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 - `motorLoop.js` — o **loop real** do motor extraído como função pura (`executarLoop`), espelho byte-a-byte; pronto pra religar no `processarConversa` (deferido: precisa Docker pra validar).
 - `motorSimulador.js` (+`.cli.js`) — **simulador** de conversa multi-turno sobre o `executarLoop` (passo a passo, detecta concluido/travado/perdido/aguardando). `node src/services/motorSimulador.cli.js <fluxo.json> [cenario.json]`.
 
+**Testar fluxo no app** (tela Fluxos → botão "Testar fluxo" → `TesteFluxoModal`): `POST /fluxos/:id/validar` (relatório estático), `/simular` (roteirizado) e `/simular-real` (roda o motor de verdade com SGP+IA em **modo sandbox** — `processarConversa(c,msg,{fluxo,estados,enviar,sandbox})`; em sandbox, reads são reais mas tudo que grava é simulado, inclusive as tools de IA via gate no `executarTool`).
+
 Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/maxxi/components/testes-de-fluxo.md).
 
 **Produção (Coolify):** o **Dockerfile raiz** é multi-stage — builda `apps/web` e copia `dist` para `apps/api/apps/web/dist`; a API serve frontend + API no **mesmo container** (porta 4000). Migrations rodam em background no boot. Runbook: [brain/systems/maxxi/runbooks/](brain/systems/maxxi/runbooks/). Webhook Evolution de produção: `https://gochat.netgo.net.br/api/webhooks/evolution`.

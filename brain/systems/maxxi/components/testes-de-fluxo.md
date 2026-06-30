@@ -52,10 +52,24 @@ node src/services/motorSimulador.cli.js examples/fluxo-exemplo.json examples/cen
 
 O **validador** prova propriedades sobre **todos** os caminhos do grafo de uma vez (bom pra "nenhum beco existe"). O **simulador** prova um **caminho concreto** que você roteiriza (bom pra "o cenário 2ª-via-de-boleto conclui certinho"). Use os dois: o validador como rede ampla, o simulador para cenários de regressão.
 
+## 3. Função nativa no app (tela Fluxos)
+
+Botão **"Testar fluxo"** no card de cada fluxo abre o `TesteFluxoModal` (`apps/web/src/components/fluxo/`), com duas abas:
+
+- **Validação** → `POST /fluxos/:id/validar` (roda o `fluxoValidador` no fluxo do banco e mostra o relatório).
+- **Simulação**, em dois modos:
+  - **Roteiro** → `POST /fluxos/:id/simular` (o `motorSimulador`; você dá as mensagens + decisões por nó; sem custo de IA).
+  - **Conversa real** → `POST /fluxos/:id/simular-real`: roda o **motor de verdade** (`processarConversa`) com **SGP e IA reais**, em **modo sandbox**.
+
+### Modo sandbox (a "simulação real")
+
+`processarConversa(conversa, msg, opts)` ganhou `opts` opcionais (defaults = produção byte-idêntica): `fluxo` (testa um fluxo específico), `estados` (Map isolado), `enviar` (captura respostas em vez de mandar no WhatsApp) e `sandbox`. Com `sandbox:true`: SGP/IA **leem de verdade**, mas tudo que **grava** é simulado — nós `abrir_chamado`/`promessa_pagamento`/`transferir_agente`/`nota_interna`/`nps_inline`/`encerrar` e as tools de IA `criar_chamado`/`promessa_pagamento`/`precadastrar_cliente`/`reiniciar_onu_acs` (gate em `executarTool`). A rota é **resumível** por turno (`{mensagem, estado}` → `{respostas, estado, status}`), então o chat sandbox mantém a conversa entre mensagens sem estado no servidor.
+
 ## Limitações / próximos passos
 
-- O simulador **não roda** o `processarNo` real (o motor não importa em teste aqui) — roteiriza as decisões de IO/IA/SGP. Para rodar o motor de verdade com SGP/IA mockados, é preciso **religar o `motorLoop` no `processarConversa`** (deferido) e/ou instalar deps + injetar serviços.
-- Não há ainda um modo "validar todos os fluxos do banco" (precisa de DB) nem badge de lint no editor — candidatos naturais a partir do `fluxoValidador`.
+- O `motorSimulador` (modo Roteiro) **não roda** o `processarNo` real — roteiriza as decisões. Quem roda o motor real é o modo **Conversa real** (sandbox). Religar o `motorLoop` no `processarConversa` para remover a duplicação do loop segue **deferido** (precisa Docker pra validar).
+- Toda a integração (rotas Express + React + dry-run do motor) foi escrita mas **não rodada** neste ambiente (sem `node_modules`/banco) — validar via `docker-compose`.
+- Faltam: modo "validar todos os fluxos do banco" e badge de lint no editor (candidatos a partir do `fluxoValidador`).
 
 ## See Also
 

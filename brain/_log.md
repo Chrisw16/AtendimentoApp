@@ -68,3 +68,12 @@ Construído em branch separada (`worktree-ambiente-testes-fluxo`) — Christian 
 - **`motorSimulador.js`** (+CLI +cenário): conversa multi-turno sobre o `executarLoop`, executor fiel p/ determinísticos (reusa `avaliarNps`) + decisões roteirizadas p/ IO/IA/SGP. 9 testes.
 - Insight registrado: o 3º fallback do `encontrarProximo` (qualquer aresta) faz ramo não-ligado **mandar pro nó errado** (não perder o cliente) → no validador é `aviso`, não `erro`; "perdido" de runtime só com **zero arestas**.
 - Brain: nova página `Testes de Fluxo`; `_index` (15 componentes) e See Also de `Motor de Fluxo` atualizados. Total na branch: **77 testes verdes**.
+
+## [2026-06-30 19:30] WORK | Função nativa de teste de fluxo no app (Fase A + B)
+
+Rodado o validador no fluxo real "Atendimento NetGo — Principal" (24 nós): 0 erros, 8 avisos reais — aresta `nao_encontrado` numa porta que `consultar_cliente` nunca emite (funciona só por sorte via `max_tentativas`), branches mortos `wifi`/`relocacao` no menu (lista não tem mais essas opções), porta `sim` resíduo, e 4 menus sem tratar resposta-fora-das-opções (o `n_1774406303940` sem `ia_menu_ativo` é o risco real). Encerrar sem mensagem de despedida.
+
+Construída a função nativa (Christian pediu, escopo A+B):
+- **Fase A:** rotas `POST /fluxos/:id/validar` e `/simular` (finas, reusam os módulos puros) + botão "Testar fluxo" → `TesteFluxoModal` (aba Validação + Simulação modo Roteiro).
+- **Fase B (simulação real):** `processarConversa(c, msg, opts)` com `opts` (fluxo/estados/enviar/sandbox; defaults = produção byte-idêntica). Sandbox roda SGP/IA reais mas **simula tudo que grava** (nós + tools de IA via gate no `executarTool`). Rota `/simular-real` resumível por turno + chat sandbox na UI.
+- **Não rodado** (sem deps/banco local) — `node --check` OK, 77 testes dos módulos puros verdes; validar via docker antes da main.
