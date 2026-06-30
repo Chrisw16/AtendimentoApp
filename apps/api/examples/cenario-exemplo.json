@@ -1,0 +1,9 @@
+{
+  "_comment": "Cenário para o fluxo-exemplo.json: cliente pede 2ª via de boleto. Rode: node src/services/motorSimulador.cli.js examples/fluxo-exemplo.json examples/cenario-exemplo.json",
+  "turnos": ["oi", "boleto", "123.456.789-00"],
+  "decisoes": {
+    "cc": "encontrado",
+    "cb": "encontrado"
+  },
+  "contextoInicial": {}
+}
