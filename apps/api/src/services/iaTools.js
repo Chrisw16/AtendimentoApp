@@ -283,9 +283,13 @@ export async function executarTool(name, input, ctx) {
       const db = getDb();
       let q = db('planos').where({ ativo: true });
       if (input.cidade) {
-        // Match case-insensitive parcial — "natal" casa com "Natal", "Macaíba" com "macaiba" etc.
+        // cidade vazia/null = plano vale para TODAS as cidades (sempre incluído).
+        // Senão, match "contém" case-insensitive — permite multi-cidade separando por vírgula
+        // ("natal" casa com "Natal", "Macaíba" com "macaiba", e "Natal, Macaíba" casa com ambas).
         const termo = String(input.cidade).toLowerCase();
-        q = q.whereRaw('LOWER(cidade) LIKE ?', [`%${termo}%`]);
+        q = q.where(function () {
+          this.whereNull('cidade').orWhere('cidade', '').orWhereRaw('LOWER(cidade) LIKE ?', [`%${termo}%`]);
+        });
       }
       const rows = await q.orderBy([{ column: 'ordem', order: 'asc' }, { column: 'valor', order: 'asc' }]);
       if (!rows.length) {

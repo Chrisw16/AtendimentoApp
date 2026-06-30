@@ -632,8 +632,8 @@ function PlanoFields({ p, onChange }) {
         {fld('Cidade',
           <input className={styles.input} value={p.cidade || ''}
             onChange={e => onChange({ cidade: e.target.value })}
-            placeholder="Natal"/>,
-          'Define POP e portador automaticamente'
+            placeholder="Natal (vazio = todas)"/>,
+          'Vazio = vale para todas as cidades · várias = separe por vírgula (ex: Natal, Macaíba)'
         )}
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
