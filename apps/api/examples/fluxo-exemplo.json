@@ -1,0 +1,21 @@
+{
+  "_comment": "Fluxo de atendimento de exemplo (com lacunas propositais) para demonstrar o validador. Rode: node src/services/fluxoValidador.cli.js examples/fluxo-exemplo.json",
+  "nodes": [
+    { "id": "inicio",  "tipo": "inicio" },
+    { "id": "menu",    "tipo": "enviar_botoes", "config": { "corpo": "Como posso ajudar?", "botoes": [{ "id": "boleto", "label": "2ª via de boleto" }, { "id": "humano", "label": "Falar com atendente" }] } },
+    { "id": "cc",      "tipo": "consultar_cliente", "config": { "mensagem": "Informe seu CPF:" } },
+    { "id": "cb",      "tipo": "consultar_boleto" },
+    { "id": "envia",   "tipo": "enviar_texto", "config": { "texto": "Aqui está seu boleto: {{boleto.pix}}" } },
+    { "id": "fim",     "tipo": "encerrar", "config": { "mensagem": "Precisa de mais alguma coisa? Até logo!" } },
+    { "id": "agente",  "tipo": "transferir_agente" }
+  ],
+  "edges": [
+    { "from": "inicio", "to": "menu",   "port": "saida" },
+    { "from": "menu",   "to": "cc",     "port": "boleto" },
+    { "from": "menu",   "to": "agente", "port": "humano" },
+    { "from": "cc",     "to": "cb",     "port": "encontrado" },
+    { "from": "cb",     "to": "envia",  "port": "encontrado" },
+    { "from": "envia",  "to": "fim",    "port": "saida" },
+    { "from": "agente", "to": "fim",    "port": "transferido" }
+  ]
+}
