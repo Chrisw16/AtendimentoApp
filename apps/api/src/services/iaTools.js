@@ -181,11 +181,19 @@ export const IA_TOOLS = [
 ];
 
 // ── EXECUTOR DE FERRAMENTAS ────────────────────────────────────────────────
+// Tools que GRAVAM/agem no mundo real — simuladas em modo sandbox (teste de fluxo).
+const TOOLS_ESCRITA = new Set(['criar_chamado', 'promessa_pagamento', 'precadastrar_cliente', 'reiniciar_onu_acs']);
+
 export async function executarTool(name, input, ctx) {
   // input.contrato tem prioridade — IA pode selecionar contrato específico para clientes multi-contrato
   // Fallback para o contrato do contexto se IA não especificar
   const contrato = input.contrato || ctx?.cliente?.contrato;
   const cpfcnpj  = ctx?.cliente?.cpf || ctx?.cliente?.cpfcnpj || input.cpfcnpj;
+
+  // Sandbox (simulação de teste): não executa ações que gravam/alteram dados reais.
+  if (ctx?.sandbox && TOOLS_ESCRITA.has(name)) {
+    return `🧪 [sandbox] A ação "${name}" foi simulada — em produção, executaria de verdade.`;
+  }
 
   switch (name) {
     case 'verificar_conexao': {

@@ -24,21 +24,24 @@ import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista } from
 const estadosExecucao = new Map();
 
 // ── ENTRY POINT ───────────────────────────────────────────────────
-export async function processarConversa(conversa, mensagemCliente) {
-  const db = getDb();
+export async function processarConversa(conversa, mensagemCliente, opts = {}) {
+  const db      = opts.db      || getDb();
+  const estados = opts.estados || estadosExecucao;  // sandbox/teste injeta um Map isolado
+  const enviar  = opts.enviar  || enviarResposta;   // sandbox captura em vez de enviar no WhatsApp
+  const sandbox = !!opts.sandbox;
 
-  // Busca fluxo ativo — usa campo dados (editor visual) com fallback para nos/conexoes
-  const fluxo = await db('fluxos').where({ ativo: true }).first();
-  if (!fluxo) return processarIADireta(conversa, mensagemCliente);
+  // Busca fluxo ativo — ou usa o fluxo injetado (teste de um fluxo específico)
+  const fluxo = opts.fluxo || await db('fluxos').where({ ativo: true }).first();
+  if (!fluxo) return sandbox ? undefined : processarIADireta(conversa, mensagemCliente);
 
   const dados = parseDados(fluxo);
   console.log(`[Motor] Fluxo "${fluxo.nome}": ${dados.nodes?.length || 0} nós, ${dados.edges?.length || 0} edges`);
   if (!dados.nodes?.length) {
     console.warn('[Motor] Fluxo sem nós — caindo para IA direta');
-    return processarIADireta(conversa, mensagemCliente);
+    return sandbox ? undefined : processarIADireta(conversa, mensagemCliente);
   }
 
-  let estado = estadosExecucao.get(conversa.id) || {
+  let estado = estados.get(conversa.id) || {
     noAtual:  null,
     contexto: { cliente: {} },
     historico: [],
@@ -50,11 +53,12 @@ export async function processarConversa(conversa, mensagemCliente) {
     const noInicio = dados.nodes.find(n => n.tipo === 'inicio' || n.tipo === 'gatilho_keyword');
     estado.noAtual = noInicio?.id;
   }
-  if (!estado.noAtual) return processarIADireta(conversa, mensagemCliente);
+  if (!estado.noAtual) return sandbox ? undefined : processarIADireta(conversa, mensagemCliente);
 
   const ctx = {
     conversa, mensagem: mensagemCliente,
     dados, estado, db, respostas: [],
+    estados, sandbox,
     instancia: conversa.canal_instancia || conversa.canal || 'default',
     numero:    conversa.telefone,
   };
@@ -80,18 +84,18 @@ export async function processarConversa(conversa, mensagemCliente) {
     console.log(`[Motor] Resultado nó ${no.tipo}: tipo=${resultado.tipo} saida=${resultado.saida}`);
 
     if (resultado.tipo === 'aguardar_input') {
-      estadosExecucao.set(conversa.id, ctx.estado);
+      estados.set(conversa.id, ctx.estado);
       break;
     }
     if (resultado.tipo === 'avancar') {
       const proxId = encontrarProximo(no.id, resultado.saida, dados.edges);
       console.log(`[Motor] Próximo nó: ${proxId || 'NENHUM (fim do fluxo)'}`);
-      if (!proxId) { estadosExecucao.delete(conversa.id); break; }
+      if (!proxId) { estados.delete(conversa.id); break; }
       ctx.estado.noAtual = proxId;
       continue;
     }
     if (resultado.tipo === 'fim') {
-      estadosExecucao.delete(conversa.id);
+      estados.delete(conversa.id);
       break;
     }
     break;
@@ -99,8 +103,9 @@ export async function processarConversa(conversa, mensagemCliente) {
 
   console.log(`[Motor] Respostas geradas: ${ctx.respostas.length}`);
   for (const resp of ctx.respostas) {
-    await enviarResposta(conversa, resp, ctx.instancia);
+    await enviar(conversa, resp, ctx.instancia);
   }
+  return { respostas: ctx.respostas, estado: estados.get(conversa.id) || null };
 }
 
 // ── DESPACHANTE ───────────────────────────────────────────────────
@@ -397,6 +402,10 @@ async function processarNo(no, ctx) {
     case 'abrir_chamado': {
       const contrato = getCtxVal(ctx, 'cliente.contrato');
       if (!contrato) return avancar('erro');
+      if (ctx.sandbox) {
+        ctx.estado.contexto.chamado = { protocolo: 'TESTE-0000', aberto: true, cliente: '' };
+        return avancar('sucesso');
+      }
       try {
         // criarChamado(contrato, tipo, descricao) — fiel ao erp.js original
         const data = await criarChamado(
@@ -419,6 +428,11 @@ async function processarNo(no, ctx) {
     case 'promessa_pagamento': {
       const contrato = getCtxVal(ctx, 'cliente.contrato');
       if (!contrato) return avancar('erro');
+      if (ctx.sandbox) {
+        ctx.estado.contexto.promessa = { dias: 3, data: '(simulado)', protocolo: 'TESTE-0000' };
+        ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem_sucesso || '✅ Promessa registrada! (simulado)', ctx) });
+        return avancar('sucesso');
+      }
       try {
         const data = await sgpPromessaPagamento(contrato);
         if (data.adimplente) {
@@ -505,9 +519,11 @@ async function processarNo(no, ctx) {
         ctx.respostas.push({ tipo: 'texto', texto: msg });
         return avancar('fora_horario');
       }
-      await conversaRepo.atualizar(ctx.conversa.id, { status: 'aguardando', aguardando_desde: new Date().toISOString(), agente_id: null });
-      broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id));
-      estadosExecucao.delete(ctx.conversa.id);
+      if (!ctx.sandbox) {
+        await conversaRepo.atualizar(ctx.conversa.id, { status: 'aguardando', aguardando_desde: new Date().toISOString(), agente_id: null });
+        broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id));
+      }
+      ctx.estados.delete(ctx.conversa.id);
       return fim();
     }
 
@@ -528,7 +544,7 @@ async function processarNo(no, ctx) {
     }
 
     case 'nota_interna':
-      await mensagemRepo.criar({ conversa_id: ctx.conversa.id, origem: 'sistema', tipo: 'nota', texto: interpolar(cfg.nota || '', ctx) }).catch(() => {});
+      if (!ctx.sandbox) await mensagemRepo.criar({ conversa_id: ctx.conversa.id, origem: 'sistema', tipo: 'nota', texto: interpolar(cfg.nota || '', ctx) }).catch(() => {});
       return avancar('saida');
 
     case 'enviar_email':
@@ -542,7 +558,7 @@ async function processarNo(no, ctx) {
         const aval = avaliarNps(ctx.mensagem.texto, cfg.escala);
         if (aval.valida) {
           const nota = parseInt(ctx.mensagem.texto, 10);
-          await ctx.db('satisfacao').insert({ conversa_id: ctx.conversa.id, nota, canal: ctx.conversa.canal }).catch(() => {});
+          if (!ctx.sandbox) await ctx.db('satisfacao').insert({ conversa_id: ctx.conversa.id, nota, canal: ctx.conversa.canal }).catch(() => {});
           return avancar(aval.porta);
         }
         ctx.estado.aguardando = no.id;
@@ -556,9 +572,11 @@ async function processarNo(no, ctx) {
 
     case 'encerrar': {
       if (cfg.mensagem) ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem, ctx) });
-      await conversaRepo.encerrar(ctx.conversa.id).catch(() => {});
-      broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id).catch(() => ({})));
-      estadosExecucao.delete(ctx.conversa.id);
+      if (!ctx.sandbox) {
+        await conversaRepo.encerrar(ctx.conversa.id).catch(() => {});
+        broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id).catch(() => ({})));
+      }
+      ctx.estados.delete(ctx.conversa.id);
       return fim();
     }
 
@@ -668,6 +686,7 @@ async function processarIAResponde(no, ctx) {
           const result = await executarTool(tu.name, tu.input || {}, {
             cliente: ctx.estado.contexto.cliente || {},
             conversa: ctx.conversa,
+            sandbox: ctx.sandbox,
           }).catch(e => `Erro ao executar ${tu.name}: ${e.message}`);
 
           // Detecta ações especiais
