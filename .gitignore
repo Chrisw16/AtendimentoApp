@@ -5,3 +5,6 @@ dist/
 .vapid.json
 *.log
 .DS_Store
+
+# Obsidian UI state (ruido)
+brain/.obsidian/workspace.json

@@ -35,6 +35,11 @@ Lista de bugs, falhas de segurança e dívidas levantados no estudo linha-por-li
 - **Protocolo de conversa e número de OS** usam `COUNT(*)+1` → race condition.
 - **Dois caches de prompt** desalinhados (integrations vs promptService TTL 3min).
 - **`analisarConversaEncerrada`** (sentimento ao encerrar) importada em `chat.js` mas aparentemente não chamada na rota de encerramento.
+- **Porta do `abrir_chamado` inconsistente:** `nodeTypes.js` declara a porta `saida`, mas o [[Catálogo de Nós|motor]] avança por `sucesso`/`erro` — o editor não expõe as portas reais do nó.
+
+## Branches / processo
+
+- A branch `dev` alterou o comportamento "sem fluxo ativo" e o break do loop agêntico do [[Motor de Fluxo]]. Há divergência entre `main` e `dev` a revalidar antes de alinhar/mesclar.
 
 ## Frontend
 

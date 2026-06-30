@@ -10,7 +10,8 @@ Last rebuilt: 2026-06-30
 - **Runbooks Maxxi** (também: subir Maxxi, deploy, Coolify) — como subir em dev e fazer deploy; configurar a instância — `systems/maxxi/runbooks/subir-e-deploy.md`
 
 ### Componentes
-- **Motor de Fluxo** (motorFluxo, nós) — interpretador de grafo do atendimento, ~30 nós, estado em memória — `systems/maxxi/components/motor-fluxo.md`
+- **Motor de Fluxo** (motorFluxo, execução de fluxo) — interpretador de grafo do atendimento, estado em memória, padrão 2 fases — `systems/maxxi/components/motor-fluxo.md`
+- **Catálogo de Nós** (tipos de nó, etapas do fluxo, nodeTypes) — referência nó-a-nó dos ~30 nós (portas, config, contexto) — `systems/maxxi/components/catalogo-de-nos.md`
 - **IA com Tool Calling** (Claude, iaTools, promptService, ia_responde/roteador) — loop agêntico + 15 tools SGP + composição de prompts — `systems/maxxi/components/ia-tool-calling.md`
 - **Integração SGP** (integrations.js, Evolution, precadastro) — camada de ERP de ISP + WhatsApp não-oficial — `systems/maxxi/components/integracoes-sgp.md`
 - **Canais e Webhooks** (Evolution/Meta/Telegram) — ingestão de mensagens — `systems/maxxi/components/canais-e-webhooks.md`

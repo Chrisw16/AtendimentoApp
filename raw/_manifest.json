@@ -15,6 +15,22 @@
       "date": "2026-06-30",
       "title": "Estudo linha-por-linha do código do Maxxi v2",
       "status": "absorbed"
+    },
+    {
+      "id": "2026-06-30_motor-fluxo-catalogo",
+      "type": "docs",
+      "path": "raw/sources/docs/2026-06-30_motor-fluxo-catalogo.md",
+      "date": "2026-06-30",
+      "title": "Motor de Fluxo — arquitetura e catálogo de nós (autoral)",
+      "status": "absorbed"
+    },
+    {
+      "id": "2026-06-30_integrations-referencia",
+      "type": "docs",
+      "path": "raw/sources/docs/2026-06-30_integrations-referencia.md",
+      "date": "2026-06-30",
+      "title": "integrations.js — referência completa (autoral)",
+      "status": "absorbed"
     }
   ],
   "last_updated": "2026-06-30"

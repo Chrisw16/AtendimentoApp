@@ -1,19 +1,23 @@
 {
   "Maxxi v2 / GoCHAT — Visão geral": {
-    "inbound": ["Modelo de Dados", "Motor de Fluxo", "IA com Tool Calling", "Integração SGP", "Canais e Webhooks", "Supervisora IA", "Fila e SLA", "Realtime SSE", "Auth e Segurança", "Frontend Maxxi", "Design System Maxxi", "API Backend Maxxi", "SGP", "Adotar o Maxxi v2 como base", "Achados de código (2026-06-30)", "Christian", "Runbooks Maxxi"],
-    "count": 17
+    "inbound": ["Modelo de Dados", "Motor de Fluxo", "Catálogo de Nós", "IA com Tool Calling", "Integração SGP", "Canais e Webhooks", "Supervisora IA", "Fila e SLA", "Realtime SSE", "Auth e Segurança", "Frontend Maxxi", "Design System Maxxi", "API Backend Maxxi", "SGP", "Adotar o Maxxi v2 como base", "Achados de código (2026-06-30)", "Christian", "Runbooks Maxxi"],
+    "count": 18
   },
   "Motor de Fluxo": {
-    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Modelo de Dados", "IA com Tool Calling", "Integração SGP", "Canais e Webhooks", "Realtime SSE", "Frontend Maxxi", "Achados de código (2026-06-30)"],
-    "count": 8
+    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Catálogo de Nós", "Modelo de Dados", "IA com Tool Calling", "Integração SGP", "Canais e Webhooks", "Realtime SSE", "Frontend Maxxi", "Achados de código (2026-06-30)"],
+    "count": 9
+  },
+  "Catálogo de Nós": {
+    "inbound": ["Motor de Fluxo", "Integração SGP", "Achados de código (2026-06-30)"],
+    "count": 3
   },
   "IA com Tool Calling": {
-    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Modelo de Dados", "Motor de Fluxo", "Integração SGP", "Supervisora IA", "SGP"],
-    "count": 6
+    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Catálogo de Nós", "Modelo de Dados", "Motor de Fluxo", "Integração SGP", "Supervisora IA", "SGP"],
+    "count": 7
   },
   "Integração SGP": {
-    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Modelo de Dados", "Motor de Fluxo", "IA com Tool Calling", "Canais e Webhooks", "SGP", "Adotar o Maxxi v2 como base"],
-    "count": 7
+    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Catálogo de Nós", "Modelo de Dados", "Motor de Fluxo", "IA com Tool Calling", "Canais e Webhooks", "SGP", "Adotar o Maxxi v2 como base"],
+    "count": 8
   },
   "Canais e Webhooks": {
     "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Motor de Fluxo", "Integração SGP", "Supervisora IA", "Realtime SSE", "API Backend Maxxi", "Runbooks Maxxi"],
@@ -40,8 +44,8 @@
     "count": 9
   },
   "Frontend Maxxi": {
-    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Motor de Fluxo", "Realtime SSE", "Design System Maxxi", "API Backend Maxxi"],
-    "count": 5
+    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Catálogo de Nós", "Motor de Fluxo", "Realtime SSE", "Design System Maxxi", "API Backend Maxxi"],
+    "count": 6
   },
   "Design System Maxxi": {
     "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Frontend Maxxi"],
@@ -60,8 +64,8 @@
     "count": 6
   },
   "Achados de código (2026-06-30)": {
-    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Modelo de Dados", "Motor de Fluxo", "Canais e Webhooks", "Realtime SSE", "Auth e Segurança", "Frontend Maxxi", "Design System Maxxi", "API Backend Maxxi"],
-    "count": 9
+    "inbound": ["Maxxi v2 / GoCHAT — Visão geral", "Catálogo de Nós", "Modelo de Dados", "Motor de Fluxo", "Canais e Webhooks", "Realtime SSE", "Auth e Segurança", "Frontend Maxxi", "Design System Maxxi", "API Backend Maxxi"],
+    "count": 10
   },
   "Christian": {
     "inbound": ["Adotar o Maxxi v2 como base"],

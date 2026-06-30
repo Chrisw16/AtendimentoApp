@@ -4,49 +4,68 @@ type: component
 created: 2026-06-30
 last_updated: 2026-06-30
 status: active
-related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[IA com Tool Calling]]", "[[Integração SGP]]", "[[Canais e Webhooks]]", "[[Frontend Maxxi]]", "[[Modelo de Dados]]"]
-sources: ["2026-06-30_estudo-codigo-maxxi"]
-aliases: ["motorFluxo", "motor de fluxo", "fluxo", "chatbot engine", "nós"]
+related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Catálogo de Nós]]", "[[IA com Tool Calling]]", "[[Integração SGP]]", "[[Canais e Webhooks]]", "[[Frontend Maxxi]]", "[[Modelo de Dados]]"]
+sources: ["2026-06-30_motor-fluxo-catalogo", "2026-06-30_estudo-codigo-maxxi"]
+aliases: ["motorFluxo", "motor de fluxo", "fluxo", "chatbot engine", "execução de fluxo"]
 tags: [backend, fluxo, motor, chatbot]
 ---
 
 # Motor de Fluxo
 
-`apps/api/src/services/motorFluxo.js` (~1032 LOC) é o coração do produto: um **interpretador de grafo** que executa o fluxo de atendimento desenhado no [[Frontend Maxxi|editor visual]]. É invocado pelos [[Canais e Webhooks|webhooks]] sempre que chega mensagem de cliente em conversa com `status = 'ia'`.
+`apps/api/src/services/motorFluxo.js` (~1032 LOC) é o coração do produto: um **interpretador de grafo** que executa o fluxo (chatbot) desenhado no [[Frontend Maxxi|editor visual]]. O editor salva o fluxo como JSON na coluna `fluxos.dados`; o motor lê o fluxo ativo e executa nó a nó. É invocado pelos [[Canais e Webhooks|webhooks]] sempre que chega mensagem de cliente em conversa com `status = 'ia'`. A referência nó-a-nó está em [[Catálogo de Nós]].
 
-## Como funciona
+## Estrutura de dados de um fluxo
 
-`processarConversa(conversa, mensagemCliente)`:
-1. Busca o fluxo ativo (`fluxos.where({ativo:true}).first()`). Sem fluxo ou sem nós → cai em `processarIADireta` (IA com prompt `outros`).
-2. `parseDados` extrai `nodes`/`edges` — suporta o formato atual (`dados.{nodes,edges}`) e o legado (`nos`/`conexoes`), normalizando `tipo` e `config`.
-3. Recupera/cria o **estado da conversa** e roda um loop de **até 15 iterações por mensagem**. Cada nó (`processarNo`) retorna um de três resultados: `avancar(saida)` (segue a aresta da porta `saida`), `aguardar_input` (pausa e espera a próxima mensagem) ou `fim` (encerra o fluxo).
-4. `encontrarProximo(noId, saida, edges)` resolve a aresta por `(from|source)` + `(port|sourceHandle)` → `(to|target)`.
-5. Ao fim do loop, `enviarResposta` despacha cada resposta acumulada para o canal certo.
+`parseDados(fluxo)` normaliza o JSON em `{nodes, edges}`:
+- **node:** `{ id, tipo, config, x, y }`. `tipo` define o comportamento; `config` (cfg) são os campos editáveis por tipo. Aceita variações (`n.type`, `n.data.tipo`/`n.data.config`).
+- **edge:** liga a **porta de saída** de um nó ao próximo. Dois formatos aceitos: editor `{from, to, port}` e legado `{source, target, sourceHandle}` — `encontrarProximo` normaliza ambos (porta exata → porta `saida` → primeira aresta do nó).
+
+## Modelo de execução (máquina de estados por conversa)
+
+`processarConversa(conversa, mensagem)`:
+1. Carrega o fluxo ativo (`fluxos.where({ativo:true})`). Sem fluxo/sem nós → cai em `processarIADireta` (IA com prompt `outros` + histórico — a rede de segurança).
+2. Recupera/cria o estado da conversa; sem `noAtual`, começa pelo nó `inicio`/`gatilho_keyword`.
+3. **Loop de até 15 iterações** (trava anti-loop-infinito) executando `processarNo(no, ctx)`. Cada nó retorna um de três resultados:
+
+| Resultado | Helper | O motor faz |
+|---|---|---|
+| `avancar(porta)` | — | acha o próximo nó pela porta e continua o loop; sem aresta → fim |
+| `aguardar()` | `aguardar_input` | **salva o estado e para** — espera a próxima mensagem do cliente |
+| `fim()` | — | limpa o estado e encerra |
+
+4. Ao final, despacha as `ctx.respostas` acumuladas (`enviarResposta`).
 
 ## Estado em memória (limitação central)
 
-`estadosExecucao = Map<conversa_id, {noAtual, contexto:{cliente}, historico, aguardando}>` vive **em memória do processo**. Reinício do servidor → todo fluxo em andamento perde o ponto e recomeça. É a mesma limitação herdada do Atendechat. Combinado com o bug do [[Realtime SSE|Redis]], também não é compartilhado entre instâncias/processos.
+`estadosExecucao = Map<conversa_id, {noAtual, contexto:{cliente}, historico, aguardando}>` vive **em memória do processo** — reinício perde o ponto de cada conversa. Combinado com o bug do [[Realtime SSE|Redis]], reforça que o Maxxi hoje assume **um processo por instância**. Persistir o estado (banco/Redis por `conversa_id`) é a melhoria nº 1 ao endurecer o sistema.
 
-## Catálogo de nós (~30, em 7 categorias)
+## Padrão "enviar e aguardar" (interatividade em 2 fases)
 
-- **Gatilhos:** `inicio`, `gatilho_keyword`.
-- **Mensagens:** `enviar_texto`, `enviar_cta`, `enviar_imagem`, `enviar_audio`, `enviar_arquivo`, `enviar_localizacao`, `enviar_botoes`, `enviar_lista`, `solicitar_localizacao`.
-- **Lógica:** `aguardar_resposta`, `condicao`, `condicao_multipla`, `definir_variavel`, `divisao_ab` (A/B por `Math.random`), `aguardar_tempo` (apenas loga e avança — não há scheduler real).
-- **SGP/ERP:** `consultar_cliente` (com retry de CPF e ramo multi-contrato), `consultar_boleto` (único/múltiplos), `verificar_status`, `abrir_chamado`, `promessa_pagamento`, `listar_planos`, `consultar_historico`. Detalhe em [[Integração SGP]].
-- **IA:** `ia_responde`, `ia_roteador`. Detalhe em [[IA com Tool Calling]].
-- **Ações:** `transferir_agente` (checa horário), `chamada_http` (genérico), `nota_interna`, `enviar_email` (TODO), `nps_inline`, `encerrar`.
-- **Stubs avançados:** `mudanca_endereco`, `mudar_plano`, `cadastrar_lead`, `cadastrar_condominio`, `registrar_ocorrencia_cond` (só mandam texto e seguem).
+Nós que pedem algo ao cliente (botões, lista, `aguardar_resposta`, `nps_inline`, `solicitar_localizacao`, `consultar_cliente`) usam **a mesma função em duas passagens**, decididas por `ctx.estado.aguardando === no.id`: na 1ª, perguntam e marcam `aguardando = no.id`; quando o cliente responde, o mesmo nó é reexecutado, agora processando a resposta e avançando. É o mecanismo central da conversação.
 
-O catálogo visual (`apps/web/src/lib/nodeTypes.js`, ~32 tipos) deve espelhar este `switch`. Adicionar um nó = mexer nos dois lados + `PropsPanel.jsx`.
+## Contexto e interpolação
 
-## Interpolação e contexto
+O `contexto` da conversa acumula dados ao longo do fluxo. Textos dos nós aceitam placeholders resolvidos por `interpolar`:
 
-`interpolar(texto, ctx)` resolve placeholders no texto dos nós: `{{cliente.x}}`, `{{boleto.x}}`, `{{chamado.x}}`, `{{promessa.x}}`, `{{planos.x}}` e `{{var}}`. O `contexto.cliente` é populado pelo nó `consultar_cliente` (nome, cpf, contrato, plano, status, cidade...) e fica disponível para a IA e para os demais nós.
+| Placeholder | Origem |
+|---|---|
+| `{{cliente.nome}}`, `{{cliente.contrato}}`… | `contexto.cliente` (preenchido por `consultar_cliente`) |
+| `{{boleto.valor}}`, `{{boleto.pix}}` | `contexto.boleto` |
+| `{{chamado.protocolo}}` | `contexto.chamado` |
+| `{{promessa.data}}`, `{{promessa.dias}}` | `contexto.promessa` |
+| `{{planos.lista}}` | `contexto.planos` |
+| `{{var}}` | `contexto[var]` ou campo da conversa |
 
-## Envio de resposta (`enviarResposta`)
+`getCtxVal(ctx, 'cliente.status')` lê valores aninhados (usado em condições e nós SGP).
 
-Persiste a mensagem (origem `ia`), faz `broadcast` SSE, e envia ao canal externo: **Telegram** (`telegram.js`, converte lista em botões/numerado pois Telegram não tem lista nativa) ou **Evolution/WhatsApp** (`integrations.js`). Bug conhecido: `enviar_lista` no Evolution perde os rótulos por mismatch snake_case/camelCase — ver [[Achados de código (2026-06-30)]].
+## Saída multicanal
+
+As respostas são **agnósticas de canal** (`{tipo, texto, botoes, url…}`) e traduzidas só na borda (`enviarResposta`): **Telegram** (texto, botões inline, imagem; lista vira botões ≤8 ou texto numerado) e **WhatsApp/Evolution** (texto, CTA, botões, lista, imagem, áudio, arquivo). Toda resposta é persistida em `mensagens` e transmitida via [[Realtime SSE|SSE]] ao painel.
+
+## Limitações e melhorias conhecidas
+
+Persistir o estado de execução; `aguardar_tempo` é simulado (avança na hora — falta scheduler/job); `enviar_email` só loga; ACS é stub. Padronizar o formato de aresta. Nota: a branch `dev` alterou o comportamento "sem fluxo" e o break do loop agêntico — revalidar ao alinhar branches. Bugs em [[Achados de código (2026-06-30)]].
 
 ## See Also
 
-- [[IA com Tool Calling]] · [[Integração SGP]] · [[Canais e Webhooks]] · [[Frontend Maxxi]]
+- [[Catálogo de Nós]] · [[IA com Tool Calling]] · [[Integração SGP]] · [[Canais e Webhooks]]
