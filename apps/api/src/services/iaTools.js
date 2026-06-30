@@ -297,11 +297,15 @@ export async function executarTool(name, input, ctx) {
           ? `Nenhum plano ativo encontrado para "${input.cidade}". Tente sem filtro de cidade.`
           : 'Nenhum plano ativo cadastrado. Avise o administrador.';
       }
+      const fmt = (v) => `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
       const linhas = rows.map(p => {
-        const valor = p.valor != null ? `R$ ${Number(p.valor).toFixed(2).replace('.', ',')}` : '—';
-        const fid   = p.fidelidade_meses ? ` · ${p.fidelidade_meses}m fidelidade` : '';
-        const cid   = p.cidade ? ` (${p.cidade})` : '';
-        return `• ${p.nome} — ${p.velocidade || '—'} — ${valor}${cid}${fid} | plano_id=${p.plano_id_sgp}`;
+        const temPromo = p.valor_promocional != null && p.promo_meses > 0;
+        const preco = temPromo
+          ? `${fmt(p.valor_promocional)} nos primeiros ${p.promo_meses} meses, depois ${p.valor != null ? fmt(p.valor) : '—'}/mês`
+          : (p.valor != null ? fmt(p.valor) : '—');
+        const fid = p.fidelidade_meses ? ` · ${p.fidelidade_meses}m fidelidade` : '';
+        const cid = p.cidade ? ` (${p.cidade})` : '';
+        return `• ${p.nome} — ${p.velocidade || '—'} — ${preco}${cid}${fid} | plano_id=${p.plano_id_sgp}`;
       }).join('\n');
       return `📋 Planos disponíveis:\n${linhas}\n\n⚠️ Use o plano_id ao chamar precadastrar_cliente.`;
     }

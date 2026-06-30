@@ -86,3 +86,13 @@ Dúvida do Christian sobre a tela Prompts IA e o nó IA Responde. Estudo + docum
 - **Armadilha registrada:** nós que setam `contexto` para um valor que não é slug válido (ex. `"Suporte Técnico"` ≠ `suporte`) caem no prompt genérico de fallback → editar o prompt na tela não afeta o nó. Visto no fluxo de produção (prompt gigante inline em `instrucao` + `contexto` divergente).
 - Observado: a aba Catálogo é lista fixa no front e esconde as tools Comercial (só mostra Diagnóstico/Atendimento/Financeiro).
 - CLAUDE.md: regra dos prompts estendida com os 3 campos do nó IA Responde.
+
+## [2026-06-30 22:00] FEAT | Iteração no produto durante o uso (Christian testando em prod)
+
+Christian subiu a branch no Coolify e foi testando/pedindo melhorias. Tudo na branch `worktree-ambiente-testes-fluxo`, validado por build do Vite + `node --check` + 77 testes (sem rodar o app — sem deps/banco local).
+
+- **Chat de simulação estilo WhatsApp** (`TesteFluxoModal`): botões/listas clicáveis, formatação `*negrito*`/`` `mono` ``, bolhas alinhadas.
+- **Dropdown de contexto no nó IA Responde** — corrigido no painel **real** (inline no `FluxoEditor.jsx`; o `components/fluxo/PropsPanel.jsx` é **código morto**). Valor inválido aparece com ⚠.
+- **Prompt comercial** completo entregue (apresentação→coleta→pré-cadastro→finalização, tools certas). Ainda não versionado no brain.
+- **Planos — cidade vazia = todas as cidades** (`listar_planos_ativos`) + multi-cidade por vírgula.
+- **Planos — promoção** (migration 008: `valor_promocional` + `promo_meses`): preço dos primeiros meses + duração; a tool `listar_planos_ativos` passa a citar "R$ X nos primeiros N meses, depois R$ Y/mês"; form e card atualizados.

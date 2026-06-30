@@ -558,7 +558,9 @@ function PlanosTab({ toast }) {
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                         {p.velocidade && <>📶 {p.velocidade} · </>}
-                        {p.valor != null && <>💰 R$ {Number(p.valor).toFixed(2).replace('.', ',')}</>}
+                        {p.valor_promocional != null && p.promo_meses > 0
+                          ? <>🔥 R$ {Number(p.valor_promocional).toFixed(2).replace('.', ',')} nos {p.promo_meses} primeiros meses · depois R$ {p.valor != null ? Number(p.valor).toFixed(2).replace('.', ',') : '—'}</>
+                          : (p.valor != null && <>💰 R$ {Number(p.valor).toFixed(2).replace('.', ',')}</>)}
                         {p.fidelidade_meses > 0 && <> · 🔒 {p.fidelidade_meses}m fidelidade</>}
                       </div>
                     </div>
@@ -590,6 +592,7 @@ function emptyPlano() {
   return {
     plano_id_sgp: '', nome: '', valor: '', velocidade: '', cidade: '',
     fidelidade_meses: 0, ativo: true, ordem: 0, descricao: '',
+    valor_promocional: '', promo_meses: 0,
   };
 }
 
@@ -622,7 +625,8 @@ function PlanoFields({ p, onChange }) {
         {fld('Valor (R$)',
           <input className={styles.input} type="number" step="0.01" value={p.valor ?? ''}
             onChange={e => onChange({ valor: e.target.value })}
-            placeholder="59.90"/>
+            placeholder="84.90"/>,
+          'Preço mensal normal (após a promoção)'
         )}
         {fld('Velocidade',
           <input className={styles.input} value={p.velocidade || ''}
@@ -634,6 +638,20 @@ function PlanoFields({ p, onChange }) {
             onChange={e => onChange({ cidade: e.target.value })}
             placeholder="Natal (vazio = todas)"/>,
           'Vazio = vale para todas as cidades · várias = separe por vírgula (ex: Natal, Macaíba)'
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {fld('Preço promocional (R$)',
+          <input className={styles.input} type="number" step="0.01" value={p.valor_promocional ?? ''}
+            onChange={e => onChange({ valor_promocional: e.target.value })}
+            placeholder="69.90"/>,
+          'Preço dos primeiros meses · vazio = sem promoção'
+        )}
+        {fld('Promoção (meses)',
+          <input className={styles.input} type="number" min="0" value={p.promo_meses ?? 0}
+            onChange={e => onChange({ promo_meses: parseInt(e.target.value) || 0 })}
+            placeholder="3"/>,
+          'Por quantos meses vale o preço promocional'
         )}
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
