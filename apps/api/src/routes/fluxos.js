@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler, HttpError }        from '../middlewares/errorHandler.js';
 import { getDb } from '../config/db.js';
+import { validarFluxo }    from '../services/fluxoValidador.js';
+import { simularConversa } from '../services/motorSimulador.js';
 
 export const fluxosRouter = Router();
 fluxosRouter.use(authMiddleware, adminMiddleware);
@@ -63,4 +65,21 @@ fluxosRouter.post('/:id/despublicar', asyncHandler(async (req, res) => {
 fluxosRouter.delete('/:id', asyncHandler(async (req, res) => {
   await getDb()('fluxos').where({ id: req.params.id }).delete();
   res.json({ ok: true });
+}));
+
+// ── TESTES DE FLUXO ───────────────────────────────────────────────
+
+// Validação estática do grafo (becos, portas soltas, loops, etc.)
+fluxosRouter.post('/:id/validar', asyncHandler(async (req, res) => {
+  const f = await getDb()('fluxos').where({ id: req.params.id }).first();
+  if (!f) throw new HttpError(404, 'Fluxo não encontrado');
+  res.json(validarFluxo(f));
+}));
+
+// Simulação roteirizada (sem subir motor/IA/SGP — decisões vêm do request)
+fluxosRouter.post('/:id/simular', asyncHandler(async (req, res) => {
+  const f = await getDb()('fluxos').where({ id: req.params.id }).first();
+  if (!f) throw new HttpError(404, 'Fluxo não encontrado');
+  const { turnos = [], decisoes = {}, contextoInicial = {} } = req.body || {};
+  res.json(await simularConversa(f, { turnos, decisoes, contextoInicial }));
 }));
