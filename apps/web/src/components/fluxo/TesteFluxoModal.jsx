@@ -1,16 +1,92 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { fluxosApi } from '../../lib/api';
 import { useStore } from '../../store';
 import Button from '../ui/Button';
 import { X, Send, RotateCcw, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react';
 import styles from './TesteFluxoModal.module.css';
 
-// Formata uma resposta do bot para exibição.
-function fmtResp(resp) {
-  const corpo = resp.texto || resp.corpo || '';
-  const opc = resp.botoes?.length ? ` · botões: ${resp.botoes.map(b => b.label || b.id || b).join(', ')}`
-    : resp.itens?.length ? ` · lista: ${resp.itens.map(i => i.titulo || i.id).join(', ')}` : '';
-  return { tipo: resp.tipo, texto: corpo + opc };
+// Renderiza texto estilo WhatsApp (*negrito*, `mono`, quebras de linha) sem innerHTML.
+function formatWa(texto = '') {
+  const linhas = String(texto).split('\n');
+  return linhas.map((linha, li) => {
+    const partes = linha.split(/(\*[^*]+\*|`[^`]+`)/g).filter(Boolean);
+    return (
+      <span key={li}>
+        {partes.map((p, i) => {
+          if (p.length > 1 && p.startsWith('*') && p.endsWith('*')) return <strong key={i}>{p.slice(1, -1)}</strong>;
+          if (p.length > 1 && p.startsWith('`') && p.endsWith('`')) return <code key={i}>{p.slice(1, -1)}</code>;
+          return <span key={i}>{p}</span>;
+        })}
+        {li < linhas.length - 1 && <br />}
+      </span>
+    );
+  });
+}
+
+// Bolha do bot: renderiza cada tipo de resposta como no WhatsApp.
+// Se `onOpcao` for passado, botões/itens viram clicáveis (enviam a opção).
+function BotBubble({ resp, onOpcao, disabled }) {
+  switch (resp.tipo) {
+    case 'botoes':
+      return (
+        <div className={styles.botWrap}>
+          {resp.corpo && <div className={styles.botBubble}>{formatWa(resp.corpo)}</div>}
+          <div className={styles.chips}>
+            {(resp.botoes || []).map((b, i) => {
+              const label = typeof b === 'object' ? b.label : b;
+              return onOpcao
+                ? <button key={i} className={styles.chip} disabled={disabled} onClick={() => onOpcao(label)}>{label}</button>
+                : <span key={i} className={styles.chipStatic}>{label}</span>;
+            })}
+          </div>
+        </div>
+      );
+
+    case 'lista':
+      return (
+        <div className={styles.botWrap}>
+          {resp.corpo && <div className={styles.botBubble}>{formatWa(resp.corpo)}</div>}
+          {resp.titulo_secao && <div className={styles.listaSecao}>{resp.titulo_secao}</div>}
+          <div className={styles.listaOpts}>
+            {(Array.isArray(resp.itens) ? resp.itens : []).map((it, i) => {
+              const titulo = it.titulo || it.id;
+              return onOpcao
+                ? <button key={i} className={styles.listaOpt} disabled={disabled} onClick={() => onOpcao(titulo)}>
+                    <span>{titulo}</span>
+                    {it.descricao && <span className={styles.listaDesc}>{it.descricao}</span>}
+                  </button>
+                : <span key={i} className={styles.listaOptStatic}>{titulo}</span>;
+            })}
+          </div>
+        </div>
+      );
+
+    case 'cta':
+      return (
+        <div className={styles.botWrap}>
+          <div className={styles.botBubble}>{formatWa(resp.corpo || '')}</div>
+          {resp.url && <a className={styles.ctaBtn} href={resp.url} target="_blank" rel="noreferrer">{resp.label || 'Abrir link'}</a>}
+        </div>
+      );
+
+    case 'imagem':
+    case 'audio':
+    case 'arquivo': {
+      const icone = resp.tipo === 'imagem' ? '🖼️' : resp.tipo === 'audio' ? '🎵' : '📎';
+      return (
+        <div className={styles.botBubble}>
+          {icone} {resp.legenda || resp.filename || resp.tipo}
+          {resp.url && <div><a className={styles.midiaLink} href={resp.url} target="_blank" rel="noreferrer">{resp.url}</a></div>}
+        </div>
+      );
+    }
+
+    case 'localizacao':
+      return <div className={styles.botBubble}>📍 {resp.nome || 'Localização'}{resp.address ? ` — ${resp.address}` : ''}</div>;
+
+    default:
+      return <div className={styles.botBubble}>{formatWa(resp.texto || resp.corpo || '')}</div>;
+  }
 }
 
 // ── Aba: Validação estática ───────────────────────────────────────
@@ -47,9 +123,7 @@ function Validacao({ fluxo, toast }) {
             <span className={styles.contagem}>· {avisos.length} aviso(s)</span>
           </div>
 
-          {res.problemas.length === 0 && (
-            <p className={styles.paneHint}>Nenhum problema encontrado. 🎉</p>
-          )}
+          {res.problemas.length === 0 && <p className={styles.paneHint}>Nenhum problema encontrado. 🎉</p>}
 
           <div className={styles.lista}>
             {[...erros, ...avisos].map((p, i) => (
@@ -73,7 +147,7 @@ function Validacao({ fluxo, toast }) {
 
 // ── Aba: Simulação ────────────────────────────────────────────────
 function Simulacao({ fluxo, toast }) {
-  const [modo, setModo] = useState('real'); // 'real' | 'roteiro'
+  const [modo, setModo] = useState('real');
   return (
     <div className={styles.pane}>
       <div className={styles.modoRow}>
@@ -85,26 +159,28 @@ function Simulacao({ fluxo, toast }) {
   );
 }
 
-// Conversa real: roda o motor de verdade (SGP + IA), captura as respostas. Turno a turno.
+// Conversa real: motor de verdade (SGP + IA) em sandbox. Chat estilo WhatsApp.
 function ConversaReal({ fluxo, toast }) {
   const [estado, setEstado] = useState(null);
   const [log, setLog] = useState([]);
   const [input, setInput] = useState('');
   const [encerrado, setEncerrado] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const logRef = useRef(null);
 
-  const enviar = async () => {
-    const msg = input.trim();
+  useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [log]);
+
+  const enviar = async (textoArg) => {
+    const viaInput = typeof textoArg !== 'string';
+    const msg = (viaInput ? input : textoArg).trim();
     if (!msg || enviando || encerrado) return;
     setLog(l => [...l, { de: 'cliente', texto: msg }]);
-    setInput(''); setEnviando(true);
+    if (viaInput) setInput('');
+    setEnviando(true);
     try {
       const r = await fluxosApi.simularReal(fluxo.id, { mensagem: msg, estado });
       setEstado(r.estado || null);
-      (r.respostas || []).forEach(resp => {
-        const f = fmtResp(resp);
-        setLog(l => [...l, { de: 'bot', texto: f.texto, tipo: f.tipo }]);
-      });
+      (r.respostas || []).forEach(resp => setLog(l => [...l, { de: 'bot', resp }]));
       if (r.status === 'encerrado') { setEncerrado(true); setLog(l => [...l, { de: 'sys', texto: '— conversa encerrada —' }]); }
     } catch (e) { toast(e.message, 'error'); }
     finally { setEnviando(false); }
@@ -117,17 +193,18 @@ function ConversaReal({ fluxo, toast }) {
       <p className={styles.aviso}>
         ⚠️ Roda o motor <strong>de verdade</strong> com SGP e IA reais — mas em <strong>modo sandbox</strong>:
         as respostas são capturadas aqui (não vão pro WhatsApp) e ações que gravam dados
-        (abrir chamado, promessa, pré-cadastro, transferência) são simuladas, não executadas.
+        (abrir chamado, promessa, pré-cadastro, transferência) são simuladas.
       </p>
-      <div className={styles.chatLog}>
+      <div className={styles.chatLog} ref={logRef}>
         {log.length === 0 && <p className={styles.paneHint}>Mande uma mensagem como se fosse o cliente (ex: "oi").</p>}
         {log.map((m, i) =>
           m.de === 'sys'
-            ? <p key={i} className={styles.paneHint} style={{ textAlign: 'center' }}>{m.texto}</p>
-            : <div key={i} className={m.de === 'cliente' ? styles.msgCliente : styles.msgBot}>
-                {m.tipo && <span className={styles.bolhaTipo}>{m.tipo}</span>}{m.texto}
-              </div>,
+            ? <p key={i} className={styles.sysMsg}>{m.texto}</p>
+            : m.de === 'cliente'
+              ? <div key={i} className={styles.msgCliente}>{m.texto}</div>
+              : <BotBubble key={i} resp={m.resp} onOpcao={enviar} disabled={enviando || encerrado} />,
         )}
+        {enviando && <p className={styles.sysMsg}>digitando…</p>}
       </div>
       <div className={styles.chatInput}>
         <input
@@ -137,7 +214,7 @@ function ConversaReal({ fluxo, toast }) {
           placeholder={encerrado ? 'Conversa encerrada — reinicie para testar de novo' : 'Mensagem do cliente…'}
           disabled={encerrado || enviando}
         />
-        <Button variant="primary" size="sm" icon={Send} onClick={enviar} loading={enviando} aria-label="Enviar" />
+        <Button variant="primary" size="sm" icon={Send} onClick={() => enviar()} loading={enviando} aria-label="Enviar" />
         <Button variant="ghost" size="sm" icon={RotateCcw} onClick={reiniciar} aria-label="Reiniciar" />
       </div>
     </div>
@@ -198,12 +275,11 @@ function Roteiro({ fluxo, toast }) {
                   <span>cliente: "{t.mensagem}"</span>
                   <span className={styles.turnoStatus}>{t.status}</span>
                 </div>
-                {t.respostas.length === 0
-                  ? <div className={styles.bolha} style={{ color: 'var(--text-tertiary)' }}>(sem resposta)</div>
-                  : t.respostas.map((resp, j) => {
-                      const f = fmtResp(resp);
-                      return <div key={j} className={styles.bolha}><span className={styles.bolhaTipo}>{f.tipo}</span>{f.texto}</div>;
-                    })}
+                <div className={styles.turnoBolhas}>
+                  {t.respostas.length === 0
+                    ? <div className={styles.bolha} style={{ color: 'var(--text-tertiary)' }}>(sem resposta)</div>
+                    : t.respostas.map((resp, j) => <BotBubble key={j} resp={resp} />)}
+                </div>
                 <div className={styles.trilha}>{t.trilha.join(' → ') || '(nenhum nó)'}</div>
               </div>
             ))}
