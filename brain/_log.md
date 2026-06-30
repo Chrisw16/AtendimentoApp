@@ -77,3 +77,12 @@ Construída a função nativa (Christian pediu, escopo A+B):
 - **Fase A:** rotas `POST /fluxos/:id/validar` e `/simular` (finas, reusam os módulos puros) + botão "Testar fluxo" → `TesteFluxoModal` (aba Validação + Simulação modo Roteiro).
 - **Fase B (simulação real):** `processarConversa(c, msg, opts)` com `opts` (fluxo/estados/enviar/sandbox; defaults = produção byte-idêntica). Sandbox roda SGP/IA reais mas **simula tudo que grava** (nós + tools de IA via gate no `executarTool`). Rota `/simular-real` resumível por turno + chat sandbox na UI.
 - **Não rodado** (sem deps/banco local) — `node --check` OK, 77 testes dos módulos puros verdes; validar via docker antes da main.
+
+## [2026-06-30 20:30] DOC | Como funciona o módulo Prompts IA + campos do nó IA Responde
+
+Dúvida do Christian sobre a tela Prompts IA e o nó IA Responde. Estudo + documentação (sem mudar código).
+
+- `IA com Tool Calling` ganhou: tabela `contexto` × `instrucao` × `tools_ativas` (papéis distintos; o prompt NÃO registra tools, só orienta) + seção das 3 abas da tela (Prompts / Catálogo read-only / Testar Tools).
+- **Armadilha registrada:** nós que setam `contexto` para um valor que não é slug válido (ex. `"Suporte Técnico"` ≠ `suporte`) caem no prompt genérico de fallback → editar o prompt na tela não afeta o nó. Visto no fluxo de produção (prompt gigante inline em `instrucao` + `contexto` divergente).
+- Observado: a aba Catálogo é lista fixa no front e esconde as tools Comercial (só mostra Diagnóstico/Atendimento/Financeiro).
+- CLAUDE.md: regra dos prompts estendida com os 3 campos do nó IA Responde.

@@ -22,6 +22,25 @@ Em `motorFluxo.js`, `processarIAResponde`:
 - Histórico por nó (`_ia_hist_<id>`, últimos 20 turns); `max_turnos` default 6 antes de sair pela porta `max_turnos`.
 - Tools ativas: lista de suporte por padrão; `precadastrar_cliente` (sensível) só entra se `cfg.tools_ativas` incluir. Resultados especiais `__TRANSFERIR__`/`__ENCERRAR__` roteiam o fluxo (portas `transferir`/`resolvido`).
 
+### Campos do nó: `contexto` × `instrução` × `tools_ativas`
+
+São três campos com papéis distintos (fonte de confusão comum):
+
+| Campo | O que é | Efeito |
+|---|---|---|
+| `contexto` | **slug** de um prompt da tabela `prompts_ia` (default `outros`) | vira a **base** do system prompt (`resolverPrompt(slug)`). Se o slug **não existir**, cai no prompt genérico de fallback |
+| `instrucao` (editor: "instruções extras"; motor lê `cfg.instrucao ?? cfg.prompt`) | instrução **específica daquele nó** | é **somada por cima** da base — `montarSystemPrompt` ([[Motor de Fluxo|fluxoHelpers]]) compõe `base + "Instrução específica: {instrucao}" + dados do cliente + regras de tool` |
+| `tools_ativas` | lista de nomes de tool | define **quais** tools a IA pode chamar nesse nó. A IA só chama tools que estão em `IA_TOOLS` **E** nessa lista. **O prompt NÃO registra tools** — só orienta quando/como usar |
+
+**Armadilha real (vista no fluxo de produção):** alguns nós põem o prompt inteiro em `instrucao` e setam `contexto` para um valor que **não é um slug válido** (ex.: `"Suporte Técnico"` com espaço/maiúscula ≠ slug `suporte`). Resultado: a base vira o **genérico de fallback** e editar o prompt "Suporte técnico" na tela **não afeta o nó**. Para a tela Prompts IA ser a fonte da verdade, o `contexto` precisa bater **exatamente** com o slug e a `instrucao` ficar curta/vazia.
+
+## Tela Prompts IA — 3 abas
+
+`apps/web/src/pages/PromptsIA.jsx` (`GET/PUT /prompts`):
+- **Prompts:** edita as linhas de `prompts_ia` (conteúdo + modelo/provedor/temperatura). `regras`/`estilo` são blocos reutilizáveis (sem modelo) injetados nos outros via placeholders. "Restaurar padrão" volta `conteudo = padrao`.
+- **Catálogo:** lista **read-only** das tools (referência: nome, categoria, endpoint SGP, params, status Ativo/Requer-config). É uma lista **fixa no front** (`TOOLS_CATALOG`), espelho manual do `iaTools.js` — e só renderiza as categorias Diagnóstico/Atendimento/Financeiro, **escondendo as tools Comercial** (pré-cadastro, listar planos/vencimentos).
+- **Testar Tools:** testador manual — escolhe a tool, preenche params e roda `POST /sysconfig/tools/test` (executa **de verdade** no SGP). As marcadas com ⚠️ (`criar_chamado`/`promessa_pagamento`/`precadastrar_cliente`) **gravam dados reais** — é o equivalente manual ao gate de sandbox dos [[Testes de Fluxo]].
+
 ## `ia_roteador` — classificador de intenção
 
 `processarIARoteador` classifica a mensagem em uma rota. Detecta despedida por regex **antes** de chamar a API (economia). Claude responde `<rota>id</rota>` (XML, `max_tokens 30`); valida contra as rotas configuradas + `nao_entendeu`/`encerrar`.
