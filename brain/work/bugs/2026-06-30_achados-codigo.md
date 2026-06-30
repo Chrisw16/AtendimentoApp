@@ -57,4 +57,5 @@ Lista de bugs, falhas de segurança e dívidas levantados no estudo linha-por-li
 
 ## See Also
 
+- [[Auditoria profunda (2026-06-30)]] — segunda passada (4 agentes + verificação), com os mismatches editor↔motor e bugs novos.
 - [[Auth e Segurança]] · [[Realtime SSE]] · [[Maxxi v2 / GoCHAT — Visão geral]]
