@@ -178,7 +178,15 @@ export const fluxosApi = {
   ativar:  (id)        => api.post(`/fluxos/${id}/ativar`),
   validar:     (id)       => api.post(`/fluxos/${id}/validar`),
   simular:     (id, body) => api.post(`/fluxos/${id}/simular`, body),
-  simularReal: (id, body) => api.post(`/fluxos/${id}/simular-real`, body),
+  simularReal:  (id, body) => api.post(`/fluxos/${id}/simular-real`, body),
+  compartilhar: (id, body) => api.post(`/fluxos/${id}/compartilhar`, body),
+  revogarLink:  (id)       => api.delete(`/fluxos/${id}/compartilhar`),
+};
+
+// Link público de teste (sem login) — usado pela página /teste/:token
+export const chatTesteApi = {
+  info:   (token)       => api.get(`/chat-teste/${token}`),
+  enviar: (token, body) => api.post(`/chat-teste/${token}`, body),
 };
 
 // ── ENDPOINTS — CANAIS ───────────────────────────────────────────

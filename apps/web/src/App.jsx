@@ -25,6 +25,7 @@ const Cobertura   = lazy(() => import('./pages/Cobertura'));
 const MonitorRede = lazy(() => import('./pages/MonitorRede'));
 const Configuracoes = lazy(() => import('./pages/Configuracoes'));
 const PromptsIA     = lazy(() => import('./pages/PromptsIA'));
+const ChatTeste     = lazy(() => import('./pages/ChatTeste'));
 const Analytics     = lazy(() => import('./pages/stubs.jsx').then(m => ({ default: m.Analytics })));
 
 
@@ -121,6 +122,7 @@ export default function App() {
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/login" element={token ? <Navigate to="/" replace /> : <Login />} />
+            <Route path="/teste/:token" element={<ChatTeste />} />
             <Route
               path="/*"
               element={

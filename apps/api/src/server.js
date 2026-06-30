@@ -29,6 +29,7 @@ import { ordensRouter }      from './routes/ordens.js';
 import { financeiroRouter }  from './routes/financeiro.js';
 import { sysconfigRouter }   from './routes/sysconfig.js';
 import { planosRouter }      from './routes/planos.js';
+import { chatTesteRouter }   from './routes/chatTeste.js';
 import { errorHandler }      from './middlewares/errorHandler.js';
 
 const app  = express();
@@ -45,8 +46,9 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/health', (_req, res) => res.json({ status: 'ok', version: '2.0.0', ts: new Date().toISOString() }));
 
 // Rotas públicas
-app.use('/api/auth',     authRouter);
-app.use('/api/webhooks', webhookRouter);
+app.use('/api/auth',       authRouter);
+app.use('/api/webhooks',   webhookRouter);
+app.use('/api/chat-teste', chatTesteRouter); // link público de teste de fluxo (sem login)
 
 // Rotas autenticadas
 app.use('/api/chat',        chatRouter);

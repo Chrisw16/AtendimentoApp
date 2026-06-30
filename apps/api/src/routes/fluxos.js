@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler, HttpError }        from '../middlewares/errorHandler.js';
 import { getDb } from '../config/db.js';
@@ -107,4 +108,25 @@ fluxosRouter.post('/:id/simular-real', asyncHandler(async (req, res) => {
 
   const novo = estados.get(SID) || null;
   res.json({ respostas, estado: novo, status: novo ? 'aguardando' : 'encerrado' });
+}));
+
+// ── LINK PÚBLICO DE TESTE ─────────────────────────────────────────
+
+// Gera (ou regenera com {regenerar:true}) o token do link público de teste.
+fluxosRouter.post('/:id/compartilhar', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const f = await db('fluxos').where({ id: req.params.id }).first();
+  if (!f) throw new HttpError(404, 'Fluxo não encontrado');
+  let token = f.share_token;
+  if (!token || req.body?.regenerar) {
+    token = randomUUID().replace(/-/g, '');
+    await db('fluxos').where({ id: f.id }).update({ share_token: token });
+  }
+  res.json({ token });
+}));
+
+// Revoga o link (desativa).
+fluxosRouter.delete('/:id/compartilhar', asyncHandler(async (req, res) => {
+  await getDb()('fluxos').where({ id: req.params.id }).update({ share_token: null });
+  res.json({ ok: true });
 }));

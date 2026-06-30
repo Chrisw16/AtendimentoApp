@@ -6,7 +6,7 @@ import { X, Send, RotateCcw, CheckCircle2, AlertTriangle, AlertCircle } from 'lu
 import styles from './TesteFluxoModal.module.css';
 
 // Renderiza texto estilo WhatsApp (*negrito*, `mono`, quebras de linha) sem innerHTML.
-function formatWa(texto = '') {
+export function formatWa(texto = '') {
   const linhas = String(texto).split('\n');
   return linhas.map((linha, li) => {
     const partes = linha.split(/(\*[^*]+\*|`[^`]+`)/g).filter(Boolean);
@@ -25,7 +25,7 @@ function formatWa(texto = '') {
 
 // Bolha do bot: renderiza cada tipo de resposta como no WhatsApp.
 // Se `onOpcao` for passado, botões/itens viram clicáveis (enviam a opção).
-function BotBubble({ resp, onOpcao, disabled }) {
+export function BotBubble({ resp, onOpcao, disabled }) {
   switch (resp.tipo) {
     case 'botoes':
       return (
@@ -159,6 +159,46 @@ function Simulacao({ fluxo, toast }) {
   );
 }
 
+// Link público de teste — gera/copia/revoga o link /teste/<token> (sem login).
+function LinkTeste({ fluxo, toast }) {
+  const [link, setLink] = useState('');
+  const [carregando, setCarregando] = useState(false);
+
+  const gerar = async (regenerar) => {
+    setCarregando(true);
+    try {
+      const r = await fluxosApi.compartilhar(fluxo.id, regenerar ? { regenerar: true } : {});
+      const url = `${window.location.origin}/teste/${r.token}`;
+      setLink(url);
+      navigator.clipboard?.writeText(url).catch(() => {});
+      toast(regenerar ? 'Novo link gerado e copiado ✓' : 'Link copiado ✓', 'success');
+    } catch (e) { toast(e.message, 'error'); }
+    finally { setCarregando(false); }
+  };
+  const revogar = async () => {
+    if (!window.confirm('Revogar o link? Quem tiver o link antigo perde o acesso.')) return;
+    try { await fluxosApi.revogarLink(fluxo.id); setLink(''); toast('Link revogado', 'info'); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', flex: 1 }}>🔗 Link público de teste (sem login)</span>
+        <Button variant="ghost" size="sm" onClick={() => gerar(false)} loading={carregando}>Gerar / copiar</Button>
+      </div>
+      {link && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input readOnly value={link} onFocus={e => e.target.select()}
+            style={{ flex: 1, fontSize: 11, padding: '5px 8px', border: '1px solid var(--border-strong)', borderRadius: 6, background: 'var(--bg-surface)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }} />
+          <button onClick={() => gerar(true)} title="Gerar novo link (revoga o anterior)" style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12 }}>↻</button>
+          <button onClick={revogar} title="Revogar link" style={{ border: '1px solid var(--danger-bg)', background: 'var(--danger-bg)', color: 'var(--danger)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }}>revogar</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Conversa real: motor de verdade (SGP + IA) em sandbox. Chat estilo WhatsApp.
 function ConversaReal({ fluxo, toast }) {
   const [estado, setEstado] = useState(null);
@@ -190,6 +230,7 @@ function ConversaReal({ fluxo, toast }) {
 
   return (
     <div className={styles.chat}>
+      <LinkTeste fluxo={fluxo} toast={toast} />
       <p className={styles.aviso}>
         ⚠️ Roda o motor <strong>de verdade</strong> com SGP e IA reais — mas em <strong>modo sandbox</strong>:
         as respostas são capturadas aqui (não vão pro WhatsApp) e ações que gravam dados
