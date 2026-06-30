@@ -96,3 +96,15 @@ Christian subiu a branch no Coolify e foi testando/pedindo melhorias. Tudo na br
 - **Prompt comercial** completo entregue (apresentação→coleta→pré-cadastro→finalização, tools certas). Ainda não versionado no brain.
 - **Planos — cidade vazia = todas as cidades** (`listar_planos_ativos`) + multi-cidade por vírgula.
 - **Planos — promoção** (migration 008: `valor_promocional` + `promo_meses`): preço dos primeiros meses + duração; a tool `listar_planos_ativos` passa a citar "R$ X nos primeiros N meses, depois R$ Y/mês"; form e card atualizados.
+
+## [2026-06-30 23:30] FECHAMENTO DO DIA | Mais melhorias de produto + pauta de amanhã
+
+Christian seguiu testando e pedindo melhorias; fim do dia.
+
+- **Planos — benefícios** (migration 009: `beneficios` texto): Globoplay/Deezer/Qualifica etc.; `listar_planos_ativos` cita "inclui: …"; form (textarea) + chips no card.
+- **Link público de teste** (migration 010: `fluxos.share_token`): rota pública `/api/chat-teste/:token` (sandbox, rate-limit) + página `ChatTeste.jsx` em `/teste/:token` (fora do login) + UI de gerar/revogar no `TesteFluxoModal`. Modo Real + token revogável.
+- **Fixes do teste comercial:** histórico do `ia_responde` 20→50 msgs (esquecia cidade/plano em cadastro longo); protocolo fabricado no sandbox (em produção `conversaRepo.criar` já gera). Confirmado: `precadastrar_cliente` não roda no sandbox **por design** (gate) — função real (`precadastrarCliente`) está correta.
+- **Prompt comercial** versionado no brain (`systems/maxxi/prompts/comercial.md`).
+- **Docs:** CLAUDE.md (link público, planos, fragilidade da memória da IA), `Testes de Fluxo`, `IA com Tool Calling`, nova página de pauta `work/tasks/2026-06-30_…`. `_index` atualizado.
+- **Branch `worktree-ambiente-testes-fluxo`:** ~13 commits, não mesclada (Christian decide o merge). Deploy roda na branch via Coolify (migrations 008/009/010 pendentes no próximo Redeploy).
+- **PAUTA DE AMANHÃ:** (1) melhorar a **memória/janela da IA** (Christian sugeriu "cache" — discutir extração estruturada / sumário / prompt caching); (2) **pré-cadastro real** (tirar do sandbox pra testar pra-valer). Ver `work/tasks/2026-06-30_ambiente-testes-e-proximos-passos.md`.

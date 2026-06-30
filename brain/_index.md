@@ -40,6 +40,10 @@ Last rebuilt: 2026-06-30
 ## People
 - **Christian** (Chrisw16, dono do produto) — dono/dev do Maxxi, ligado à NetGo Internet — `people/christian.md`
 
+## Prompts (referência)
+- **Prompt Comercial (Netzinha)** (prompt comercial, vendas, slug comercial) — prompt-coração da IA vendedora (apresentação→coleta→pré-cadastro) — `systems/maxxi/prompts/comercial.md`
+
 ## Work
 - **Achados de código (2026-06-30)** (bugs, dívida técnica, segurança) — levantamento do estudo estático — `work/bugs/2026-06-30_achados-codigo.md`
 - **Auditoria profunda (2026-06-30)** (auditoria pesada, mismatches editor↔motor) — 4 agentes + verificação; CONFIRMADO vs PLAUSÍVEL — `work/bugs/2026-06-30_auditoria-profunda.md`
+- **Ambiente de testes + próximos passos (2026-06-30)** (pauta de amanhã: janela/memória da IA, pré-cadastro real) — recap da sessão + agenda — `work/tasks/2026-06-30_ambiente-testes-e-proximos-passos.md`

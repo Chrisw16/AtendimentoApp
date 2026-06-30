@@ -19,7 +19,7 @@ A camada de IA do Maxxi usa **Anthropic Claude** (`claude-haiku-4-5-20251001` po
 Em `motorFluxo.js`, `processarIAResponde`:
 - Carrega o prompt do slug (`cfg.contexto`, default `outros`) via `resolverPrompt`, compõe o `system` com o contexto do cliente identificado e regras explícitas de uso de tool (executar silenciosamente, nunca inventar contrato/CPF/protocolo).
 - Roda um **loop de até 5 rounds** (`ai.messages.create` com `tools`): trata `stop_reason` `end_turn` (responde) e `tool_use` (executa as tools do bloco, anexa `tool_result`, continua).
-- Histórico por nó (`_ia_hist_<id>`, últimos 20 turns); `max_turnos` default 6 antes de sair pela porta `max_turnos`.
+- Histórico por nó (`_ia_hist_<id>`, **`.slice(-50)`** mensagens ≈ 25 trocas); `max_turnos` default 6 antes de sair pela porta `max_turnos`. ⚠️ **Limitação:** os dados coletados vivem só nesse histórico (sliding window), não em estrutura — cadastro longo perdia cidade/plano com a janela antiga de 20. O `-50` é paliativo; melhoria estrutural (extração de campos / sumário / "cache") na pauta de [[Ambiente de testes + próximos passos (2026-06-30)]].
 - Tools ativas: lista de suporte por padrão; `precadastrar_cliente` (sensível) só entra se `cfg.tools_ativas` incluir. Resultados especiais `__TRANSFERIR__`/`__ENCERRAR__` roteiam o fluxo (portas `transferir`/`resolvido`).
 
 ### Campos do nó: `contexto` × `instrução` × `tools_ativas`
@@ -51,7 +51,7 @@ São três campos com papéis distintos (fonte de confusão comum):
 
 ## `iaTools.js` — 15 ferramentas
 
-Definições no formato Anthropic (`input_schema`) e o executor `executarTool(name, input, ctx)`. As tools: `verificar_conexao`, `consultar_manutencao`, `criar_chamado`, `segunda_via_boleto`, `promessa_pagamento`, `historico_ocorrencias`, `status_rede`, `consultar_onu_acs` (stub ACS), `reiniciar_onu_acs` (stub ACS), `consultar_radius`, `listar_planos_ativos` (lê a tabela `planos`; **cidade vazia no cadastro = vale para todas as cidades**, e o filtro "contém" aceita multi-cidade separando por vírgula), `listar_vencimentos`, `precadastrar_cliente`, `transferir_para_humano`, `encerrar_atendimento`. `executarTool` prioriza `input.contrato` e cai para `ctx.cliente.contrato`. Todas formatam um texto amigável de retorno para a IA. Implementação SGP em [[Integração SGP]].
+Definições no formato Anthropic (`input_schema`) e o executor `executarTool(name, input, ctx)`. As tools: `verificar_conexao`, `consultar_manutencao`, `criar_chamado`, `segunda_via_boleto`, `promessa_pagamento`, `historico_ocorrencias`, `status_rede`, `consultar_onu_acs` (stub ACS), `reiniciar_onu_acs` (stub ACS), `consultar_radius`, `listar_planos_ativos` (lê a tabela `planos`; **cidade vazia no cadastro = vale para todas as cidades** + multi-cidade por vírgula; cita **promoção** `valor_promocional`/`promo_meses` — "R$ X nos primeiros N meses, depois R$ Y" — e **benefícios** `beneficios` — "inclui: Globoplay, …"), `listar_vencimentos`, `precadastrar_cliente`, `transferir_para_humano`, `encerrar_atendimento`. `executarTool` prioriza `input.contrato` e cai para `ctx.cliente.contrato`. Todas formatam um texto amigável de retorno para a IA. Implementação SGP em [[Integração SGP]].
 
 ## `promptService.js` — composição de prompts
 

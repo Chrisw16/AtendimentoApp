@@ -64,9 +64,9 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 - `motorLoop.js` — o **loop real** do motor extraído como função pura (`executarLoop`), espelho byte-a-byte; pronto pra religar no `processarConversa` (deferido: precisa Docker pra validar).
 - `motorSimulador.js` (+`.cli.js`) — **simulador** de conversa multi-turno sobre o `executarLoop` (passo a passo, detecta concluido/travado/perdido/aguardando). `node src/services/motorSimulador.cli.js <fluxo.json> [cenario.json]`.
 
-**Testar fluxo no app** (tela Fluxos → botão "Testar fluxo" → `TesteFluxoModal`): `POST /fluxos/:id/validar` (relatório estático), `/simular` (roteirizado) e `/simular-real` (roda o motor de verdade com SGP+IA em **modo sandbox** — `processarConversa(c,msg,{fluxo,estados,enviar,sandbox})`; em sandbox, reads são reais mas tudo que grava é simulado, inclusive as tools de IA via gate no `executarTool`).
+**Testar fluxo no app** (tela Fluxos → botão "Testar fluxo" → `TesteFluxoModal`): `POST /fluxos/:id/validar` (relatório estático), `/simular` (roteirizado) e `/simular-real` (roda o motor de verdade com SGP+IA em **modo sandbox** — `processarConversa(c,msg,{fluxo,estados,enviar,sandbox})`; em sandbox, reads são reais mas tudo que grava é simulado, inclusive as tools de IA via gate no `executarTool`). **Link público de teste** `/teste/<token>` (rota pública `chat-teste`, sem login, sandbox, revogável; coluna `fluxos.share_token`).
 
-Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/maxxi/components/testes-de-fluxo.md).
+Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/maxxi/components/testes-de-fluxo.md). Próximos passos abertos (memória/janela da IA, pré-cadastro real) em [brain/work/tasks/2026-06-30_ambiente-testes-e-proximos-passos.md](brain/work/tasks/2026-06-30_ambiente-testes-e-proximos-passos.md).
 
 **Produção (Coolify):** o **Dockerfile raiz** é multi-stage — builda `apps/web` e copia `dist` para `apps/api/apps/web/dist`; a API serve frontend + API no **mesmo container** (porta 4000). Migrations rodam em background no boot. Runbook: [brain/systems/maxxi/runbooks/](brain/systems/maxxi/runbooks/). Webhook Evolution de produção: `https://gochat.netgo.net.br/api/webhooks/evolution`.
 
@@ -79,6 +79,8 @@ Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/max
 - **Prompts da IA são editáveis em runtime** (tabela `prompts_ia`, tela Prompts IA: abas Prompts/Catálogo/Testar Tools). Placeholders `[REGRAS]/[ESTILO]/[PLANOS]/[TIPOS_OCORRENCIA]` resolvidos por `promptService`. Cuidado: há **dois caches** (`integrations.invalidateConfigCache` e `promptService` TTL 3min) — editar prompt invalida só um.
 - **Nó `IA Responde` tem 3 campos com papéis distintos:** `contexto` = **slug** do prompt da tela (vira a base; slug inexistente → fallback genérico — o `contexto` precisa bater **exato**, ex. `suporte` não `"Suporte Técnico"`); `instrucao`/"instruções extras" = texto somado por cima da base; `tools_ativas` = **quais** tools a IA pode chamar (o prompt não registra tool, só orienta). Detalhe em [brain/systems/maxxi/components/ia-tool-calling.md](brain/systems/maxxi/components/ia-tool-calling.md).
 - **Acoplamento NetGo:** IDs de plano/POP/portador e textos estão hardcoded em `integrations.js` e nos prompts seed. Qualquer revenda exige parametrizar isso por instância.
+- **Planos comerciais (Configurações → Planos, tabela `planos`):** alimentam a tool `listar_planos_ativos`. `cidade` vazia = vale p/ **todas** (multi-cidade por vírgula); `valor` = preço normal + `valor_promocional`/`promo_meses` = promoção dos primeiros meses; `beneficios` = texto (um por linha). Migrations 008/009.
+- **Memória da IA é frágil:** o histórico do `ia_responde` é janela deslizante (`.slice(-50)` por nó) — cadastro longo perdia dados do início (paliativo aplicado; melhoria estrutural na pauta de [brain/work/tasks/](brain/work/tasks/)). Toda conversa de produção nasce com `protocolo` (`conversaRepo.criar`); no sandbox de teste o protocolo é fabricado (`AAAAMMDD-TESTE`).
 
 ## Armadilhas conhecidas (bugs/dívidas — ver [brain/work/](brain/work/))
 

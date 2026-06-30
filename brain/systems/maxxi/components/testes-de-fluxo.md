@@ -65,6 +65,15 @@ Botão **"Testar fluxo"** no card de cada fluxo abre o `TesteFluxoModal` (`apps/
 
 `processarConversa(conversa, msg, opts)` ganhou `opts` opcionais (defaults = produção byte-idêntica): `fluxo` (testa um fluxo específico), `estados` (Map isolado), `enviar` (captura respostas em vez de mandar no WhatsApp) e `sandbox`. Com `sandbox:true`: SGP/IA **leem de verdade**, mas tudo que **grava** é simulado — nós `abrir_chamado`/`promessa_pagamento`/`transferir_agente`/`nota_interna`/`nps_inline`/`encerrar` e as tools de IA `criar_chamado`/`promessa_pagamento`/`precadastrar_cliente`/`reiniciar_onu_acs` (gate em `executarTool`). A rota é **resumível** por turno (`{mensagem, estado}` → `{respostas, estado, status}`), então o chat sandbox mantém a conversa entre mensagens sem estado no servidor.
 
+## 4. Link público de teste (`/teste/<token>`)
+
+Para compartilhar o chat de teste com pessoas **sem login**: botão "Testar fluxo" → Conversa real → **"🔗 Link público de teste"** gera `…/teste/<token>` (token revogável por fluxo).
+
+- Backend: coluna `fluxos.share_token` (migration 010); rota **pública** `GET/POST /api/chat-teste/:token` (`apps/api/src/routes/chatTeste.js`, fora do auth, rate-limit 60/5min) que roda o mesmo **sandbox**; admin `POST /fluxos/:id/compartilhar` (gera/regenera) e `DELETE` (revoga).
+- Frontend: página standalone `pages/ChatTeste.jsx` na rota `/teste/:token` (fora do `PrivateRoute`), reusa o `BotBubble` exportado do `TesteFluxoModal`.
+- **Stateless** (estado vive no cliente) → aguenta vários testadores ao mesmo tempo.
+- ⚠️ Modo escolhido: **Real** — IA gasta tokens por uso e, em fluxos com `consultar_cliente`, o testador veria dado real. Seguro para o fluxo **comercial** (leads, sem PII de cliente existente).
+
 ## Limitações / próximos passos
 
 - O `motorSimulador` (modo Roteiro) **não roda** o `processarNo` real — roteiriza as decisões. Quem roda o motor real é o modo **Conversa real** (sandbox). Religar o `motorLoop` no `processarConversa` para remover a duplicação do loop segue **deferido** (precisa Docker pra validar).
