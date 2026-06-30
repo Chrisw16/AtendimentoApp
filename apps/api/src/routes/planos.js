@@ -36,7 +36,7 @@ planosRouter.post('/', asyncHandler(async (req, res) => {
   const {
     plano_id_sgp, nome, valor, velocidade, cidade,
     fidelidade_meses, ativo, ordem, descricao,
-    valor_promocional, promo_meses,
+    valor_promocional, promo_meses, beneficios,
   } = req.body || {};
 
   if (!plano_id_sgp || !nome) {
@@ -55,6 +55,7 @@ planosRouter.post('/', asyncHandler(async (req, res) => {
     descricao:         descricao || null,
     valor_promocional: valor_promocional != null && valor_promocional !== '' ? parseFloat(valor_promocional) : null,
     promo_meses:       parseInt(promo_meses ?? 0, 10) || 0,
+    beneficios:        beneficios || null,
   }).returning('*');
 
   res.status(201).json({ ok: true, plano: row });
@@ -70,7 +71,7 @@ planosRouter.put('/:id', asyncHandler(async (req, res) => {
   const {
     plano_id_sgp, nome, valor, velocidade, cidade,
     fidelidade_meses, ativo, ordem, descricao,
-    valor_promocional, promo_meses,
+    valor_promocional, promo_meses, beneficios,
   } = req.body || {};
 
   await db('planos').where({ id }).update({
@@ -85,6 +86,7 @@ planosRouter.put('/:id', asyncHandler(async (req, res) => {
     descricao:         descricao !== undefined ? descricao : exists.descricao,
     valor_promocional: valor_promocional !== undefined ? (valor_promocional != null && valor_promocional !== '' ? parseFloat(valor_promocional) : null) : exists.valor_promocional,
     promo_meses:       promo_meses != null ? parseInt(promo_meses, 10) || 0 : exists.promo_meses,
+    beneficios:        beneficios !== undefined ? (beneficios || null) : exists.beneficios,
     atualizado:        db.fn.now(),
   });
 

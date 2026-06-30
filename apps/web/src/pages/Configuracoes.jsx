@@ -535,6 +535,7 @@ function PlanosTab({ toast }) {
           {planos.map(p => {
             const edit = editingOf(p);
             const isEditing = edit != null;
+            const benef = String(p.beneficios || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean);
             return (
               <div key={p.id} style={{
                 background: '#fff', border: '1px solid rgba(0,0,0,.08)', borderRadius: 10, padding: 14,
@@ -563,6 +564,13 @@ function PlanosTab({ toast }) {
                           : (p.valor != null && <>💰 R$ {Number(p.valor).toFixed(2).replace('.', ',')}</>)}
                         {p.fidelidade_meses > 0 && <> · 🔒 {p.fidelidade_meses}m fidelidade</>}
                       </div>
+                      {benef.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                          {benef.map((b, i) => (
+                            <span key={i} style={{ fontSize: 10.5, color: 'var(--brand-blue)', background: 'rgba(32,80,184,.08)', padding: '2px 8px', borderRadius: 10 }}>🎁 {b}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <code style={{ fontSize: 11, background: 'rgba(32,80,184,.08)', color: 'var(--brand-blue)', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
                       SGP id={p.plano_id_sgp}
@@ -592,7 +600,7 @@ function emptyPlano() {
   return {
     plano_id_sgp: '', nome: '', valor: '', velocidade: '', cidade: '',
     fidelidade_meses: 0, ativo: true, ordem: 0, descricao: '',
-    valor_promocional: '', promo_meses: 0,
+    valor_promocional: '', promo_meses: 0, beneficios: '',
   };
 }
 
@@ -671,6 +679,15 @@ function PlanoFields({ p, onChange }) {
             {p.ativo ? 'Ativo' : 'Inativo'}
           </span>
         </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        {fld('Benefícios inclusos',
+          <textarea className={styles.input} value={p.beneficios || ''}
+            onChange={e => onChange({ beneficios: e.target.value })}
+            placeholder={'Globoplay\nDeezer\nQualifica'} rows={3}
+            style={{ resize: 'vertical', minHeight: 64, fontFamily: 'inherit', lineHeight: 1.5 }}/>,
+          'Um por linha (ou separados por vírgula) — a IA cita junto com o plano'
+        )}
       </div>
     </div>
   );

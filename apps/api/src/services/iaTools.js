@@ -305,7 +305,9 @@ export async function executarTool(name, input, ctx) {
           : (p.valor != null ? fmt(p.valor) : '—');
         const fid = p.fidelidade_meses ? ` · ${p.fidelidade_meses}m fidelidade` : '';
         const cid = p.cidade ? ` (${p.cidade})` : '';
-        return `• ${p.nome} — ${p.velocidade || '—'} — ${preco}${cid}${fid} | plano_id=${p.plano_id_sgp}`;
+        const benef = String(p.beneficios || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+        const ben = benef.length ? ` · inclui: ${benef.join(', ')}` : '';
+        return `• ${p.nome} — ${p.velocidade || '—'} — ${preco}${cid}${fid}${ben} | plano_id=${p.plano_id_sgp}`;
       }).join('\n');
       return `📋 Planos disponíveis:\n${linhas}\n\n⚠️ Use o plano_id ao chamar precadastrar_cliente.`;
     }
