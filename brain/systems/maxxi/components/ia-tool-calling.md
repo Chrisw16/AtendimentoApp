@@ -34,6 +34,8 @@ São três campos com papéis distintos (fonte de confusão comum):
 
 **Armadilha real (vista no fluxo de produção):** alguns nós põem o prompt inteiro em `instrucao` e setam `contexto` para um valor que **não é um slug válido** (ex.: `"Suporte Técnico"` com espaço/maiúscula ≠ slug `suporte`). Resultado: a base vira o **genérico de fallback** e editar o prompt "Suporte técnico" na tela **não afeta o nó**. Para a tela Prompts IA ser a fonte da verdade, o `contexto` precisa bater **exatamente** com o slug e a `instrucao` ficar curta/vazia.
 
+> Mitigação no editor (PropsPanel): o campo **Contexto** agora é um **dropdown** que puxa os slugs de `prompts_ia` (menos `regras`/`estilo`), eliminando o erro de digitação. Valores legados inválidos aparecem marcados com `⚠` pra serem trocados. O campo **Instruções extras** mostra o `cfg.prompt` legado como fallback (`cfg.instrucao ?? cfg.prompt`) pra o prompt antigo ficar visível e migrável.
+
 ## Tela Prompts IA — 3 abas
 
 `apps/web/src/pages/PromptsIA.jsx` (`GET/PUT /prompts`):
