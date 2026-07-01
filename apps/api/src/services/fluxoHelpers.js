@@ -50,3 +50,15 @@ export function camposLista(cfg = {}) {
     titulo_secao: cfg.secao ?? cfg.titulo_secao ?? '',
   };
 }
+
+// salvar_dado: normaliza o nome do campo salvo pela IA para um slug ASCII,
+// porque a interpolação {{campo}} usa regex \w+ (não casa acento/espaço).
+export function normalizarNomeCampo(nome) {
+  return String(nome || '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')    // remove acentos decompostos pelo NFD
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')       // não-alfanumérico → _
+    .replace(/^_+|_+$/g, '');          // apara _ das bordas
+}

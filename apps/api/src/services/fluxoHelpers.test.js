@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, normalizarNomeCampo } from './fluxoHelpers.js';
 
 test('resolverTipoChamado mapeia tipo "tecnico" para 200 (Reparo)', () => {
   assert.equal(resolverTipoChamado({ tipo: 'tecnico' }), 200);
@@ -100,4 +100,25 @@ test('camposLista faz fallback para label_botao/titulo_secao (fluxos antigos)', 
 
 test('camposLista retorna strings vazias quando nada está configurado', () => {
   assert.deepEqual(camposLista({}), { label_botao: '', titulo_secao: '' });
+});
+
+// ── normalizarNomeCampo ─────────────────────────────────────────
+test('normalizarNomeCampo remove acentos e minusculiza', () => {
+  assert.equal(normalizarNomeCampo('Endereço'), 'endereco');
+});
+
+test('normalizarNomeCampo troca espaços por _', () => {
+  assert.equal(normalizarNomeCampo('Data Nasc'), 'data_nasc');
+});
+
+test('normalizarNomeCampo mantém nome já simples', () => {
+  assert.equal(normalizarNomeCampo('cidade'), 'cidade');
+});
+
+test('normalizarNomeCampo colapsa não-alfanuméricos e apara as bordas', () => {
+  assert.equal(normalizarNomeCampo('CPF/CNPJ '), 'cpf_cnpj');
+});
+
+test('normalizarNomeCampo devolve string vazia para entrada vazia', () => {
+  assert.equal(normalizarNomeCampo(''), '');
 });
