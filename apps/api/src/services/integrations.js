@@ -467,25 +467,29 @@ export async function listarVencimentos() {
 // logradouro, numero, bairro, cidade, plano_id, vencimento_id.
 // Os demais usam defaults sensatos (uf=RN, pais=BR, formacobranca=1, etc).
 export async function precadastrarCliente(d = {}) {
+  // SGP só exige nome + logradouro no /api/precadastro/F. Mantemos cpf/celular
+  // por qualidade de dado (lead sem contato/CPF é inútil).
   if (!d.nome)        throw new Error('nome é obrigatório');
   if (!d.cpf && !d.cpfcnpj) throw new Error('cpf é obrigatório');
   if (!d.celular)     throw new Error('celular é obrigatório');
-  if (!d.cidade)      throw new Error('cidade é obrigatória');
-  if (!d.plano_id)    throw new Error('plano_id é obrigatório');
-  if (!d.vencimento_id) throw new Error('vencimento_id é obrigatório');
+  if (!d.logradouro)  throw new Error('logradouro é obrigatório');
 
   const cpfDigits = String(d.cpf || d.cpfcnpj).replace(/\D/g, '');
   const celDigits = String(d.celular).replace(/\D/g, '');
   const cidade    = String(d.cidade || '').toLowerCase();
 
-  // Defaults inteligentes por cidade (NetGo opera em RN)
-  const popPadrao = (() => {
-    if (cidade.includes('gostoso'))                            return 3;
-    if (cidade.includes('gonçalo') || cidade.includes('goncalo')) return 4;
-    return 1; // Natal e Macaíba
-  })();
-  const portadorPadrao = cidade.includes('gostoso') ? 18 : 16;
+  // precadastro_ativar: 0 = LEAD (default — a equipe NetGo monta o contrato depois);
+  // 1 = cadastro definitivo (cria o contrato; exige os campos "[Para criação de contrato]").
+  const ativar = Number(d.precadastro_ativar ?? 0);
 
+  // O plano/vencimento desejados vão na observação p/ a equipe finalizar o contrato.
+  const desejo = [
+    d.plano_id      ? `Plano desejado (id ${d.plano_id})`      : '',
+    d.vencimento_id ? `Vencimento dia (id ${d.vencimento_id})` : '',
+  ].filter(Boolean).join(' · ');
+  const observacao = [d.observacao || 'Pré-cadastro via IA GoCHAT', desejo].filter(Boolean).join(' | ');
+
+  // Campos do CLIENTE (todos opcionais no SGP além de nome/logradouro).
   const params = {
     nome: d.nome,
     cpfcnpj: cpfDigits,
@@ -496,29 +500,38 @@ export async function precadastrarCliente(d = {}) {
     numero: String(d.numero || ''),
     complemento: d.complemento || '',
     bairro: d.bairro || '',
-    cidade: d.cidade,
+    cidade: d.cidade || '',
     cep: String(d.cep || '').replace(/\D/g, ''),
     pontoreferencia: d.pontoreferencia || '',
-    plano_id: String(d.plano_id),
-    vencimento_id: String(d.vencimento_id),
     uf: d.uf || 'RN',
     pais: d.pais || 'BR',
-    login: d.login || cpfDigits,
-    senha: d.senha || '123456',
-    pop_id: String(d.pop_id || popPadrao),
-    portador_id: String(d.portador_id || portadorPadrao),
-    nas_id: String(d.nas_id || 53),   // 53 = RTR_BNG_NETGO_02 (NetGo). Acoplamento hardcoded — parametrizar p/ revenda.
-    os_instalacao: d.os_instalacao === false ? 'False' : 'True',
-    formacobranca_id: String(d.formacobranca_id || 1),
-    precadastro_ativar: String(d.precadastro_ativar ?? 1),
-    observacao: d.observacao || 'Pré-cadastro via IA GoCHAT',
+    observacao,
+    precadastro_ativar: String(ativar),
     ...(d.rg ? { rg: d.rg } : {}),
     ...(d.rg_emissor ? { rg_emissor: d.rg_emissor } : {}),
     ...(d.map_ll ? { map_ll: d.map_ll } : {}),
-    ...(d.condominio ? { condominio: String(d.condominio) } : {}),
-    ...(d.vendedor_id ? { vendedor_id: String(d.vendedor_id) } : {}),
     ...(d.midia_id ? { midia_id: String(d.midia_id) } : {}),
   };
+
+  // Modo cadastro definitivo (B): só aqui mandamos os campos de criação de contrato.
+  if (ativar === 1) {
+    const popPadrao = cidade.includes('gostoso') ? 3
+      : (cidade.includes('gonçalo') || cidade.includes('goncalo')) ? 4 : 1;
+    const portadorPadrao = cidade.includes('gostoso') ? 18 : 16;
+    Object.assign(params, {
+      plano_id:         String(d.plano_id || ''),
+      vencimento_id:    String(d.vencimento_id || ''),
+      pop_id:           String(d.pop_id || popPadrao),
+      portador_id:      String(d.portador_id || portadorPadrao),
+      nas_id:           String(d.nas_id || 53),   // 53 = RTR_BNG_NETGO_02 (NetGo)
+      login:            d.login || cpfDigits,
+      senha:            d.senha || '123456',
+      os_instalacao:    '1',                       // doc: gerar OS de instalação = valor 1
+      formacobranca_id: String(d.formacobranca_id || 1),
+      ...(d.vendedor_id ? { vendedor_id: String(d.vendedor_id) } : {}),
+      ...(d.condominio ? { condominio: String(d.condominio) } : {}),
+    });
+  }
 
   console.log('[SGP] precadastro/F params:', JSON.stringify(params));
   const raw = await sgpPost('/api/precadastro/F', params);
