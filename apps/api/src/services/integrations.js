@@ -3,6 +3,7 @@
  * Todos os endpoints, formatos e campos idênticos ao erp.js de referência
  */
 import { getDb } from '../config/db.js';
+import { normalizarData } from './fluxoHelpers.js';
 
 // ── CACHE DE CONFIG (5 min) ───────────────────────────────────────
 const cache = new Map();
@@ -488,7 +489,7 @@ export async function precadastrarCliente(d = {}) {
   const params = {
     nome: d.nome,
     cpfcnpj: cpfDigits,
-    datanasc: d.datanasc || '',
+    datanasc: normalizarData(d.datanasc),
     email: d.email || '',
     celular: celDigits,
     logradouro: d.logradouro || '',

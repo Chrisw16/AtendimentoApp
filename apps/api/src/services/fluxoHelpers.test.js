@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, normalizarNomeCampo, montarFichaColetada, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, normalizarNomeCampo, montarFichaColetada, CAMPOS_RESERVADOS, normalizarData } from './fluxoHelpers.js';
 
 test('resolverTipoChamado mapeia tipo "tecnico" para 200 (Reparo)', () => {
   assert.equal(resolverTipoChamado({ tipo: 'tecnico' }), 200);
@@ -143,6 +143,30 @@ test('montarFichaColetada lista escalares flat e ignora objetos/internos/vazios'
 
 test('montarFichaColetada devolve string vazia quando não há dados coletados', () => {
   assert.equal(montarFichaColetada({ cliente: {}, _ia_hist_n1: [] }), '');
+});
+
+// ── normalizarData ──────────────────────────────────────────────
+test('normalizarData converte DD/MM/AAAA para AAAA-MM-DD', () => {
+  assert.equal(normalizarData('09/05/2004'), '2004-05-09');
+});
+
+test('normalizarData aceita dígitos únicos e separadores variados', () => {
+  assert.equal(normalizarData('9/5/2004'), '2004-05-09');
+  assert.equal(normalizarData('09-05-2004'), '2004-05-09');
+});
+
+test('normalizarData mantém AAAA-MM-DD já correto', () => {
+  assert.equal(normalizarData('2004-05-09'), '2004-05-09');
+});
+
+test('normalizarData expande ano de 2 dígitos com pivô 30', () => {
+  assert.equal(normalizarData('09/05/04'), '2004-05-09');
+  assert.equal(normalizarData('09/05/95'), '1995-05-09');
+});
+
+test('normalizarData devolve vazio p/ vazio e passa adiante o irreconhecível', () => {
+  assert.equal(normalizarData(''), '');
+  assert.equal(normalizarData('sei lá'), 'sei lá');
 });
 
 // ── montarSystemPrompt: ficha ───────────────────────────────────

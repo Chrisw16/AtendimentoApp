@@ -87,3 +87,19 @@ export function montarFichaColetada(contexto = {}) {
     'Estes dados já foram coletados nesta conversa. NUNCA pergunte de novo por eles. Se faltar algum dado que não está na lista acima, pergunte e salve com a ferramenta salvar_dado.',
   ].join('\n');
 }
+
+// SGP: normaliza data de nascimento para AAAA-MM-DD (exigido pelo /api/precadastro/F).
+// Aceita DD/MM/AAAA, DD/MM/AA, D/M/AAAA com "/", "-" ou ".". Já em AAAA-MM-DD → devolve igual.
+// Não reconheceu → devolve o input (deixa o SGP validar em vez de corromper).
+export function normalizarData(valor) {
+  const s = String(valor || '').trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
+  if (!m) return s;
+  let [, dd, mm, yy] = m;
+  dd = dd.padStart(2, '0');
+  mm = mm.padStart(2, '0');
+  if (yy.length === 2) yy = (Number(yy) <= 30 ? '20' : '19') + yy;   // pivô 30 p/ ano de 2 dígitos
+  return `${yy}-${mm}-${dd}`;
+}
