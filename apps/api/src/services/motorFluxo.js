@@ -698,6 +698,7 @@ async function processarIAResponde(no, ctx) {
               ctx.estado.contexto[chave] = String(valor ?? '');
               salvos.push(`${chave}=${ctx.estado.contexto[chave]}`);
             }
+            console.log(`[IA] salvar_dado →`, salvos.length ? salvos.join(', ') : '(nada salvo)', '| raw:', dados);
             toolResults.push({
               type: 'tool_result',
               tool_use_id: tu.id,
