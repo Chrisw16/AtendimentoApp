@@ -48,7 +48,7 @@ sysconfigRouter.get('/:chave', asyncHandler(async (req, res) => {
 // ── ROTA DE TESTE DE TOOLS SGP ────────────────────────────────────────────
 import { consultarClientes, segundaViaBoleto, promessaPagamento, criarChamado,
   verificarConexao, consultarManutencao, historicoOcorrencias, consultarRadius,
-  statusRede, precadastrarCliente, listarVencimentos } from '../services/integrations.js';
+  statusRede, precadastrarCliente, listarVencimentos, listarPlanos } from '../services/integrations.js';
 
 sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandler(async (req, res) => {
   const { tool, params = {} } = req.body;
@@ -90,6 +90,9 @@ sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandle
         result = await q.orderBy([{ column: 'ordem', order: 'asc' }, { column: 'valor', order: 'asc' }]);
         break;
       }
+      case 'listar_planos_sgp':
+        // Lê direto do SGP (/api/ura/planos/) — traz os IDs REAIS p/ mapear em Configurações → Planos
+        result = await listarPlanos(params.cidade || ''); break;
       default:
         return res.status(400).json({ error: `Tool desconhecida: ${tool}` });
     }

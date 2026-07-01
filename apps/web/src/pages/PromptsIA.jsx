@@ -298,6 +298,14 @@ const TEST_TOOLS = [
     ],
   },
   {
+    id: 'listar_planos_sgp', label: 'Listar Planos SGP', icon: '🔎', category: 'SGP — Comercial',
+    endpoint: 'POST /api/ura/planos/',
+    desc: 'Lista os planos direto do SGP, com os IDs REAIS (id, descrição, valor, velocidade). Use pra descobrir o plano_id correto e corrigir Configurações → Planos.',
+    fields: [
+      { key: 'cidade', label: 'Cidade (opcional)', placeholder: 'Natal' },
+    ],
+  },
+  {
     id: 'listar_vencimentos', label: 'Listar Vencimentos', icon: '📅', category: 'SGP — Comercial',
     endpoint: 'POST /api/precadastro/vencimento/list',
     desc: 'Retorna dias de vencimento disponíveis no SGP. Sem parâmetros.',
