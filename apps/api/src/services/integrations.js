@@ -54,7 +54,10 @@ async function sgpPost(path, params = {}) {
     body,
     signal: AbortSignal.timeout(12000),
   });
-  if (!res.ok) throw new Error(`SGP ${res.status} em ${path}`);
+  if (!res.ok) {
+    const corpo = await res.text().catch(() => '');
+    throw new Error(`SGP ${res.status} em ${path}${corpo ? ` — ${corpo.slice(0, 400)}` : ''}`);
+  }
   return res.json();
 }
 
@@ -515,7 +518,9 @@ export async function precadastrarCliente(d = {}) {
     ...(d.midia_id ? { midia_id: String(d.midia_id) } : {}),
   };
 
+  console.log('[SGP] precadastro/F params:', JSON.stringify(params));
   const raw = await sgpPost('/api/precadastro/F', params);
+  console.log('[SGP] precadastro/F resposta:', JSON.stringify(raw));
 
   // Normalização de resposta — SGP costuma retornar { message, id } ou erros variados
   const ok = !raw?.error && !raw?.errors && (
