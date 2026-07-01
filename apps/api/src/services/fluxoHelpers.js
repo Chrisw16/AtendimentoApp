@@ -32,12 +32,13 @@ export function avaliarNps(notaRaw, escala) {
 }
 
 // ia_responde: o editor salva a instrução extra em cfg.instrucao (o motor lia cfg.prompt).
-// Compõe o system prompt na ordem: base + instrução específica + dados do cliente + regras de tool.
-export function montarSystemPrompt({ systemBase, instrucao, ctxCliente, regrasTools } = {}) {
+// Compõe o system prompt na ordem: base + instrução específica + dados do cliente + ficha + regras de tool.
+export function montarSystemPrompt({ systemBase, instrucao, ctxCliente, ficha, regrasTools } = {}) {
   return [
     systemBase || instrucao,
     instrucao && systemBase ? `\nInstrução específica: ${instrucao}` : '',
     ctxCliente ? `\n📋 Dados do cliente identificado:\n${ctxCliente}` : '',
+    ficha ? `\n${ficha}` : '',
     regrasTools || '',
   ].filter(Boolean).join('\n');
 }

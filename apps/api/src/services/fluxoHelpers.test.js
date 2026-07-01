@@ -144,3 +144,15 @@ test('montarFichaColetada lista escalares flat e ignora objetos/internos/vazios'
 test('montarFichaColetada devolve string vazia quando não há dados coletados', () => {
   assert.equal(montarFichaColetada({ cliente: {}, _ia_hist_n1: [] }), '');
 });
+
+// ── montarSystemPrompt: ficha ───────────────────────────────────
+test('montarSystemPrompt injeta o bloco da ficha quando fornecido', () => {
+  const s = montarSystemPrompt({ systemBase: 'Base', ficha: '## DADOS JÁ COLETADOS\ncidade: Natal' });
+  assert.match(s, /DADOS JÁ COLETADOS/);
+  assert.match(s, /cidade: Natal/);
+});
+
+test('montarSystemPrompt sem ficha não inclui o bloco de memória', () => {
+  const s = montarSystemPrompt({ systemBase: 'Base' });
+  assert.doesNotMatch(s, /DADOS JÁ COLETADOS/);
+});
