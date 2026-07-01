@@ -62,3 +62,21 @@ export function normalizarNomeCampo(nome) {
     .replace(/[^a-z0-9]+/g, '_')       // não-alfanumérico → _
     .replace(/^_+|_+$/g, '');          // apara _ das bordas
 }
+
+// ia_responde: monta o bloco de "memória" injetado no system prompt a cada turno.
+// Inclui só variáveis flat escalares (não-vazias) do contexto; ignora chaves internas
+// (_ia_hist_*, _ia_turnos_*) e valores não-escalares (cliente/boleto/planos são objetos).
+export function montarFichaColetada(contexto = {}) {
+  const linhas = Object.entries(contexto)
+    .filter(([k, v]) =>
+      !k.startsWith('_') &&
+      (typeof v === 'string' || typeof v === 'number') &&
+      String(v).trim() !== '')
+    .map(([k, v]) => `${k}: ${v}`);
+  if (!linhas.length) return '';
+  return [
+    '## DADOS JÁ COLETADOS (memória — NUNCA re-pergunte)',
+    ...linhas,
+    'Estes dados já foram coletados nesta conversa. NUNCA pergunte de novo por eles. Se faltar algum dado que não está na lista acima, pergunte e salve com a ferramenta salvar_dado.',
+  ].join('\n');
+}

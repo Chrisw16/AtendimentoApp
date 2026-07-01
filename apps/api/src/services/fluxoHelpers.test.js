@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, normalizarNomeCampo } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, normalizarNomeCampo, montarFichaColetada } from './fluxoHelpers.js';
 
 test('resolverTipoChamado mapeia tipo "tecnico" para 200 (Reparo)', () => {
   assert.equal(resolverTipoChamado({ tipo: 'tecnico' }), 200);
@@ -121,4 +121,26 @@ test('normalizarNomeCampo colapsa não-alfanuméricos e apara as bordas', () => 
 
 test('normalizarNomeCampo devolve string vazia para entrada vazia', () => {
   assert.equal(normalizarNomeCampo(''), '');
+});
+
+// ── montarFichaColetada ─────────────────────────────────────────
+test('montarFichaColetada lista escalares flat e ignora objetos/internos/vazios', () => {
+  const bloco = montarFichaColetada({
+    cidade: 'Natal',
+    plano: '450M',
+    cliente: { nome: 'Fulano' },   // objeto → ignora
+    _ia_turnos_n1: 3,              // interno → ignora
+    _ia_hist_n1: [],              // interno → ignora
+    obs: '',                      // vazio → ignora
+  });
+  assert.match(bloco, /cidade: Natal/);
+  assert.match(bloco, /plano: 450M/);
+  assert.match(bloco, /NUNCA/);
+  assert.doesNotMatch(bloco, /Fulano/);
+  assert.doesNotMatch(bloco, /_ia_turnos/);
+  assert.doesNotMatch(bloco, /obs:/);
+});
+
+test('montarFichaColetada devolve string vazia quando não há dados coletados', () => {
+  assert.equal(montarFichaColetada({ cliente: {}, _ia_hist_n1: [] }), '');
 });
