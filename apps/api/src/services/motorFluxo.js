@@ -18,7 +18,7 @@ import {
   evolutionEnviarCTA, evolutionEnviarImagem, evolutionEnviarAudio,
   evolutionEnviarArquivo,
 } from './integrations.js';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, montarFichaColetada, normalizarNomeCampo } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
 
 // Estado de execução em memória (por conversa_id)
 const estadosExecucao = new Map();
@@ -694,7 +694,7 @@ async function processarIAResponde(no, ctx) {
             const salvos = [];
             for (const [campo, valor] of Object.entries(dados)) {
               const chave = normalizarNomeCampo(campo);
-              if (!chave) continue;
+              if (!chave || CAMPOS_RESERVADOS.has(chave)) continue;
               ctx.estado.contexto[chave] = String(valor ?? '');
               salvos.push(`${chave}=${ctx.estado.contexto[chave]}`);
             }

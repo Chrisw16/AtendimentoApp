@@ -64,6 +64,11 @@ export function normalizarNomeCampo(nome) {
     .replace(/^_+|_+$/g, '');          // apara _ das bordas
 }
 
+// Chaves do contexto que são objetos aninhados com semântica própria
+// (interpolação {{cliente.nome}}, {{boleto.valor}}, ...). salvar_dado NUNCA
+// pode sobrescrevê-las com um escalar, e a ficha não deve listá-las.
+export const CAMPOS_RESERVADOS = new Set(['cliente', 'boleto', 'chamado', 'promessa', 'planos']);
+
 // ia_responde: monta o bloco de "memória" injetado no system prompt a cada turno.
 // Inclui só variáveis flat escalares (não-vazias) do contexto; ignora chaves internas
 // (_ia_hist_*, _ia_turnos_*) e valores não-escalares (cliente/boleto/planos são objetos).
@@ -71,6 +76,7 @@ export function montarFichaColetada(contexto = {}) {
   const linhas = Object.entries(contexto)
     .filter(([k, v]) =>
       !k.startsWith('_') &&
+      !CAMPOS_RESERVADOS.has(k) &&
       (typeof v === 'string' || typeof v === 'number') &&
       String(v).trim() !== '')
     .map(([k, v]) => `${k}: ${v}`);

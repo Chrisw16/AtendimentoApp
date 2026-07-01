@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, normalizarNomeCampo, montarFichaColetada } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, normalizarNomeCampo, montarFichaColetada, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
 
 test('resolverTipoChamado mapeia tipo "tecnico" para 200 (Reparo)', () => {
   assert.equal(resolverTipoChamado({ tipo: 'tecnico' }), 200);
@@ -155,4 +155,17 @@ test('montarSystemPrompt injeta o bloco da ficha quando fornecido', () => {
 test('montarSystemPrompt sem ficha não inclui o bloco de memória', () => {
   const s = montarSystemPrompt({ systemBase: 'Base' });
   assert.doesNotMatch(s, /DADOS JÁ COLETADOS/);
+});
+
+// ── CAMPOS_RESERVADOS ───────────────────────────────────────────
+test('CAMPOS_RESERVADOS contém os objetos aninhados do contexto', () => {
+  for (const k of ['cliente', 'boleto', 'chamado', 'promessa', 'planos']) {
+    assert.ok(CAMPOS_RESERVADOS.has(k), `esperava ${k} reservado`);
+  }
+});
+
+test('montarFichaColetada ignora chaves reservadas mesmo se escalares', () => {
+  const bloco = montarFichaColetada({ cliente: 'Fulano', cidade: 'Natal' });
+  assert.match(bloco, /cidade: Natal/);
+  assert.doesNotMatch(bloco, /cliente/);
 });
