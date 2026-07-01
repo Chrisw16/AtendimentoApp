@@ -505,7 +505,7 @@ export async function precadastrarCliente(d = {}) {
     senha: d.senha || '123456',
     pop_id: String(d.pop_id || popPadrao),
     portador_id: String(d.portador_id || portadorPadrao),
-    nas_id: String(d.nas_id || 2),
+    nas_id: String(d.nas_id || 53),   // 53 = RTR_BNG_NETGO_02 (NetGo). Acoplamento hardcoded — parametrizar p/ revenda.
     os_instalacao: d.os_instalacao === false ? 'False' : 'True',
     formacobranca_id: String(d.formacobranca_id || 1),
     precadastro_ativar: String(d.precadastro_ativar ?? 1),
