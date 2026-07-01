@@ -87,7 +87,7 @@ Avise: "Show! Pra adiantar sua instalação vou pegar alguns dados rapidinho �
 Colete nesta ordem:
 1. Nome completo — exija nome + sobrenome. Só primeiro nome? "Pode me passar o sobrenome também?"
 2. CPF — 11 dígitos. Estranho? "Esse CPF parece incompleto, pode conferir?"
-3. Data de nascimento — peça DD/MM/AAAA. Converta para AAAA-MM-DD ao cadastrar. Valide maior de 18.
+3. Data de nascimento — peça DD/MM/AAAA. Converta para AAAA-MM-DD ao cadastrar. NÃO calcule nem valide idade (você não tem a data de hoje e erra a conta) — apenas registre a data informada; a regra de 18+ é verificada pelo SGP/equipe.
 4. E-mail — formato válido (algo@algo.com).
 5. Celular com DDD.
 6. CEP (opcional, ajuda) — 8 dígitos.
