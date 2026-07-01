@@ -18,7 +18,7 @@ import {
   evolutionEnviarCTA, evolutionEnviarImagem, evolutionEnviarAudio,
   evolutionEnviarArquivo,
 } from './integrations.js';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, montarFichaColetada, normalizarNomeCampo } from './fluxoHelpers.js';
 
 // Estado de execução em memória (por conversa_id)
 const estadosExecucao = new Map();
@@ -613,12 +613,16 @@ async function processarIAResponde(no, ctx) {
     .map(([k, v]) => `cliente.${k}: ${v}`)
     .join('\n');
 
+  // Ficha de dados já coletados (reinjetada todo turno para a IA não re-perguntar).
+  const ficha = montarFichaColetada(ctx.estado.contexto);
+
   // O editor salva a instrução extra em cfg.instrucao; mantém cfg.prompt por compatibilidade.
   const instrucao = cfg.instrucao ?? cfg.prompt;
   const system = montarSystemPrompt({
     systemBase,
     instrucao,
     ctxCliente,
+    ficha,
     regrasTools: `## REGRAS CRÍTICAS DE FERRAMENTAS
 - Você tem acesso a ferramentas reais (tool_use). Use-as diretamente — NUNCA escreva o nome delas no texto.
 - ERRADO: "Deixa eu verificar... verificar_conexao"
@@ -649,7 +653,8 @@ async function processarIAResponde(no, ctx) {
     'promessa_pagamento', 'historico_ocorrencias',
     'transferir_para_humano', 'encerrar_atendimento',
   ];
-  const tools = IA_TOOLS.filter(t => toolsAtivas.includes(t.name));
+  // salvar_dado sempre disponível — memória não pode ser desligada por config de nó.
+  const tools = IA_TOOLS.filter(t => toolsAtivas.includes(t.name) || t.name === 'salvar_dado');
 
   try {
     const ai = await getAnthropicClient();
@@ -682,6 +687,24 @@ async function processarIAResponde(no, ctx) {
         const toolResults = [];
 
         for (const tu of toolUses) {
+          // salvar_dado é tratada aqui (não no executarTool) porque precisa mutar
+          // o estado do fluxo, que o executarTool(name,input,{cliente,conversa,sandbox}) não vê.
+          if (tu.name === 'salvar_dado') {
+            const dados = tu.input?.dados || {};
+            const salvos = [];
+            for (const [campo, valor] of Object.entries(dados)) {
+              const chave = normalizarNomeCampo(campo);
+              if (!chave) continue;
+              ctx.estado.contexto[chave] = String(valor ?? '');
+              salvos.push(`${chave}=${ctx.estado.contexto[chave]}`);
+            }
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: tu.id,
+              content: salvos.length ? `✓ Salvei: ${salvos.join(', ')}` : 'Nenhum dado para salvar.',
+            });
+            continue;
+          }
           console.log(`[IA] Executando tool: ${tu.name}`, tu.input);
           const result = await executarTool(tu.name, tu.input || {}, {
             cliente: ctx.estado.contexto.cliente || {},
