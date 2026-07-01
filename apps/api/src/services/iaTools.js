@@ -159,6 +159,21 @@ export const IA_TOOLS = [
     },
   },
   {
+    name: 'salvar_dado',
+    description: 'Salva dados que o cliente informou, como variáveis persistentes da conversa. Sempre que o cliente fornecer um dado (nome, cpf, data de nascimento, email, celular, logradouro, numero, bairro, cidade, cep, plano, vencimento, etc.), salve TODOS os dados novos desta mensagem numa ÚNICA chamada. NUNCA pergunte de novo um dado já salvo. Use nomes de campo curtos e sem acento (ex.: cidade, plano, data_nasc).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        dados: {
+          type: 'object',
+          description: 'Mapa campo→valor. Ex.: {"cidade":"Natal","plano":"450M","vencimento":"10"}',
+          additionalProperties: { type: 'string' },
+        },
+      },
+      required: ['dados'],
+    },
+  },
+  {
     name: 'transferir_para_humano',
     description: 'Transfere para atendente humano. Use APENAS quando o cliente pedir explicitamente.',
     input_schema: {
