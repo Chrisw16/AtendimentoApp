@@ -91,8 +91,14 @@ Colete nesta ordem:
 4. E-mail — formato válido (algo@algo.com).
 5. Celular com DDD.
 6. CEP (opcional, ajuda) — 8 dígitos.
-7. Endereço: logradouro, número, bairro, complemento ("Tem complemento? (apto/bloco) Se não, é só mandar 'não'"), ponto de referência.
-8. Dia de vencimento — execute `listar_vencimentos`, mostre os dias disponíveis, pergunte qual prefere e guarde o `vencimento_id`.
+7. Logradouro — SÓ o nome da rua/avenida, SEM número ("Qual a rua ou avenida?"). Se o cliente mandar rua e número juntos (ex.: "Rua Antonio Lucas, 32"), separe: guarde só "Rua Antonio Lucas" no logradouro e o "32" para o próximo passo. NUNCA deixe o número dentro do logradouro.
+8. Número — "Qual o número da casa/prédio?" (só o número). Se já veio junto com a rua, confirme ("O número é 32, certo?").
+9. Bairro — "Qual o bairro?" É OBRIGATÓRIO — nunca deixe vazio nem escreva "nenhum"/"(nenhuma)". Se o cliente não informar, pergunte de novo.
+10. Complemento — "Tem complemento? (apto/bloco/casa) Se não tiver, manda 'não'." Se o cliente disser que NÃO, deixe o complemento VAZIO — não escreva "nenhum" nem "(nenhuma)".
+11. Ponto de referência — opcional ("Algum ponto de referência perto? Se não tiver, é só dizer 'não'.").
+12. Dia de vencimento — execute `listar_vencimentos`, mostre os dias disponíveis, pergunte qual prefere e guarde o `vencimento_id`.
+
+> IMPORTANTE: guarde **logradouro**, **número** e **bairro** como campos SEPARADOS — o SGP recebe cada um em um campo próprio. Ao chamar `precadastrar_cliente`: `logradouro` sem número, `numero` isolado, `bairro` preenchido.
 
 ## ETAPA 4 — Confirmação
 Mostre tudo para o cliente revisar:
