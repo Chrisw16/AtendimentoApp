@@ -314,10 +314,11 @@ export async function historicoOcorrencias(contrato) {
 }
 
 // ── SGP: LISTAR PLANOS ────────────────────────────────────────────
-// POST /api/ura/planos/
+// POST /api/precadastro/plano/list — mesma família de /api/precadastro/vencimento/list.
+// (A rota antiga /api/ura/planos/ dá 404 na SGP da NetGo — mismatch de versão.)
 export async function listarPlanos(cidade) {
-  const raw = await sgpPost('/api/ura/planos/', cidade ? { cidade } : {});
-  const lista = Array.isArray(raw) ? raw : (raw?.planos || raw?.data || []);
+  const raw = await sgpPost('/api/precadastro/plano/list', cidade ? { cidade } : {});
+  const lista = Array.isArray(raw) ? raw : (raw?.planos || raw?.results || raw?.data || []);
   return lista.map(p => ({
     id:        p.id || p.plano_id,
     descricao: p.descricao || p.nome || p.plano,
