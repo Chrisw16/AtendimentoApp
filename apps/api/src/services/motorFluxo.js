@@ -659,6 +659,7 @@ async function processarIAResponde(no, ctx) {
   try {
     const ai = await getAnthropicClient();
     let texto = '';
+    let faladoNoTurno = '';   // tudo que a IA falou neste turno (p/ histórico coerente)
     let transferiu = false;
     let resolveu = false;
 
@@ -682,6 +683,15 @@ async function processarIAResponde(no, ctx) {
       }
 
       if (res.stop_reason === 'tool_use') {
+        // A IA pode mandar texto JUNTO de um tool_use (ex.: "confirmo seus dados,
+        // posso finalizar?" + salvar_dado). Sem empilhar aqui, essa fala se perde e a
+        // conversa trava esperando um "sim" que o cliente nunca viu (Respostas geradas: 0).
+        const textoJunto = res.content.find(b => b.type === 'text')?.text?.trim();
+        if (textoJunto) {
+          ctx.respostas.push({ tipo: 'texto', texto: textoJunto });
+          faladoNoTurno = faladoNoTurno ? `${faladoNoTurno}\n${textoJunto}` : textoJunto;
+        }
+
         // Processa todos os tool_use do bloco
         const toolUses = res.content.filter(b => b.type === 'tool_use');
         const toolResults = [];
@@ -751,7 +761,7 @@ async function processarIAResponde(no, ctx) {
     ctx.estado.contexto[histKey]   = [
       ...histSessao,
       { role: 'user',      content: ctx.mensagem.texto || '' },
-      { role: 'assistant', content: texto },
+      { role: 'assistant', content: [faladoNoTurno, texto].filter(Boolean).join('\n') },
     ].slice(-50);
 
     if (transferiu) {
