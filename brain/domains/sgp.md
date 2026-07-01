@@ -19,7 +19,9 @@ O **SGP (Sistema de Gestão de Provedores)** é o ERP/OSS usado por provedores d
 Autenticação por `app` + `token` (de [[Modelo de Dados|sistema_kv]]) em todo request, `x-www-form-urlencoded`. Duas famílias de endpoint:
 
 - **URA** (`/api/ura/*`) — autoatendimento: `consultacliente`, `fatura2via`, `liberacaopromessa`, `chamado`, `verificaacesso`, `ocorrencia/list`, `planos`, `manutencao/list`. Também RADIUS (`/ws/radius/radacct/list/all/`) para sessão PPPoE.
-- **Pré-cadastro** (`/api/precadastro/*`) — `F` (cadastro PF), `vencimento/list`.
+- **Pré-cadastro** (`/api/precadastro/*`) — `F` (cadastro PF, [[Pré-cadastro real|modo lead]]), `plano/list`, `vencimento/list`.
+
+A API do SGP tem **237 endpoints em 13 módulos**; o GoCHAT usa um subconjunto pequeno. Estudo completo (cada endpoint, campos e obrigatórios) em [[SGP API — Visão geral]].
 
 ## Vocabulário de domínio
 
@@ -29,7 +31,7 @@ Autenticação por `app` + `token` (de [[Modelo de Dados|sistema_kv]]) em todo r
 - **Promessa de pagamento** — liberação temporária (≈3 dias) de acesso suspenso por inadimplência.
 - **Vencimento** — dia de cobrança escolhido no cadastro (`vencimento_id`).
 - **RADIUS / PPPoE** — autenticação de sessão de banda; indica se o cliente está efetivamente conectado.
-- **ACS / TR-069 / ONU** — gestão remota do equipamento óptico do cliente. No Maxxi é **stub** (não integrado).
+- **ACS / TR-069 / ONU** — gestão remota do equipamento óptico do cliente. No Maxxi é **stub** (não integrado); a API real é o módulo **Gerenciador CPE** ([[SGP API — Visão geral]]).
 
 ## Contexto NetGo
 
@@ -37,4 +39,5 @@ A instância de referência é a **NetGo Internet** (fibra em Natal/RN e cidades
 
 ## See Also
 
+- [[SGP API — Visão geral]] — estudo completo dos 237 endpoints
 - [[Integração SGP]] · [[IA com Tool Calling]]

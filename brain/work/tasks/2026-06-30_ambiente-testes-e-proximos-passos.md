@@ -31,6 +31,8 @@ Migrations pendentes (rodam no próximo Redeploy): **008, 009, 010**.
 
 ## ▶ PAUTA DE AMANHÃ
 
+> **✅ Ambos concluídos em 2026-07-01.** (1) Memória/janela → [[Memória estruturada da IA]] (tool `salvar_dado` + ficha reinjetada; loop tool_use e `max_turns` corrigidos). (2) Pré-cadastro real → [[Pré-cadastro real]] (validado no Testar Tools contra o SGP de produção, modo lead). De quebra: estudo completo da API do SGP em [[SGP API — Visão geral]]. Falta só validar a memória na conversa com a IA ao vivo.
+
 ### 1. Memória/janela da IA (começar por aqui)
 **Problema:** o `ia_responde` guarda o histórico por nó num **sliding window** (`_ia_hist_<id>`, agora `.slice(-50)`). Os dados coletados vivem **só no histórico de chat**, não em estrutura. Cadastro longo → dados do começo (cidade/plano) saem da janela → a IA re-pergunta. O `-50` é paliativo. Christian sugeriu **"um cache para a IA"**.
 

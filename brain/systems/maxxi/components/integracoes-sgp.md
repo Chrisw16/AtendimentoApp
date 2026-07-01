@@ -36,19 +36,19 @@ Credenciais lidas de `sistema_kv` (`sgp_url`, `sgp_app`, `sgp_token`), cache 5 m
 | `criarChamado(contrato, tipo, conteudo)` | `chamado/` | `{protocolo, chamado_aberto, cliente}`; tipos 5/200/3/14/13/23/22 |
 | `verificarConexao(contrato)` | `verificaacesso/` | `{online, status_conexao, msg, …}` (`online = status===1`) |
 | `historicoOcorrencias(contrato)` | `ocorrencia/list/` | `[{numero, status, tipo, data_cadastro, conteudo…}]` |
-| `listarPlanos(cidade)` | `planos/` | `[{id, descricao, valor, velocidade}]` |
+| `listarPlanos(cidade)` | `precadastro/plano/list` | `[{id, descricao, valor, velocidade}]` (era `/api/ura/planos/`, dava 404) |
 | `consultarManutencao()` | `manutencao/list` | `{ativa, cidadesAfetadas, previsao…}` (fuso America/Fortaleza) |
 | `consultarRadius(cpf)` | `/ws/radius/radacct/list/all/` | `{sessao_ativa, ip, usuario, sessoes[]}` (PPPoE, máx 3) |
 | `listarVencimentos()` | `precadastro/vencimento/list` | `[{id, dia}]` |
-| `precadastrarCliente(d)` | `precadastro/F` | `{sucesso, mensagem, id, raw}` (cadastro PF) |
+| `precadastrarCliente(d)` | `precadastro/F` | `{sucesso, mensagem, id, raw}` — cadastro PF em [[Pré-cadastro real|modo lead]] (`precadastro_ativar=0`; só `nome`+`logradouro` obrigatórios) |
 
-`statusRede()` usa `consultarManutencao` como proxy (não tem endpoint próprio). `consultarOnuAcs`/`reiniciarOnuAcs` são **stubs** (TR-069/ACS não integrado — retornam orientação). Status numéricos do contrato: 1=ativo, 2=inativo, 3=cancelado, 4=suspenso, 5=inviabilidade, 6=novo, 7=ativo vel. reduzida.
+`statusRede()` usa `consultarManutencao` como proxy (não tem endpoint próprio). `consultarOnuAcs`/`reiniciarOnuAcs` são **stubs** (TR-069/ACS não integrado — retornam orientação); a API real p/ isso é o módulo **Gerenciador CPE** do SGP (ver [[SGP API — Visão geral]]). Status numéricos do contrato: 1=ativo, 2=inativo, 3=cancelado, 4=suspenso, 5=inviabilidade, 6=novo, 7=ativo vel. reduzida.
 
 > `listarPlanos` (SGP) **difere** da tool `listar_planos_ativos` da IA, que lê a tabela **local** `planos`. São fontes distintas de catálogo.
 
 ## Acoplamento NetGo (impacto na revenda)
 
-`precadastrarCliente` e a tool `precadastrar_cliente` têm **IDs hardcoded da NetGo**: planos (Natal/Macaíba/SGA: Essencial=12, Avançado=13, Premium=16; S.M.Gostoso: 30/29/28), POP (Natal/Macaíba=1, S.M.Gostoso=3, S.Gonçalo=4 — auto por cidade), portador (16/18), `uf=RN`, `senha=123456`, `nas_id=2`, `formacobranca_id=1`. É o maior ponto de acoplamento single-tenant fora dos prompts — parametrizar por instância antes de revender. Ver [[Adotar o Maxxi v2 como base]].
+`precadastrarCliente` e a tool `precadastrar_cliente` têm **IDs hardcoded da NetGo**: POP (Natal/Macaíba=1, S.M.Gostoso=3, S.Gonçalo=4 — auto por cidade), portador (16/18), `uf=RN`, `senha=123456`, `nas_id=53` (`RTR_BNG_NETGO_02`), `formacobranca_id=1`. É o maior ponto de acoplamento single-tenant fora dos prompts — parametrizar por instância antes de revender. **A própria API do SGP tem os `list` para de-hardcodar isso** (NAS `/api/ura/nas/list/`, POP `/api/ura/pops/`, portador `/api/ura/portador/`, plano `/api/precadastro/plano/list`) — ver [[SGP API — Visão geral]]. Ver também [[Adotar o Maxxi v2 como base]]. (Os `plano_id` reais vivem no SGP e na tabela local `planos`, não mais hardcoded no código.)
 
 ## Aliases para o motorFluxo
 
@@ -60,4 +60,5 @@ Exports que adaptam funções aos nós: `sgpBuscarCliente`→`consultarClientes`
 
 ## See Also
 
-- [[SGP]] · [[Catálogo de Nós]] · [[IA com Tool Calling]] · [[Motor de Fluxo]]
+- [[SGP API — Visão geral]] — estudo completo dos 237 endpoints da API do SGP
+- [[Pré-cadastro real]] · [[SGP]] · [[Catálogo de Nós]] · [[IA com Tool Calling]] · [[Motor de Fluxo]]
