@@ -10,6 +10,7 @@ import {
   precadastrarCliente, listarVencimentos,
 } from './integrations.js';
 import { getDb } from '../config/db.js';
+import { formatarBoletoIA } from './iaToolsHelpers.js';
 
 // ── DEFINIÇÃO DAS FERRAMENTAS ──────────────────────────────────────────────
 export const IA_TOOLS = [
@@ -238,14 +239,7 @@ export async function executarTool(name, input, ctx) {
 
     case 'segunda_via_boleto': {
       const r = await segundaViaBoleto(cpfcnpj, contrato).catch(e => ({ erro: e.message }));
-      if (r?.erro) return `Erro ao buscar boleto: ${r.erro}`;
-      if (!r?.link && !r?.pix) return 'Não encontrei boletos em aberto para este contrato.';
-      let msg = '📄 Segunda via encontrada:\n';
-      if (r.valor)     msg += `💰 Valor: R$ ${r.valor}\n`;
-      if (r.vencimento) msg += `📅 Vencimento: ${r.vencimento}\n`;
-      if (r.pix)       msg += `\n🔑 *PIX:*\n\`${r.pix}\`\n`;
-      if (r.link)      msg += `\n🔗 [Link do boleto](${r.link})`;
-      return msg;
+      return formatarBoletoIA(r);
     }
 
     case 'promessa_pagamento': {
