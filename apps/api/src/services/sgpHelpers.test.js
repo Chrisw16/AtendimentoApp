@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizarManutencoes, manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado, classificarSinal,
+  normalizarManutencoes, manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado, classificarSinal, formatarDiagnosticoOnu,
 } from './sgpHelpers.js';
 
 const AGORA = new Date(2026, 6, 2, 12, 0, 0); // 2026-07-02 12:00 (local)
@@ -136,4 +136,37 @@ test('classificarSinal: -28.5 é crítico', () => {
 test('classificarSinal: valor nulo/inválido é desconhecido', () => {
   assert.equal(classificarSinal(null).nivel, 'desconhecido');
   assert.equal(classificarSinal('x').nivel, 'desconhecido');
+});
+
+// ── formatarDiagnosticoOnu ─────────────────────────────────────────
+const AGORA_ONU = new Date(2026, 6, 2, 12, 0, 0); // 2026-07-02 12:00
+
+test('formatarDiagnosticoOnu: row nulo → fail-safe, sem "Rx"', () => {
+  const msg = formatarDiagnosticoOnu(null, AGORA_ONU);
+  assert.match(msg, /não consegui ler/i);
+  assert.doesNotMatch(msg, /Rx/);
+});
+test('formatarDiagnosticoOnu: leitura fresca + online mostra rx, "bom", ONLINE e uptime', () => {
+  const row = { rx_dbm: -20.97, tx_dbm: 2.06, sinal_lido_em: '2026-07-02 07:25:37',
+    online: true, uptime_segundos: 10800, ultima_queda_motivo: null };
+  const msg = formatarDiagnosticoOnu(row, AGORA_ONU);
+  assert.match(msg, /-20\.97/);
+  assert.match(msg, /bom/);
+  assert.match(msg, /ONLINE/);
+  assert.match(msg, /3h/);
+  assert.match(msg, /hoje/);
+});
+test('formatarDiagnosticoOnu: leitura antiga (>7 dias) avisa desatualizada', () => {
+  const row = { rx_dbm: -21, tx_dbm: 2, sinal_lido_em: '2026-06-01 10:00:00', online: true, uptime_segundos: 600 };
+  const msg = formatarDiagnosticoOnu(row, AGORA_ONU);
+  assert.match(msg, /dias/);
+  assert.match(msg, /desatualizad/i);
+});
+test('formatarDiagnosticoOnu: offline mostra OFFLINE e o motivo da queda', () => {
+  const row = { rx_dbm: -35, tx_dbm: 2, sinal_lido_em: '2026-07-02 07:00:00',
+    online: false, uptime_segundos: null, ultima_queda_motivo: 'Lost-Carrier' };
+  const msg = formatarDiagnosticoOnu(row, AGORA_ONU);
+  assert.match(msg, /OFFLINE/);
+  assert.match(msg, /Lost-Carrier/);
+  assert.match(msg, /crítico/);
 });

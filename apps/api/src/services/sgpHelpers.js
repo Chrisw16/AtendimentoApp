@@ -89,3 +89,41 @@ export function classificarSinal(rx) {
   if (v >= -28) return { nivel: 'ruim',    emoji: '🔴', label: 'ruim' };
   return          { nivel: 'critico', emoji: '🔴', label: 'crítico' };
 }
+
+function formatarUptimeOnu(seg) {
+  const s = Number(seg);
+  if (!Number.isFinite(s) || s <= 0) return '';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h >= 24) return `${Math.floor(h / 24)}d${h % 24}h`;
+  if (h >= 1)  return `${h}h${m > 0 ? m + 'min' : ''}`;
+  return `${m}min`;
+}
+
+// Monta o texto INTERNO (técnico + veredito) que a IA lê. O prompt traduz p/ leigo.
+export function formatarDiagnosticoOnu(row, now = new Date()) {
+  if (!row || row.rx_dbm == null) {
+    return 'Não consegui ler o sinal do equipamento agora. Siga o diagnóstico normal (reinício → chamado).';
+  }
+  const s = classificarSinal(row.rx_dbm);
+  let msg = `📡 Sinal da ONU: Rx ${row.rx_dbm} dBm ${s.emoji} (${s.label})`;
+  if (row.tx_dbm != null) msg += ` · Tx ${row.tx_dbm}`;
+
+  const lido = parseDataSgp(row.sinal_lido_em);
+  if (lido) {
+    const dias = Math.floor((now - lido) / 86400000);
+    if (dias <= 0)       msg += ` · medido hoje`;
+    else if (dias === 1) msg += ` · medido ontem`;
+    else                 msg += ` · medido há ${dias} dias`;
+    if (dias > 7) msg += ` ⚠️ (leitura antiga, pode estar desatualizada)`;
+  }
+
+  if (row.online) {
+    const up = formatarUptimeOnu(row.uptime_segundos);
+    msg += ` · Equipamento ONLINE${up ? ` há ${up}` : ''}`;
+  } else {
+    msg += ` · Equipamento OFFLINE`;
+    if (row.ultima_queda_motivo) msg += ` (última queda: ${row.ultima_queda_motivo})`;
+  }
+  return msg;
+}
