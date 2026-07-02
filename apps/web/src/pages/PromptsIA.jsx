@@ -216,6 +216,12 @@ const TEST_TOOLS = [
     fields: [{ key: 'contrato', label: 'ID do Contrato', placeholder: '30951', required: true }],
   },
   {
+    id: 'consultar_onu_acs', label: 'Sinal da ONU', icon: '📶', category: 'SGP — Diagnóstico',
+    endpoint: 'Banco SGP (netcore_onu + radacct)',
+    desc: 'Lê o sinal óptico (Rx/Tx em dBm), status (online/uptime) e última queda direto do banco do SGP. Retorna o dado cru + a mensagem que a IA recebe.',
+    fields: [{ key: 'contrato', label: 'ID do Contrato', placeholder: '30951', required: true }],
+  },
+  {
     id: 'consultar_radius', label: 'Consultar Radius', icon: '🔌', category: 'SGP — Diagnóstico',
     endpoint: 'POST /ws/radius/radacct/list/all/',
     desc: 'Consulta sessão PPPoE ativa. Retorna IP, usuário e início da sessão.',

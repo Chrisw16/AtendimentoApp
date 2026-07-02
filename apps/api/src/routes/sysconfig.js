@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { invalidateConfigCache } from '../services/integrations.js';
-import { invalidateSgpDbPool } from '../services/sgpDb.js';
+import { invalidateSgpDbPool, diagnosticoOnu } from '../services/sgpDb.js';
+import { formatarDiagnosticoOnu } from '../services/sgpHelpers.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler } from '../middlewares/errorHandler.js';
 import { getDb } from '../config/db.js';
@@ -96,6 +97,12 @@ sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandle
       case 'listar_planos_sgp':
         // Lê direto do SGP (/api/ura/planos/) — traz os IDs REAIS p/ mapear em Configurações → Planos
         result = await listarPlanos(params.cidade || ''); break;
+      case 'consultar_onu_acs': {
+        // Lê sinal óptico + status direto do banco read-only do SGP (sgpDb.js).
+        const row = await diagnosticoOnu(params.contrato);
+        result = { row, mensagem_ia: formatarDiagnosticoOnu(row, new Date()) };
+        break;
+      }
       default:
         return res.status(400).json({ error: `Tool desconhecida: ${tool}` });
     }
