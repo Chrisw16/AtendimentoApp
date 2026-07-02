@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizarManutencoes, manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado,
+  normalizarManutencoes, manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado, classificarSinal,
 } from './sgpHelpers.js';
 
 const AGORA = new Date(2026, 6, 2, 12, 0, 0); // 2026-07-02 12:00 (local)
@@ -115,4 +115,25 @@ test('montarBodyChamado omite extras vazios e aplica defaults (tipo 5, conteúdo
   assert.ok(body.conteudo.length > 0);
   assert.ok(!('contato_nome' in body));
   assert.ok(!('usuario' in body));
+});
+
+// ── classificarSinal ───────────────────────────────────────────────
+test('classificarSinal: -20 e -25 (fronteira) são bom', () => {
+  assert.equal(classificarSinal(-20).nivel, 'bom');
+  assert.equal(classificarSinal(-25).nivel, 'bom');
+});
+test('classificarSinal: -26 e -27 (fronteira) são atenção', () => {
+  assert.equal(classificarSinal(-26).nivel, 'atencao');
+  assert.equal(classificarSinal(-27).nivel, 'atencao');
+});
+test('classificarSinal: -27.5 e -28 (fronteira) são ruim', () => {
+  assert.equal(classificarSinal(-27.5).nivel, 'ruim');
+  assert.equal(classificarSinal(-28).nivel, 'ruim');
+});
+test('classificarSinal: -28.5 é crítico', () => {
+  assert.equal(classificarSinal(-28.5).nivel, 'critico');
+});
+test('classificarSinal: valor nulo/inválido é desconhecido', () => {
+  assert.equal(classificarSinal(null).nivel, 'desconhecido');
+  assert.equal(classificarSinal('x').nivel, 'desconhecido');
 });

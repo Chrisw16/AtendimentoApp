@@ -78,3 +78,14 @@ export function montarBodyChamado(contrato, ocorrenciatipo, conteudo, extras = {
   if (extras.usuario)          body.usuario          = extras.usuario;
   return body;
 }
+
+// Classifica o Rx do cliente (dBm) conforme a régua da NetGo.
+export function classificarSinal(rx) {
+  if (rx == null) return { nivel: 'desconhecido', emoji: '⚪', label: 'sinal indisponível' };
+  const v = Number(rx);
+  if (!Number.isFinite(v)) return { nivel: 'desconhecido', emoji: '⚪', label: 'sinal indisponível' };
+  if (v >= -25) return { nivel: 'bom',     emoji: '🟢', label: 'bom' };
+  if (v >= -27) return { nivel: 'atencao', emoji: '🟡', label: 'atenção' };
+  if (v >= -28) return { nivel: 'ruim',    emoji: '🔴', label: 'ruim' };
+  return          { nivel: 'critico', emoji: '🔴', label: 'crítico' };
+}
