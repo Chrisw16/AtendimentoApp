@@ -32,7 +32,7 @@
 
 ```js
 // ── classificarSinal ───────────────────────────────────────────────
-import { classificarSinal, formatarDiagnosticoOnu } from './sgpHelpers.js';
+import { classificarSinal } from './sgpHelpers.js';
 
 test('classificarSinal: -20 e -25 (fronteira) são bom', () => {
   assert.equal(classificarSinal(-20).nivel, 'bom');
@@ -54,8 +54,6 @@ test('classificarSinal: valor nulo/inválido é desconhecido', () => {
   assert.equal(classificarSinal('x').nivel, 'desconhecido');
 });
 ```
-
-> Nota: o `import` de `formatarDiagnosticoOnu` já entra aqui porque a Task 2 usa o mesmo arquivo de teste. Ele fica não-usado até a Task 2 — tudo bem.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -100,7 +98,12 @@ git commit -m "feat(sgp): classificarSinal (régua Rx da ONU)"
 - Consumes: `classificarSinal` (Task 1), `parseDataSgp` (já existe em `sgpHelpers.js`).
 - Produces: `formatarDiagnosticoOnu(row: object|null, now?: Date) → string` — texto INTERNO (técnico + veredito) que a IA lê. Espera o row da query da Task 3: `{ modelo, serial, rx_dbm, tx_dbm, olt_rx_dbm, sinal_lido_em, online, uptime_segundos, ultima_queda_motivo }`.
 
-- [ ] **Step 1: Write the failing tests** — anexe ao fim de `apps/api/src/services/sgpHelpers.test.js`:
+- [ ] **Step 1: Write the failing tests.** Primeiro, atualize o import de `classificarSinal` (adicionado na Task 1) para incluir a nova função:
+
+De: `import { classificarSinal } from './sgpHelpers.js';`
+Para: `import { classificarSinal, formatarDiagnosticoOnu } from './sgpHelpers.js';`
+
+Depois anexe ao fim de `apps/api/src/services/sgpHelpers.test.js`:
 
 ```js
 // ── formatarDiagnosticoOnu ─────────────────────────────────────────
