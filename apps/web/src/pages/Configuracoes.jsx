@@ -114,6 +114,11 @@ export default function Configuracoes() {
   const [sgpUrl,       setSgpUrl]       = useState('');
   const [sgpApp,       setSgpApp]       = useState('');
   const [sgpToken,     setSgpToken]     = useState('');
+  const [sgpdbHost,    setSgpdbHost]    = useState('');
+  const [sgpdbPort,    setSgpdbPort]    = useState('5432');
+  const [sgpdbName,    setSgpdbName]    = useState('dbconect');
+  const [sgpdbUser,    setSgpdbUser]    = useState('');
+  const [sgpdbPass,    setSgpdbPass]    = useState('');
   const [evoUrl,       setEvoUrl]       = useState('');
   const [tgToken,      setTgToken]      = useState('');
   const [evoKey,       setEvoKey]       = useState('');
@@ -137,6 +142,11 @@ export default function Configuracoes() {
     setSgpUrl(      kv.sgp_url            || '');
     setSgpApp(      kv.sgp_app            || '');
     setSgpToken(    kv.sgp_token          || '');
+    setSgpdbHost(kv.sgpdb_host || '');
+    setSgpdbPort(kv.sgpdb_port || '5432');
+    setSgpdbName(kv.sgpdb_name || 'dbconect');
+    setSgpdbUser(kv.sgpdb_user || '');
+    setSgpdbPass(kv.sgpdb_password || '');
     setEvoUrl(      kv.evolution_url      || '');
     setTgToken(     kv.telegram_bot_token  || '');
     setEvoKey(      kv.evolution_key      || '');
@@ -157,6 +167,8 @@ export default function Configuracoes() {
     horario, mensagem_fora_hora: msgFora, notificacoes: notifs,
     anthropic_api_key: anthropicKey, openai_api_key: openaiKey,
     sgp_url: sgpUrl, sgp_app: sgpApp, sgp_token: sgpToken,
+    sgpdb_host: sgpdbHost, sgpdb_port: sgpdbPort, sgpdb_name: sgpdbName,
+    sgpdb_user: sgpdbUser, sgpdb_password: sgpdbPass,
     evolution_url: evoUrl, evolution_key: evoKey,
     telegram_bot_token: tgToken,
   });
@@ -398,6 +410,11 @@ export default function Configuracoes() {
                     hint="Token de autenticação gerado no SGP"/>
                 </div>
               </div>
+              <ApiKeyField label="Banco SGP — Host" value={sgpdbHost} onChange={setSgpdbHost} placeholder="177.52.36.89" mono />
+              <ApiKeyField label="Banco SGP — Porta" value={sgpdbPort} onChange={setSgpdbPort} placeholder="5432" mono />
+              <ApiKeyField label="Banco SGP — Database" value={sgpdbName} onChange={setSgpdbName} placeholder="dbconect" mono />
+              <ApiKeyField label="Banco SGP — Usuário (read-only)" value={sgpdbUser} onChange={setSgpdbUser} placeholder="consulta_conect" mono />
+              <ApiKeyField label="Banco SGP — Senha" value={sgpdbPass} onChange={setSgpdbPass} placeholder="senha read-only" />
               <div className={styles.infoBox}>
                 <p style={{ fontSize: 12, color: 'var(--brand-blue)', margin: 0, lineHeight: 1.5 }}>
                   💡 As credenciais são enviadas como headers <code>app</code> e <code>token</code> em cada requisição ao SGP.

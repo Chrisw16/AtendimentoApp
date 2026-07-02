@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { invalidateConfigCache } from '../services/integrations.js';
+import { invalidateSgpDbPool } from '../services/sgpDb.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler } from '../middlewares/errorHandler.js';
 import { getDb } from '../config/db.js';
@@ -12,6 +13,7 @@ const CHAVES_PUBLICAS = [
   'modo', 'horario_ativo', 'notificacoes',
   'anthropic_api_key', 'openai_api_key', 'sgp_url', 'sgp_token', 'sgp_app',
   'evolution_url', 'evolution_key', 'telegram_bot_token', 'nome_empresa',
+  'sgpdb_host', 'sgpdb_port', 'sgpdb_name', 'sgpdb_user', 'sgpdb_password',
 ];
 
 sysconfigRouter.get('/', asyncHandler(async (req, res) => {
@@ -34,6 +36,7 @@ sysconfigRouter.put('/', asyncHandler(async (req, res) => {
       .onConflict('chave').merge(['valor', 'atualizado']);
   }
   invalidateConfigCache();
+  invalidateSgpDbPool();
   res.json({ ok: true });
 }));
 
