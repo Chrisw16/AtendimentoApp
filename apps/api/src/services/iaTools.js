@@ -27,7 +27,7 @@ export const IA_TOOLS = [
   },
   {
     name: 'consultar_manutencao',
-    description: 'Verifica se há manutenção ativa na área do cliente. Use quando cliente estiver offline.',
+    description: 'Verifica se há manutenção ativa que AFETE a região (POP) do cliente. Use quando o cliente estiver offline. Só retorna manutenção que realmente afeta este cliente; se não houver, siga o diagnóstico normal (não invente manutenção).',
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -81,7 +81,7 @@ export const IA_TOOLS = [
   },
   {
     name: 'status_rede',
-    description: 'Verifica o status geral da rede CITmax. Use para checar se há problemas generalizados antes de diagnosticar o cliente.',
+    description: 'Verifica o status geral da rede NetGo. Use para checar se há problemas generalizados antes de diagnosticar o cliente.',
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -220,9 +220,13 @@ export async function executarTool(name, input, ctx) {
     }
 
     case 'consultar_manutencao': {
-      const r = await consultarManutencao().catch(() => null);
-      if (!r?.ativa) return 'Não há manutenção ativa na sua área no momento.';
-      return `⚠️ Há manutenção ativa na sua área. Previsão de normalização: ${r.previsao || 'em breve'}. Protocolo: ${r.protocolo || 'N/A'}.`;
+      // Escopo por POP/cidade do cliente (fail-safe em consultarManutencao/sgpHelpers).
+      const scope = { popId: ctx?.cliente?.popId, cidade: ctx?.cliente?.cidade };
+      const r = await consultarManutencao(scope).catch(() => null);
+      if (!r?.ativa) return 'Não há manutenção ativa na região do cliente no momento. Siga o diagnóstico normal.';
+      const previsao = r.previsao ? ` Previsão de normalização: ${r.previsao}.` : '';
+      const central  = r.mensagemCentral ? ` (${r.mensagemCentral})` : '';
+      return `⚠️ Há manutenção ativa na região do cliente.${previsao}${central}`;
     }
 
     case 'criar_chamado': {
@@ -230,7 +234,7 @@ export async function executarTool(name, input, ctx) {
         contrato,
         input.ocorrenciatipo || 200,
         input.conteudo || 'Suporte técnico solicitado via chat',
-        { contato_nome: input.contato_nome || ctx?.cliente?.nome, contato_telefone: input.contato_telefone, usuario: 'ia_maxxi' }
+        { contato_nome: input.contato_nome || ctx?.cliente?.nome, contato_telefone: input.contato_telefone, usuario: 'ia_natalia' }
       ).catch(e => ({ erro: e.message }));
       if (r?.erro) return `Erro ao abrir chamado: ${r.erro}`;
       const protocolo = r?.protocolo || r?.id || r?.ocorrencia_id || JSON.stringify(r);

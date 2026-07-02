@@ -280,6 +280,7 @@ async function processarNo(no, ctx) {
             status:   ct.status,
             cidade:   ct.cidade || '',
             email:    data.email || '',
+            fone:     data.fone || '',
             popId:    ct.popId,
             titulos_abertos: ct.titulos_abertos,
             valor_aberto:    ct.valor_aberto,

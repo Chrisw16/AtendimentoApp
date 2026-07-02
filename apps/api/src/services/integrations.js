@@ -4,6 +4,7 @@
  */
 import { getDb } from '../config/db.js';
 import { normalizarData } from './fluxoHelpers.js';
+import { manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado } from './sgpHelpers.js';
 
 // ── CACHE DE CONFIG (5 min) ───────────────────────────────────────
 const cache = new Map();
@@ -254,12 +255,9 @@ export async function promessaPagamento(contrato, extras = {}) {
 // POST /api/ura/chamado/ — body JSON
 // Tipos: 5=Outros, 200=Reparo, 13=MudEndereco, 23=MudPlano, 22=ProbFatura
 export async function criarChamado(contrato, ocorrenciatipo, conteudo, extras = {}) {
-  console.log(`[SGP] criarChamado: contrato=${contrato} tipo=${ocorrenciatipo}`);
-  const raw = await sgpPostJSON('/api/ura/chamado/', {
-    contrato:       Number(contrato),
-    ocorrenciatipo: Number(ocorrenciatipo) || 5,
-    conteudo:       conteudo || 'Chamado aberto via GoCHAT',
-  });
+  const body = montarBodyChamado(contrato, ocorrenciatipo, conteudo, extras);
+  console.log(`[SGP] criarChamado: contrato=${contrato} tipo=${body.ocorrenciatipo}`);
+  const raw = await sgpPostJSON('/api/ura/chamado/', body);
   console.log(`[SGP] criarChamado resposta:`, JSON.stringify(raw));
 
   // SGP retorna diferentes formatos dependendo da versão
@@ -329,25 +327,25 @@ export async function listarPlanos(cidade) {
 }
 
 // ── SGP: VERIFICAR MANUTENÇÃO ─────────────────────────────────────
-// GET /api/ura/manutencao/list
-export async function consultarManutencao() {
+// GET /api/ura/manutencao/list/ (endpoint é rede-inteira, sem filtro de cliente).
+// scope = { popId, cidade } → só manutenção que AFETA o cliente (escopo por POP,
+//   fail-safe: na dúvida NÃO afirma manutenção). Usado pela tool consultar_manutencao.
+// scope null → todas as manutenções ativas da rede (usado por status_rede).
+// A filtragem/escopo vive em sgpHelpers.js (pura, testada).
+export async function consultarManutencao(scope = null) {
   try {
-    const raw = await sgpGet('/api/ura/manutencao/list');
-    let itens = [];
-    if (Array.isArray(raw))                    itens = raw;
-    else if (Array.isArray(raw?.manutencoes))  itens = raw.manutencoes;
-    else if (Array.isArray(raw?.data))         itens = raw.data;
-    else if (raw?.em_manutencao || raw?.manutencao) itens = [{ descricao: 'Manutenção ativa', ativa: true }];
-
-    const ativas = itens.filter(m => m.ativa === true || m.status === 'ativo' || m.ativo === true);
-    const cidadesAfetadas = [...new Set(ativas.flatMap(m => (m.pops || []).map(p => p.cidade).filter(Boolean)))];
-    const mensagemCentral = ativas[0]?.mensagem_central || ativas[0]?.mensagem_ura || null;
-    const previsao = ativas[0]?.data_final
-      ? new Date(ativas[0].data_final).toLocaleTimeString('pt-BR', { timeZone: 'America/Fortaleza', hour:'2-digit', minute:'2-digit' })
+    const raw = await sgpGet('/api/ura/manutencao/list/');
+    console.log('[SGP] manutencao/list raw:', JSON.stringify(raw)?.slice(0, 600));
+    const itens = scope ? manutencaoParaCliente(raw, scope).itens : manutencoesAtivas(raw);
+    const cidadesAfetadas = [...new Set(itens.flatMap(m => (m.pops || []).map(p => p.cidade).filter(Boolean)))];
+    const mensagemCentral = itens[0]?.mensagem_central || itens[0]?.mensagem_ura || null;
+    const fim = parseDataSgp(itens[0]?.data_final);
+    const previsao = fim
+      ? fim.toLocaleTimeString('pt-BR', { timeZone: 'America/Fortaleza', hour:'2-digit', minute:'2-digit' })
       : null;
-
-    return { ativa: ativas.length > 0, total: ativas.length, itens: ativas, cidadesAfetadas, mensagemCentral, previsao };
-  } catch {
+    return { ativa: itens.length > 0, total: itens.length, itens, cidadesAfetadas, mensagemCentral, previsao };
+  } catch (e) {
+    console.error('[SGP] consultarManutencao:', e.message);
     return { ativa: false, total: 0, itens: [], cidadesAfetadas: [], mensagemCentral: null, previsao: null };
   }
 }
