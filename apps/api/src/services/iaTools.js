@@ -6,7 +6,7 @@ import {
   consultarClientes, segundaViaBoleto, promessaPagamento,
   criarChamado, verificarConexao, consultarManutencao,
   historicoOcorrencias,
-  statusRede, consultarOnuAcs, reiniciarOnuAcs, consultarRadius,
+  statusRede, reiniciarOnuAcs, consultarRadius,
   precadastrarCliente, listarVencimentos,
 } from './integrations.js';
 import { getDb } from '../config/db.js';
@@ -271,7 +271,6 @@ export async function executarTool(name, input, ctx) {
 
     case 'consultar_onu_acs': {
       // Lê sinal óptico + status direto do banco read-only do SGP (sgpDb.js).
-      const contrato = input.contrato || ctx?.cliente?.contrato;
       const row = await diagnosticoOnu(contrato);
       return formatarDiagnosticoOnu(row, new Date());
     }

@@ -7,6 +7,7 @@ import pg from 'pg';
 import { getDb } from '../config/db.js';
 
 let pool = null;
+let poolPromise = null;
 
 async function getCreds() {
   const db = getDb();
@@ -19,38 +20,42 @@ async function getCreds() {
 
 async function getPool() {
   if (pool) return pool;
-  const kv = await getCreds();
-  if (!kv.sgpdb_host || !kv.sgpdb_user) {
-    throw new Error('Banco do SGP não configurado (Configurações → SGP/Banco).');
+  if (poolPromise) return poolPromise;
+  poolPromise = (async () => {
+    const kv = await getCreds();
+    if (!kv.sgpdb_host || !kv.sgpdb_user) {
+      throw new Error('Banco do SGP não configurado (Configurações → SGP/Banco).');
+    }
+    const p = new pg.Pool({
+      host: kv.sgpdb_host,
+      port: Number(kv.sgpdb_port) || 5432,
+      database: kv.sgpdb_name || 'dbconect',
+      user: kv.sgpdb_user,
+      password: kv.sgpdb_password || '',
+      ssl: false,
+      max: 8,
+      options: '-c timezone=America/Sao_Paulo',
+      statement_timeout: 5000,
+      connectionTimeoutMillis: 5000,
+    });
+    p.on('error', (e) => console.error('[SGP-DB] pool error:', e.message));
+    pool = p;
+    return pool;
+  })();
+  try {
+    return await poolPromise;
+  } finally {
+    poolPromise = null;
   }
-  pool = new pg.Pool({
-    host: kv.sgpdb_host,
-    port: Number(kv.sgpdb_port) || 5432,
-    database: kv.sgpdb_name || 'dbconect',
-    user: kv.sgpdb_user,
-    password: kv.sgpdb_password || '',
-    ssl: false,
-    max: 8,
-    options: '-c timezone=America/Sao_Paulo',
-    statement_timeout: 5000,
-    connectionTimeoutMillis: 5000,
-  });
-  pool.on('error', (e) => console.error('[SGP-DB] pool error:', e.message));
-  return pool;
 }
 
 export function invalidateSgpDbPool() {
   if (pool) { pool.end().catch(() => {}); pool = null; }
+  poolPromise = null;
 }
 
 // contrato → sinal óptico (netcore_onu.info->optical) + status (radacct).
 const QUERY_DIAG_ONU = `
-WITH svc AS (
-  SELECT si.id, si.login
-  FROM admcore_servicointernet si
-  WHERE si.clientecontrato_id = $1
-  LIMIT 1
-)
 SELECT
   o.onutype AS modelo,
   o.phy_addr AS serial,
@@ -59,15 +64,16 @@ SELECT
   (o.info->'optical'->>'olt_rx')::float8 AS olt_rx_dbm,
   (o.info->'optical'->>'date') AS sinal_lido_em,
   EXISTS(SELECT 1 FROM radacct ra
-         WHERE lower(trim(ra.username))=lower(trim(svc.login)) AND ra.acctstoptime IS NULL) AS online,
+         WHERE lower(trim(ra.username))=lower(trim(si.login)) AND ra.acctstoptime IS NULL) AS online,
   (SELECT EXTRACT(EPOCH FROM (now()-ra.acctstarttime))::int FROM radacct ra
-     WHERE lower(trim(ra.username))=lower(trim(svc.login)) AND ra.acctstoptime IS NULL
+     WHERE lower(trim(ra.username))=lower(trim(si.login)) AND ra.acctstoptime IS NULL
      ORDER BY ra.acctstarttime DESC LIMIT 1) AS uptime_segundos,
   (SELECT ra.acctterminatecause FROM radacct ra
-     WHERE lower(trim(ra.username))=lower(trim(svc.login)) AND ra.acctstoptime IS NOT NULL
+     WHERE lower(trim(ra.username))=lower(trim(si.login)) AND ra.acctstoptime IS NOT NULL
      ORDER BY ra.acctstoptime DESC LIMIT 1) AS ultima_queda_motivo
-FROM svc
-JOIN netcore_onu o ON o.service_id = svc.id AND o.date_removed_from_olt IS NULL AND o.info ? 'optical'
+FROM admcore_servicointernet si
+JOIN netcore_onu o ON o.service_id = si.id AND o.date_removed_from_olt IS NULL AND o.info ? 'optical'
+WHERE si.clientecontrato_id = $1
 ORDER BY o.id DESC
 LIMIT 1;`;
 
