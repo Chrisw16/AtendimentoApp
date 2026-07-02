@@ -2,9 +2,9 @@
 title: IA com Tool Calling
 type: component
 created: 2026-06-30
-last_updated: 2026-06-30
+last_updated: 2026-07-02
 status: active
-related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Motor de Fluxo]]", "[[Integração SGP]]", "[[Modelo de Dados]]", "[[SGP]]"]
+related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Motor de Fluxo]]", "[[Integração SGP]]", "[[Modelo de Dados]]", "[[SGP]]", "[[Auditoria SGP ↔ tools da IA (2026-07-02)]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
 aliases: ["IA com Tool Calling", "IA", "Claude", "tool calling", "iaTools", "promptService", "ia_responde", "ia_roteador", "prompts"]
 tags: [backend, ia, anthropic, tools]
@@ -52,6 +52,8 @@ São três campos com papéis distintos (fonte de confusão comum):
 ## `iaTools.js` — 15 ferramentas
 
 Definições no formato Anthropic (`input_schema`) e o executor `executarTool(name, input, ctx)`. As tools: `verificar_conexao`, `consultar_manutencao`, `criar_chamado`, `segunda_via_boleto`, `promessa_pagamento`, `historico_ocorrencias`, `status_rede`, `consultar_onu_acs` (stub ACS), `reiniciar_onu_acs` (stub ACS), `consultar_radius`, `listar_planos_ativos` (lê a tabela `planos`; **cidade vazia no cadastro = vale para todas as cidades** + multi-cidade por vírgula; cita **promoção** `valor_promocional`/`promo_meses` — "R$ X nos primeiros N meses, depois R$ Y" — e **benefícios** `beneficios` — "inclui: Globoplay, …"), `listar_vencimentos`, `precadastrar_cliente`, `transferir_para_humano`, `encerrar_atendimento`. `executarTool` prioriza `input.contrato` e cai para `ctx.cliente.contrato`. Todas formatam um texto amigável de retorno para a IA. Implementação SGP em [[Integração SGP]].
+
+> ⚠️ **Armadilha integração ↔ tool (mesma classe do editor↔motor):** o texto de retorno de cada tool tem de ler os **campos reais** que a função de `integrations.js` devolve — as tools foram escritas depois dos nós e algumas divergiram. Caso corrigido: `segunda_via_boleto` lia `r.link`/`r.pix`/`r.valor` (o retorno traz `link_cobranca`/`pix_copia_cola`/`valor_cobrado`) e **sempre** dizia "não encontrei boleto"; fix extraiu `formatarBoletoIA` para **`iaToolsHelpers.js`** (módulo puro testável, mesma ideia do `fluxoHelpers`, porque `iaTools.js` puxa knex e não roda em teste). Ainda abertos nesse eixo (`historico_ocorrencias`, `criar_chamado` extras, nó `promessa_pagamento`): ver [[Auditoria SGP ↔ tools da IA (2026-07-02)]].
 
 ## `promptService.js` — composição de prompts
 

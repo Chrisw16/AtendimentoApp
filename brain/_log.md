@@ -112,3 +112,11 @@ Christian seguiu testando e pedindo melhorias; fim do dia.
 ## [2026-07-01 18:00] INGEST | Estudo da API do SGP (237 endpoints) + memória/pré-cadastro
 
 Fonte `sgp-api-postman` (coleção Postman oficial) absorvida. Criadas: [[SGP API — Visão geral]] + 13 páginas de módulo em `brain/domains/sgp-api/` (URA 69, Central Assinante 33, Estoque 32, FTTH 29, Ordem de Serviço 26, CRM 12, Gerenciador CPE 12, Suporte 9, Pré-Cadastro 5, RADIUS 5, Remessa/Retorno 2, Termo de Aceite 2, Outros 1). Cada endpoint com método, path, campos e obrigatórios. Criadas [[Pré-cadastro real]] e [[Memória estruturada da IA]] (trabalho da sessão). Corrigidos endpoints errados em [[Integração SGP]] e [[SGP]] (planos `/api/precadastro/plano/list`, `nas_id=53`, modo lead, ACS→Gerenciador CPE). Task [[Ambiente de testes + próximos passos (2026-06-30)]] itens 1 e 2 marcados concluídos. Raw imutável: `raw/sources/docs/2026-07-01_sgp-api-postman.json` + extração `2026-07-01_sgp-api-completa.md`.
+
+## [2026-07-02 14:30] WORK | Auditoria das chamadas SGP dos nós/tools + fix da 2ª via
+
+Revisão das 11 chamadas SGP do código contra a doc oficial (agora que a API do SGP está toda no brain), confrontando `integrations.js` + `iaTools.js` + `processarNo`. Padrão dos bugs vivos: **mismatch de campo entre a resposta do `integrations.js` e quem consome** — eixo `integração ↔ tool da IA` (as tools divergiram dos nós). Criada [[Auditoria SGP ↔ tools da IA (2026-07-02)]].
+
+- **Corrigido (TDD, commit `d423a48`):** a tool `segunda_via_boleto` lia `r.link`/`r.pix`/`r.valor` (inexistentes) e **sempre** dizia "não encontrei boleto". Lógica extraída p/ `iaToolsHelpers.js` (`formatarBoletoIA`, pura) + `iaToolsHelpers.test.js` (6 testes; suíte 93→99 verdes). [[IA com Tool Calling]] enriquecida com a armadilha.
+- **Abertos:** `criarChamado` descarta `extras` (contato/atribuição do chamado); nó `promessa_pagamento` lê `adimplente`/`dias`/`data` (função retorna `liberado`/`liberado_dias`/`data_promessa`); tool `historico_ocorrencias` lê `o.id`/`o.descricao` (retorno tem `numero`/`conteudo`); `listarPlanos(cidade)` filtra por campo que o `plano/list` ignora; `manutencao/list` sem barra final; `consultar_radius` `tipoconexao:'PPP'` a validar.
+- Christian foi testar a IA ao vivo em seguida. Tudo na branch `worktree-ambiente-testes-fluxo`.
