@@ -11,6 +11,8 @@ import {
 } from './integrations.js';
 import { getDb } from '../config/db.js';
 import { formatarBoletoIA } from './iaToolsHelpers.js';
+import { diagnosticoOnu } from './sgpDb.js';
+import { formatarDiagnosticoOnu } from './sgpHelpers.js';
 
 // ── DEFINIÇÃO DAS FERRAMENTAS ──────────────────────────────────────────────
 export const IA_TOOLS = [
@@ -86,7 +88,7 @@ export const IA_TOOLS = [
   },
   {
     name: 'consultar_onu_acs',
-    description: 'Lê dados da ONU do cliente via ACS: sinal óptico Rx/Tx, uptime, firmware, IP WAN. Use quando suspeitar de falha óptica ou problema no equipamento.',
+    description: 'Lê o sinal óptico (Rx/Tx em dBm) e o status do equipamento (online/offline, uptime) do cliente. Use no diagnóstico de suporte quando o cliente estiver offline ou com lentidão, para saber se o problema é na fibra/equipamento. Não repasse números técnicos ao cliente — fale simples.',
     input_schema: {
       type: 'object',
       properties: {
@@ -268,15 +270,10 @@ export async function executarTool(name, input, ctx) {
     }
 
     case 'consultar_onu_acs': {
-      const r = await consultarOnuAcs(input.serial || '').catch(e => ({ encontrado: false, mensagem: e.message }));
-      if (!r.encontrado) return r.mensagem;
-      let msg = `📡 Dados da ONU:\n`;
-      if (r.sinal_rx) msg += `• Sinal Rx: ${r.sinal_rx} dBm\n`;
-      if (r.sinal_tx) msg += `• Sinal Tx: ${r.sinal_tx} dBm\n`;
-      if (r.uptime)   msg += `• Uptime: ${r.uptime}\n`;
-      if (r.ip_wan)   msg += `• IP WAN: ${r.ip_wan}\n`;
-      if (r.status)   msg += `• Status: ${r.status}`;
-      return msg;
+      // Lê sinal óptico + status direto do banco read-only do SGP (sgpDb.js).
+      const contrato = input.contrato || ctx?.cliente?.contrato;
+      const row = await diagnosticoOnu(contrato);
+      return formatarDiagnosticoOnu(row, new Date());
     }
 
     case 'reiniciar_onu_acs': {
