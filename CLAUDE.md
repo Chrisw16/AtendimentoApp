@@ -64,6 +64,8 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 
 ## Convenções e regras (não-óbvias — leia antes de mexer)
 
+- **`JWT_SECRET` é obrigatória em produção.** Não existe mais fallback fixo no código (havia um, versionado no repo). Sem a env: em `NODE_ENV=production` o boot **falha**; fora disso, gera um segredo **aleatório por boot** (sessões caem no restart). Ver `middlewares/auth.js` → `resolverSegredo`.
+- **As faixas do NPS têm fonte única:** `agregarNps`/`avaliarNps` em `fluxoHelpers.js`. O dashboard **não** classifica em SQL (era assim, e divergia do motor). `satisfacao.escala` (migration 009) guarda a escala de cada resposta; linhas antigas = 10.
 - **Credenciais de integração vivem no BANCO (`sistema_kv`), não em env.** SGP, Evolution, Anthropic, OpenAI, Telegram são configurados pela tela admin (**Configurações** / **Canais**) e gravados em `sistema_kv`. Só **infra** vem de env: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `PORT`, `CORS_ORIGIN`, `META_VERIFY_TOKEN`, `ERP_URL`/`ERP_API_KEY`. Muitas vars do `.env.example` (IMAP/SMTP/ASTERISK/VAPID/META_ACCESS_TOKEN) **não são lidas pelo código** — são aspiracionais.
 - **Migrations:** cada mudança de schema é um arquivo novo em `apps/api/src/migrations/versions/NNN_nome.js` com `up(db)`/`down(db)`. Runner próprio (tabela `_migrations`, transacional, ordenado por nome). Nunca rode `ALTER TABLE` direto.
 - **Estado do fluxo é em memória** (`estadosExecucao` Map em `motorFluxo.js`) — **perde no restart**. Conversas em meio de fluxo recomeçam. O acesso a esse Map é **serializado por conversa** via `filaPorChave.js` (`processarConversa` é um wrapper sobre `processarConversaInterno`); ao mexer na entry point do motor, mantenha o wrapper ou a race volta.
@@ -76,9 +78,9 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 - **Os 4 críticos da auditoria foram corrigidos em 2026-08-21** (race de estado do fluxo → `filaPorChave.js`; `sgp_url` não salvava; Canais apagava config; dedup de webhook → migration 008 + `onConflict`). ⚠️ A migration 008 e o `onConflict` **ainda não foram validados contra Postgres real** — a máquina de dev não tem banco.
 - **Mismatches editor↔motor (parcialmente corrigidos):** 4 já resolvidos via `fluxoHelpers.js` (`enviar_lista`, `abrir_chamado`, `ia_responde`, `nps_inline`). **Ainda abertos:** `gatilho_keyword` (filtro de palavra inerte), `aguardar_resposta` (`timeout`/`max_tentativas` ignorados — falta scheduler), `condicao_multipla` (sem editor no PropsPanel + porta por `ramo.id`×`ramo.porta`), portas mortas (`solicitar_localizacao`, `transferir_agente`), `enviar_cta` `rodape`. Detalhe em [brain/work/bugs/2026-06-30_auditoria-profunda.md](brain/work/bugs/2026-06-30_auditoria-profunda.md).
 - ~~`sseManager.js` importa `redis` mas o pacote é `ioredis`~~ → **corrigido (2026-08-21)**: migrado para a API do `ioredis`. Conexão real ainda não validada.
-- `GET /api/sysconfig` retorna **API keys em texto plano** (sem mascaramento).
+- `GET /api/sysconfig` retorna **API keys em texto plano** (sem mascaramento). A rota é **admin-only** (`authMiddleware, adminMiddleware`), então não é exposição pública — mas uma sessão de admin vazada entrega todas as credenciais de integração de uma vez.
 - Mass-assignment em PUT de `ocorrencias`/`ordens`/`tarefas`; `tarefas` sem ownership-check.
-- `Tarefas.jsx` e `Financeiro.jsx` existem mas **não têm rota** em `App.jsx`. `Clientes.jsx` tem `useDebounce` quebrado.
+- `Tarefas.jsx` e `Financeiro.jsx` existem mas **não têm rota** em `App.jsx`. ~~`Clientes.jsx` tem `useDebounce` quebrado~~ → **corrigido (2026-08-21)**: usava `useState` no lugar de `useEffect`, então o valor debounced nunca mudava e a busca de clientes não funcionava.
 - Meta gera mídia em `/api/media/:id` mas **não há rota `/api/media`** montada.
 - Resíduos do provedor de inspiração ("CITmax") em `seed.js` e na tool `status_rede`. Fluxo padrão do seed é legado e não roda no motor atual.
 

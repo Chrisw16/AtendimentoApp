@@ -50,7 +50,9 @@ O grupo mais importante é o de **mismatches editor↔motor**: o painel de propr
   - `solicitar_localizacao`: só emite `localizacao_recebida` (nunca `sem_localizacao`/`erro`); não valida se veio localização.
   - `transferir_agente`: só `fora_horario` ou `fim()` no sucesso — nunca `transferido`/`sem_agente`.
   - `condicao_multipla`: **sem bloco no PropsPanel** (inconfigurável) + FlowNode gera portas por `ramo.id` mas o motor avança por `ramo.porta`, com fallback `default` que o editor nunca cria.
-- **Dashboard NPS ≈ -100** `[CONFIRMADO]` — quando cai no fallback da tabela `avaliacoes` (escala 1-5), o cálculo usa escala 0-10 (`>=9` promotor) → toda nota vira detrator. Liga-se à divergência de NPS: `nps_inline` grava em `satisfacao` (0-10), a tela Satisfação lê `avaliacoes` (1-5).
+- ✅ **Dashboard NPS ≈ -100** `[CONFIRMADO]` — quando cai no fallback da tabela `avaliacoes` (escala 1-5), o cálculo usava escala 0-10 (`>=9` promotor) → toda nota virava detrator.
+
+  **Corrigido em 2026-08-21, junto de um caso pior descoberto na revisão:** o `nps_inline` gravava a nota **crua** em `satisfacao` sem registrar a escala, e o dashboard reimplementava as faixas em SQL com 0-10 fixo. Numa escala de 5, a nota máxima (5) era *promotora* no roteamento do fluxo e *detratora* no relatório — o fix da escala feito na sessão anterior corrigiu só o roteamento e, com isso, **alargou** a divergência. Agora: migration 009 (`satisfacao.escala`, default 10), o motor grava a escala, e o dashboard delega tudo a `agregarNps` — **fonte única das faixas** (6 testes). O fallback de `avaliacoes` passa escala 5 explicitamente.
 
 ## Médio
 

@@ -91,3 +91,25 @@ Se qualquer migration falha no boot, o `.catch` (server.js:101) só loga warning
 **Ambiente local:** a máquina de dev não tem Docker, Postgres nem Redis. A porta 6379 responde, mas é um **túnel SSH** (`ssh -f -N workflow-vps`) para um Redis remoto — não apontar o `.env` do Maxxi para `localhost:6379` achando que é local.
 
 **Próximo passo:** validar em produção — aplicar as correções e conferir a 008 rodando contra o Postgres real (janela ideal: base ainda vazia), e então fazer o primeiro atendimento ponta-a-ponta de verdade pelo WhatsApp.
+
+## [2026-08-21 · revisão] WORK | Revisão de código: 3 bugs novos corrigidos
+
+Revisão pedida pelo Christian ("código quebrado, sem sentido, sem lógica, bugs"). Feita sem agentes: verificações automáticas sobre os 89 arquivos + leitura profunda do núcleo.
+
+### Ferramentas de varredura (em `scratchpad`, descartáveis)
+- **`check_imports.mjs`** — resolve todo import relativo e confere se o símbolo nomeado existe no módulo alvo. **89 arquivos, 0 quebrados.**
+- **`check_api.mjs`** — extrai os 88 endpoints do backend e as 52 chamadas de `api.js`, e cruza por verbo+forma. Reproduziu exatamente as 5 divergências que a auditoria marcou como latentes — todas confirmadas **código morto** (nenhuma tela as chama).
+
+### Bugs novos (não estavam na auditoria)
+1. **NPS escala 5 → todo respondente vira detrator** (alto). `nps_inline` gravava a nota crua em `satisfacao` (sem coluna de escala) e o dashboard reimplementava as faixas em SQL com 0-10 fixo. Nota 5 numa escala de 5 era promotora no fluxo e detratora no relatório. **Causa raiz: as faixas viviam em dois lugares.** Corrigido com migration 009 (`satisfacao.escala`) + `agregarNps` como fonte única (6 testes) + dashboard delegando. Rótulos do FE ("Promotores (9–10)") viraram agnósticos de escala.
+2. **Busca de clientes morta** (alto). `useDebounce` usava `useState` no lugar de `useEffect`: o callback virava inicializador lazy, rodava uma vez com o valor inicial vazio, e o "cleanup" virava o valor do state. `buscaDebounced` ficava `''` para sempre.
+3. **`JWT_SECRET` com fallback versionado no repo** (crítico). `'maxxi-dev-secret-change-in-prod'` era a única ocorrência da env em todo o código — sem validação nem aviso. Se o Coolify não define a env, produção assina com segredo público e qualquer um forja admin. Corrigido em `resolverSegredo` (4 testes): env quando existe; **falha o boot** em `NODE_ENV=production`; **aleatório por boot** no resto. Escolhi aleatório em vez de falha dura no caso ambíguo justamente para **não arriscar downtime** se a env não estiver setada — o pior caso vira "sessões caem no restart".
+
+### Correções ao que estava documentado
+- `GET /api/sysconfig` **é admin-only** — o CLAUDE.md não dizia, superestimando a severidade.
+- O SQL do dashboard (`INTERVAL '${days} days'`) **não é injetável**: `days` vem de um ternário com literais 7/90/30. Registrado como padrão frágil, não vulnerabilidade.
+
+### Cobertura
+Lido a fundo: motor de fluxo, auth, dashboard, monitor de SLA, Clientes, sysconfig, contrato FE↔BE. **Não** revisado linha a linha: `iaTools.js`, `integrations.js`, `supervisoraIA.js` e a maioria das rotas e páginas de frontend — os achados de médio porte da auditoria nessas áreas seguem sem revalidação.
+
+Suíte: 31 → 41 testes.
