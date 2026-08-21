@@ -39,6 +39,14 @@ Sessão de retomada depois de ~7 semanas parado. Resumo do que mudou e por onde 
 7. **Segurança**: mass-assignment em `ocorrencias`/`ordens`/`tarefas`, mascarar `GET /sysconfig`.
 8. **Reprodutibilidade do build**: não há lock file versionado e o Dockerfile usa `npm install`, não `npm ci` — dois deploys do mesmo commit podem gerar artefatos diferentes.
 
+## Continuação (mesma data, sessão seguinte)
+
+Entrou um pedido novo — **WhatsApp API Oficial** — que interrompeu esta pauta e revelou uma vulnerabilidade viva em produção. Estado, 4 fases e 13 pendências em [[WhatsApp API Oficial — estado e pendências]].
+
+Dois itens desta pauta ganharam urgência por causa dele:
+- **Item 1 (ler o log de boot)** virou parte de um problema maior: o **deploy automático do Coolify não está funcionando** — webhook entrega 200 e nada sobe. Enquanto isso não se resolve, nada desta pauta chega à produção.
+- **Segurança (item 7)** deixou de ser preventiva: `GET /api/webhooks/meta` refletia HTML sem autenticação, e `GET /api/sysconfig/:chave` lia qualquer chave. Ambos corrigidos, **aguardando deploy**.
+
 ## Decisões da sessão
 
 - **Branch `dev`** (21 commits, WhatsApp QR Code, de outro programador) fica **de lado** por ora — não está no `main` nem nunca foi deployada.

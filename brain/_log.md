@@ -236,3 +236,43 @@ Sessão de retomada após ~7 semanas parado. Pauta de continuação em [[Fechame
 **O que a sessão ensinou sobre o produto:** o harness pega problema de *grafo*, não de *configuração*. O `max_turnos: 12` que encerrou o atendimento comercial no meio passou por validador e simulador sem alarme — só o chat de conversa real pegou. Validador e simulador são rede ampla; conversa real continua insubstituível.
 
 **Aberto e importante:** as migrations 008/009 nunca foram confirmadas rodando (a 008 apaga linhas) — ler o log de boot do Coolify é o item 1 da pauta.
+
+## [2026-08-21 · whatsapp oficial] WORK | Vulnerabilidade viva corrigida + registry de canais (Fase 1)
+
+Pedido: adicionar a **API Oficial do WhatsApp** (Meta Cloud API) como canal. Design em `docs/superpowers/specs/2026-08-21-whatsapp-api-oficial-design.md`; estado e pendências em [[WhatsApp API Oficial — estado e pendências]].
+
+### O achado que interrompeu a feature
+
+Três agentes revisaram a spec (arquitetura contra o código, segurança, e verificação da doc da Meta). A revisão de segurança apontou, e **confirmei sondando a produção**, uma vulnerabilidade **viva**:
+
+`GET /api/webhooks/meta` comparava `token === process.env.META_VERIFY_TOKEN`. A env não está definida em produção, então ambos os lados eram `undefined` e a comparação **passava sem token nenhum**. Com `res.send(challenge)` respondendo `text/html`, a rota pública virou refletor de HTML na origem do painel. Enviei `<b>negrito</b>` e voltou 200 com o markup intacto.
+
+A cadeia não parava no XSS: CSP desligada + JWT de 30 dias em `localStorage` + `GET /api/sysconfig` devolvendo todas as credenciais em texto plano = roubo de sessão de admin e vazamento de SGP/Anthropic/Evolution.
+
+Corrigido em `f8ed98f`: `verificarHandshake` **fail-closed**, comparação em tempo constante, `text/plain`. Junto, fechada a leitura irrestrita do `sistema_kv` em `GET /api/sysconfig/:chave` (a allowlist só valia para o `PUT` e o GET agregado).
+
+### Fase 1 — registry de canais
+
+O `switch` de despacho (67 linhas) saiu do `motorFluxo.enviarResposta` para `services/canais/`. Detalhe em [[Canais e Webhooks]] → "Envio: registry de adapters". **30 testes de caracterização escritos ANTES da extração.**
+
+Duas decisões que vieram das revisões e mudaram o desenho original:
+- **Degradação por adapter, não genérica** — o Telegram degrada `lista`→**botões** com ≤8 itens. Um `renderizarComoTexto` central não expressaria isso.
+- **Sem fallback genérico para texto** — a Evolution não tem `padrao` de propósito: hoje ela descarta `localizacao` em silêncio, e um fallback faria ela passar a enviar. Seria mudança observável escondida num refactor.
+
+Também descartei duas coisas que eu havia escrito na spec: "o agente ganha envio de mídia" (o botão de anexo do painel **não tem `onClick`** — falta o upload inteiro) e mexer no `chat.js` (só envia texto e não tem `else`; migra na Fase 2).
+
+### Erro meu, registrado
+
+A primeira versão da spec **se contradizia**: dizia "refactor inobservável" e, duas linhas acima, "o agente ganha envio de mídia". Ganhar comportamento é observável. Só apareceu porque um revisor leu as duas afirmações juntas — eu não tinha relido o próprio documento como um todo.
+
+### Descoberta de infraestrutura
+
+**O deploy automático do Coolify não está funcionando.** O webhook do GitHub está ativo e as três entregas de hoje voltaram **200 OK** — o Coolify recebe e não deploya. É configuração do lado dele. Consequência: **pushar não é deployar neste projeto**; confirmar sempre com sonda antes de dar algo como entregue.
+
+A correção de segurança está no `origin/main` e **ainda não subiu**. Mitigação sem deploy: definir `META_VERIFY_TOKEN` no ambiente — com um valor real, a comparação que hoje passa deixa de passar.
+
+### Decisão de entrega
+
+Separei os lotes: `main` fica só com a correção de segurança, e a Fase 1 espera na branch `feat/canais-registry`. Misturar os dois faria o rollback do refactor levar a correção de segurança junto.
+
+Suíte: 155 → **185 testes**.
