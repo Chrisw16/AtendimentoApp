@@ -19,12 +19,22 @@ import {
   evolutionEnviarArquivo,
 } from './integrations.js';
 import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista } from './fluxoHelpers.js';
+import { criarFilaPorChave } from './filaPorChave.js';
 
 // Estado de execução em memória (por conversa_id)
 const estadosExecucao = new Map();
 
+// Serializa o processamento por conversa. Sem isto, duas mensagens seguidas do
+// mesmo cliente intercalam nos `await` de SGP/IA e corrompem `estadosExecucao`
+// (o estado é lido no começo e só gravado no fim).
+const filaConversa = criarFilaPorChave();
+
 // ── ENTRY POINT ───────────────────────────────────────────────────
-export async function processarConversa(conversa, mensagemCliente) {
+export function processarConversa(conversa, mensagemCliente) {
+  return filaConversa(conversa.id, () => processarConversaInterno(conversa, mensagemCliente));
+}
+
+async function processarConversaInterno(conversa, mensagemCliente) {
   const db = getDb();
 
   // Busca fluxo ativo — usa campo dados (editor visual) com fallback para nos/conexoes

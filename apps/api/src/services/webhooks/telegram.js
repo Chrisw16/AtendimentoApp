@@ -68,6 +68,10 @@ async function processarMensagemTelegram(chatId, nome, texto, externalId, tipo =
     external_id: externalId,
   });
 
+  // Reentrega concorrente: a unique de external_id barrou o insert duplicado.
+  // Sem isto o motor rodaria 2x e a IA responderia (e cobraria) em dobro.
+  if (!mensagem) return;
+
   await conversaRepo.incrementarNaoLidas(conversa.id);
   broadcast('mensagem', { ...mensagem, conversa_id: conversa.id });
   broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));

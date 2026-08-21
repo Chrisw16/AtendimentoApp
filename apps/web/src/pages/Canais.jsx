@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { canaisApi } from '../lib/api';
 import { useStore } from '../store';
@@ -80,6 +80,13 @@ function CanalCard({ canal }) {
   const meta  = CANAL_META[canal.tipo] || { nome: canal.nome, icone: '⚙️', desc: '', campos: [] };
   const [expanded, setExpanded] = useState(false);
   const [config, setConfig]     = useState(canal.config || {});
+
+  // Ressincroniza quando o servidor traz outra config. Sem isto o estado do
+  // primeiro render (que pode ser o placeholder `{}` do merge do catálogo)
+  // persiste, e qualquer toggle/salvar grava `config:{}` por cima das
+  // credenciais já salvas — perda de dados.
+  const configServidor = JSON.stringify(canal.config || {});
+  useEffect(() => { setConfig(canal.config || {}); }, [configServidor]);
 
   const updateMut = useMutation({
     mutationFn: (d) => canaisApi.update(canal.tipo, d),

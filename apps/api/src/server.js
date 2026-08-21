@@ -87,18 +87,27 @@ const server = app.listen(PORT, () => {
 
 // Migrations em background — não bloqueia o servidor
 if (process.env.DATABASE_URL) {
-  import('./migrations/run.js')
-    .then(({ runMigrations }) => runMigrations())
-    .then(async () => {
-      console.log('✅ Migrations OK');
-      // Inicia monitor de SLA/fila
+  const iniciarMonitores = async () => {
+    try {
       const { iniciarMonitorSLA } = await import('./services/filaService.js');
       iniciarMonitorSLA();
       console.log('✅ Monitor SLA iniciado');
       const { iniciarMonitorSupervisora } = await import('./services/supervisoraIA.js');
       iniciarMonitorSupervisora();
-    })
-    .catch(err => console.error('⚠️  Migration warning:', err.message));
+      console.log('✅ Monitor supervisora iniciado');
+    } catch (err) {
+      console.error('⚠️  Falha ao iniciar monitores:', err.message);
+    }
+  };
+
+  import('./migrations/run.js')
+    .then(({ runMigrations }) => runMigrations())
+    .then(() => console.log('✅ Migrations OK'))
+    .catch(err => console.error('❌ Migration FALHOU:', err.message))
+    // `finally`: os monitores sobem mesmo se a migration falhar. Antes eles
+    // viviam no `.then` da migration — uma migration quebrada desligava SLA e
+    // supervisora em silêncio, com o app parecendo saudável.
+    .finally(iniciarMonitores);
 } else {
   console.warn('⚠️  DATABASE_URL não definida');
 }

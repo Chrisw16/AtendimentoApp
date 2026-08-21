@@ -24,7 +24,17 @@ export const mensagemRepo = {
   // ── CRIAR ─────────────────────────────────────────────────────
   async criar(dados) {
     const db = getDb();
-    const [msg] = await db('mensagens').insert(dados).returning('*');
+    // onConflict + unique em external_id: numa reentrega concorrente de webhook
+    // o segundo insert é descartado pelo banco em vez de duplicar a mensagem.
+    // Mensagens sem external_id (agente/sistema/IA) nunca conflitam.
+    const [msg] = await db('mensagens')
+      .insert(dados)
+      .onConflict('external_id')
+      .ignore()
+      .returning('*');
+
+    // Duplicata barrada pelo banco — quem chamou deve simplesmente parar.
+    if (!msg) return null;
 
     // Atualiza preview da conversa
     await db('conversas')

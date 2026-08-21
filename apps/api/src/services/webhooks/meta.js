@@ -68,6 +68,10 @@ async function processarMensagemMeta(msg, value) {
     meta: { timestamp: msg.timestamp },
   });
 
+  // Reentrega concorrente: a unique de external_id barrou o insert duplicado.
+  // Sem isto o motor rodaria 2x e a IA responderia (e cobraria) em dobro.
+  if (!mensagem) return;
+
   // Incrementa não lidas se conversa não estiver aberta por nenhum agente
   await conversaRepo.incrementarNaoLidas(conversa.id);
 
