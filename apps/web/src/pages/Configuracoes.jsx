@@ -114,6 +114,11 @@ export default function Configuracoes() {
   const [sgpUrl,       setSgpUrl]       = useState('');
   const [sgpApp,       setSgpApp]       = useState('');
   const [sgpToken,     setSgpToken]     = useState('');
+  const [sgpdbHost,    setSgpdbHost]    = useState('');
+  const [sgpdbPort,    setSgpdbPort]    = useState('5432');
+  const [sgpdbName,    setSgpdbName]    = useState('dbconect');
+  const [sgpdbUser,    setSgpdbUser]    = useState('');
+  const [sgpdbPass,    setSgpdbPass]    = useState('');
   const [evoUrl,       setEvoUrl]       = useState('');
   const [tgToken,      setTgToken]      = useState('');
   const [evoKey,       setEvoKey]       = useState('');
@@ -137,6 +142,11 @@ export default function Configuracoes() {
     setSgpUrl(      kv.sgp_url            || '');
     setSgpApp(      kv.sgp_app            || '');
     setSgpToken(    kv.sgp_token          || '');
+    setSgpdbHost(kv.sgpdb_host || '');
+    setSgpdbPort(kv.sgpdb_port || '5432');
+    setSgpdbName(kv.sgpdb_name || 'dbconect');
+    setSgpdbUser(kv.sgpdb_user || '');
+    setSgpdbPass(kv.sgpdb_password || '');
     setEvoUrl(      kv.evolution_url      || '');
     setTgToken(     kv.telegram_bot_token  || '');
     setEvoKey(      kv.evolution_key      || '');
@@ -157,6 +167,8 @@ export default function Configuracoes() {
     horario, mensagem_fora_hora: msgFora, notificacoes: notifs,
     anthropic_api_key: anthropicKey, openai_api_key: openaiKey,
     sgp_url: sgpUrl, sgp_app: sgpApp, sgp_token: sgpToken,
+    sgpdb_host: sgpdbHost, sgpdb_port: sgpdbPort, sgpdb_name: sgpdbName,
+    sgpdb_user: sgpdbUser, sgpdb_password: sgpdbPass,
     evolution_url: evoUrl, evolution_key: evoKey,
     telegram_bot_token: tgToken,
   });
@@ -398,6 +410,11 @@ export default function Configuracoes() {
                     hint="Token de autenticação gerado no SGP"/>
                 </div>
               </div>
+              <ApiKeyField label="Banco SGP — Host" value={sgpdbHost} onChange={setSgpdbHost} placeholder="177.52.36.89" mono />
+              <ApiKeyField label="Banco SGP — Porta" value={sgpdbPort} onChange={setSgpdbPort} placeholder="5432" mono />
+              <ApiKeyField label="Banco SGP — Database" value={sgpdbName} onChange={setSgpdbName} placeholder="dbconect" mono />
+              <ApiKeyField label="Banco SGP — Usuário (read-only)" value={sgpdbUser} onChange={setSgpdbUser} placeholder="consulta_conect" mono />
+              <ApiKeyField label="Banco SGP — Senha" value={sgpdbPass} onChange={setSgpdbPass} placeholder="senha read-only" />
               <div className={styles.infoBox}>
                 <p style={{ fontSize: 12, color: 'var(--brand-blue)', margin: 0, lineHeight: 1.5 }}>
                   💡 As credenciais são enviadas como headers <code>app</code> e <code>token</code> em cada requisição ao SGP.
@@ -535,6 +552,7 @@ function PlanosTab({ toast }) {
           {planos.map(p => {
             const edit = editingOf(p);
             const isEditing = edit != null;
+            const benef = String(p.beneficios || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean);
             return (
               <div key={p.id} style={{
                 background: '#fff', border: '1px solid rgba(0,0,0,.08)', borderRadius: 10, padding: 14,
@@ -558,9 +576,18 @@ function PlanosTab({ toast }) {
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                         {p.velocidade && <>📶 {p.velocidade} · </>}
-                        {p.valor != null && <>💰 R$ {Number(p.valor).toFixed(2).replace('.', ',')}</>}
+                        {p.valor_promocional != null && p.promo_meses > 0
+                          ? <>🔥 R$ {Number(p.valor_promocional).toFixed(2).replace('.', ',')} nos {p.promo_meses} primeiros meses · depois R$ {p.valor != null ? Number(p.valor).toFixed(2).replace('.', ',') : '—'}</>
+                          : (p.valor != null && <>💰 R$ {Number(p.valor).toFixed(2).replace('.', ',')}</>)}
                         {p.fidelidade_meses > 0 && <> · 🔒 {p.fidelidade_meses}m fidelidade</>}
                       </div>
+                      {benef.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                          {benef.map((b, i) => (
+                            <span key={i} style={{ fontSize: 10.5, color: 'var(--brand-blue)', background: 'rgba(32,80,184,.08)', padding: '2px 8px', borderRadius: 10 }}>🎁 {b}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <code style={{ fontSize: 11, background: 'rgba(32,80,184,.08)', color: 'var(--brand-blue)', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
                       SGP id={p.plano_id_sgp}
@@ -590,6 +617,7 @@ function emptyPlano() {
   return {
     plano_id_sgp: '', nome: '', valor: '', velocidade: '', cidade: '',
     fidelidade_meses: 0, ativo: true, ordem: 0, descricao: '',
+    valor_promocional: '', promo_meses: 0, beneficios: '',
   };
 }
 
@@ -622,7 +650,8 @@ function PlanoFields({ p, onChange }) {
         {fld('Valor (R$)',
           <input className={styles.input} type="number" step="0.01" value={p.valor ?? ''}
             onChange={e => onChange({ valor: e.target.value })}
-            placeholder="59.90"/>
+            placeholder="84.90"/>,
+          'Preço mensal normal (após a promoção)'
         )}
         {fld('Velocidade',
           <input className={styles.input} value={p.velocidade || ''}
@@ -632,8 +661,22 @@ function PlanoFields({ p, onChange }) {
         {fld('Cidade',
           <input className={styles.input} value={p.cidade || ''}
             onChange={e => onChange({ cidade: e.target.value })}
-            placeholder="Natal"/>,
-          'Define POP e portador automaticamente'
+            placeholder="Natal (vazio = todas)"/>,
+          'Vazio = vale para todas as cidades · várias = separe por vírgula (ex: Natal, Macaíba)'
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {fld('Preço promocional (R$)',
+          <input className={styles.input} type="number" step="0.01" value={p.valor_promocional ?? ''}
+            onChange={e => onChange({ valor_promocional: e.target.value })}
+            placeholder="69.90"/>,
+          'Preço dos primeiros meses · vazio = sem promoção'
+        )}
+        {fld('Promoção (meses)',
+          <input className={styles.input} type="number" min="0" value={p.promo_meses ?? 0}
+            onChange={e => onChange({ promo_meses: parseInt(e.target.value) || 0 })}
+            placeholder="3"/>,
+          'Por quantos meses vale o preço promocional'
         )}
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -653,6 +696,15 @@ function PlanoFields({ p, onChange }) {
             {p.ativo ? 'Ativo' : 'Inativo'}
           </span>
         </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        {fld('Benefícios inclusos',
+          <textarea className={styles.input} value={p.beneficios || ''}
+            onChange={e => onChange({ beneficios: e.target.value })}
+            placeholder={'Globoplay\nDeezer\nQualifica'} rows={3}
+            style={{ resize: 'vertical', minHeight: 64, fontFamily: 'inherit', lineHeight: 1.5 }}/>,
+          'Um por linha (ou separados por vírgula) — a IA cita junto com o plano'
+        )}
       </div>
     </div>
   );

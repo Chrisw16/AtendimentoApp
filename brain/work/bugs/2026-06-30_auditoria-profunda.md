@@ -95,4 +95,4 @@ O grupo mais importante é o de **mismatches editor↔motor**: o painel de propr
 
 ## See Also
 
-- [[Achados de código (2026-06-30)]] · [[Motor de Fluxo]] · [[Catálogo de Nós]] · [[Canais e Webhooks]]
+- [[Achados de código (2026-06-30)]] · [[Motor de Fluxo]] · [[Catálogo de Nós]] · [[Canais e Webhooks]] · [[Auditoria SGP ↔ tools da IA (2026-07-02)]]

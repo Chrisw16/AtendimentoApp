@@ -1,7 +1,11 @@
 import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler, HttpError }        from '../middlewares/errorHandler.js';
 import { getDb } from '../config/db.js';
+import { validarFluxo }     from '../services/fluxoValidador.js';
+import { simularConversa }  from '../services/motorSimulador.js';
+import { processarConversa } from '../services/motorFluxo.js';
 
 export const fluxosRouter = Router();
 fluxosRouter.use(authMiddleware, adminMiddleware);
@@ -62,5 +66,69 @@ fluxosRouter.post('/:id/despublicar', asyncHandler(async (req, res) => {
 
 fluxosRouter.delete('/:id', asyncHandler(async (req, res) => {
   await getDb()('fluxos').where({ id: req.params.id }).delete();
+  res.json({ ok: true });
+}));
+
+// ── TESTES DE FLUXO ───────────────────────────────────────────────
+
+// Validação estática do grafo (becos, portas soltas, loops, etc.)
+fluxosRouter.post('/:id/validar', asyncHandler(async (req, res) => {
+  const f = await getDb()('fluxos').where({ id: req.params.id }).first();
+  if (!f) throw new HttpError(404, 'Fluxo não encontrado');
+  res.json(validarFluxo(f));
+}));
+
+// Simulação roteirizada (sem subir motor/IA/SGP — decisões vêm do request)
+fluxosRouter.post('/:id/simular', asyncHandler(async (req, res) => {
+  const f = await getDb()('fluxos').where({ id: req.params.id }).first();
+  if (!f) throw new HttpError(404, 'Fluxo não encontrado');
+  const { turnos = [], decisoes = {}, contextoInicial = {} } = req.body || {};
+  res.json(await simularConversa(f, { turnos, decisoes, contextoInicial }));
+}));
+
+// Simulação REAL: roda o motor de verdade (SGP + IA reais) em modo sandbox.
+// Captura as respostas (não envia no WhatsApp) e simula ações que gravam dados
+// (chamado, promessa, pré-cadastro, transferência). Resumível: o cliente devolve
+// o `estado` do turno anterior (null no primeiro turno).
+fluxosRouter.post('/:id/simular-real', asyncHandler(async (req, res) => {
+  const f = await getDb()('fluxos').where({ id: req.params.id }).first();
+  if (!f) throw new HttpError(404, 'Fluxo não encontrado');
+  const { mensagem = '', estado = null } = req.body || {};
+
+  const SID = `sandbox:${req.params.id}`;
+  const estados = new Map();
+  if (estado) estados.set(SID, estado);
+  const h = new Date();
+  const protocolo = `${h.getFullYear()}${String(h.getMonth() + 1).padStart(2, '0')}${String(h.getDate()).padStart(2, '0')}-TESTE`;
+  const conversa = { id: SID, canal: 'sandbox', canal_instancia: 'sandbox', telefone: '0', nome: 'Cliente Teste', protocolo };
+  const respostas = [];
+
+  await processarConversa(conversa, { texto: mensagem, tipo: 'texto' }, {
+    fluxo: f, estados, sandbox: true,
+    enviar: (_c, resp) => respostas.push(resp),
+  });
+
+  const novo = estados.get(SID) || null;
+  res.json({ respostas, estado: novo, status: novo ? 'aguardando' : 'encerrado' });
+}));
+
+// ── LINK PÚBLICO DE TESTE ─────────────────────────────────────────
+
+// Gera (ou regenera com {regenerar:true}) o token do link público de teste.
+fluxosRouter.post('/:id/compartilhar', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const f = await db('fluxos').where({ id: req.params.id }).first();
+  if (!f) throw new HttpError(404, 'Fluxo não encontrado');
+  let token = f.share_token;
+  if (!token || req.body?.regenerar) {
+    token = randomUUID().replace(/-/g, '');
+    await db('fluxos').where({ id: f.id }).update({ share_token: token });
+  }
+  res.json({ token });
+}));
+
+// Revoga o link (desativa).
+fluxosRouter.delete('/:id/compartilhar', asyncHandler(async (req, res) => {
+  await getDb()('fluxos').where({ id: req.params.id }).update({ share_token: null });
   res.json({ ok: true });
 }));

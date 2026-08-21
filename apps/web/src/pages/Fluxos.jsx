@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fluxosApi } from '../lib/api';
 import { useStore }  from '../store';
-import { Plus, GitBranch, Zap, ZapOff, Pencil, Trash2, Play } from 'lucide-react';
+import { Plus, GitBranch, Zap, ZapOff, Pencil, Trash2, Play, FlaskConical } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input  from '../components/ui/Input';
+import TesteFluxoModal from '../components/fluxo/TesteFluxoModal';
 import styles from './Fluxos.module.css';
 
 function fmtData(ts) {
@@ -72,7 +73,7 @@ function FluxoModal({ fluxo, onClose, onSave }) {
 }
 
 // ── FLUXO CARD ────────────────────────────────────────────────────
-function FluxoCard({ fluxo, onEdit, onAtivar, onDelete, onOpenEditor }) {
+function FluxoCard({ fluxo, onEdit, onAtivar, onDelete, onOpenEditor, onTestar }) {
   // dados pode ser string JSON ou objeto — editor salva em dados.nodes
   const dadosParsed = (() => {
     try { return typeof fluxo.dados === 'string' ? JSON.parse(fluxo.dados) : (fluxo.dados || {}); }
@@ -118,6 +119,7 @@ function FluxoCard({ fluxo, onEdit, onAtivar, onDelete, onOpenEditor }) {
           {fluxo.ativo ? 'Desativar' : 'Ativar'}
         </Button>
         <div className={styles.cardActionsRight}>
+          <Button variant="ghost" size="sm" icon={FlaskConical} onClick={() => onTestar(fluxo)} aria-label="Testar fluxo" />
           <Button variant="ghost" size="sm" icon={Play} onClick={() => onOpenEditor(fluxo)} aria-label="Abrir editor" />
           <Button variant="ghost" size="sm" icon={Pencil} onClick={() => onEdit(fluxo)} aria-label="Editar nome" />
           <Button variant="ghost" size="sm" icon={Trash2} onClick={() => onDelete(fluxo)} aria-label="Excluir" />
@@ -133,6 +135,7 @@ export default function Fluxos() {
   const qc       = useQueryClient();
   const navigate = useNavigate();
   const [modal, setModal] = useState(null);
+  const [testando, setTestando] = useState(null);
 
   const { data: fluxos = [], isLoading } = useQuery({
     queryKey: ['fluxos'],
@@ -217,6 +220,7 @@ export default function Fluxos() {
               onAtivar={(f) => ativarMut.mutate(f.id)}
               onDelete={handleDelete}
               onOpenEditor={f => navigate(`/fluxos/${f.id}`)}
+              onTestar={setTestando}
             />
           ))}
         </div>
@@ -228,6 +232,10 @@ export default function Fluxos() {
           onClose={() => setModal(null)}
           onSave={handleSave}
         />
+      )}
+
+      {testando && (
+        <TesteFluxoModal fluxo={testando} onClose={() => setTestando(null)} />
       )}
     </div>
   );

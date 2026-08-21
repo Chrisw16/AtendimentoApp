@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { invalidateConfigCache } from '../services/integrations.js';
+import { invalidateSgpDbPool, diagnosticoOnu } from '../services/sgpDb.js';
+import { formatarDiagnosticoOnu } from '../services/sgpHelpers.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler } from '../middlewares/errorHandler.js';
 import { getDb } from '../config/db.js';
@@ -12,6 +14,7 @@ const CHAVES_PUBLICAS = [
   'modo', 'horario_ativo', 'notificacoes',
   'anthropic_api_key', 'openai_api_key', 'sgp_url', 'sgp_token', 'sgp_app',
   'evolution_url', 'evolution_key', 'telegram_bot_token', 'nome_empresa',
+  'sgpdb_host', 'sgpdb_port', 'sgpdb_name', 'sgpdb_user', 'sgpdb_password',
 ];
 
 sysconfigRouter.get('/', asyncHandler(async (req, res) => {
@@ -34,6 +37,7 @@ sysconfigRouter.put('/', asyncHandler(async (req, res) => {
       .onConflict('chave').merge(['valor', 'atualizado']);
   }
   invalidateConfigCache();
+  invalidateSgpDbPool();
   res.json({ ok: true });
 }));
 
@@ -48,7 +52,7 @@ sysconfigRouter.get('/:chave', asyncHandler(async (req, res) => {
 // ── ROTA DE TESTE DE TOOLS SGP ────────────────────────────────────────────
 import { consultarClientes, segundaViaBoleto, promessaPagamento, criarChamado,
   verificarConexao, consultarManutencao, historicoOcorrencias, consultarRadius,
-  statusRede, precadastrarCliente, listarVencimentos } from '../services/integrations.js';
+  statusRede, precadastrarCliente, listarVencimentos, listarPlanos } from '../services/integrations.js';
 
 sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandler(async (req, res) => {
   const { tool, params = {} } = req.body;
@@ -88,6 +92,15 @@ sysconfigRouter.post('/tools/test', authMiddleware, adminMiddleware, asyncHandle
         let q = db('planos').where({ ativo: true });
         if (params.cidade) q = q.whereRaw('LOWER(cidade) LIKE ?', [`%${String(params.cidade).toLowerCase()}%`]);
         result = await q.orderBy([{ column: 'ordem', order: 'asc' }, { column: 'valor', order: 'asc' }]);
+        break;
+      }
+      case 'listar_planos_sgp':
+        // Lê direto do SGP (/api/ura/planos/) — traz os IDs REAIS p/ mapear em Configurações → Planos
+        result = await listarPlanos(params.cidade || ''); break;
+      case 'consultar_onu_acs': {
+        // Lê sinal óptico + status direto do banco read-only do SGP (sgpDb.js).
+        const row = await diagnosticoOnu(params.contrato);
+        result = { row, mensagem_ia: formatarDiagnosticoOnu(row, new Date()) };
         break;
       }
       default:

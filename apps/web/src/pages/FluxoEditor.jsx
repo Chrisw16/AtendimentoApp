@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Panel,
   addEdge, useNodesState, useEdgesState, MarkerType,
@@ -9,6 +9,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../store';
 import { NODE_TYPES, NODE_GROUPS, PORTA_META } from '../lib/nodeTypes';
+import { api } from '../lib/api';
 
 // ── CSS OVERRIDE — apenas ajustes visuais que NÃO interferem na detecção
 //    de eventos do @xyflow/react v12. Não mexer no posicionamento/transform
@@ -319,11 +320,15 @@ const NODE_TYPES_MAP = { fluxo: FlowNode };
 
 // ── PROPS PANEL ───────────────────────────────────────────────────
 function PropsPanel({ node, onChange, onDelete }) {
+  // Prompts da aba "Prompts IA" — alimentam o select de contexto do nó ia_responde.
+  const { data: promptsIA = [] } = useQuery({ queryKey: ['prompts-ia'], queryFn: () => api.get('/prompts'), staleTime: 60000 });
   if (!node) return null;
   const def = NODE_TYPES[node.data.tipo] || {};
   const cfg = node.data.config || {};
   const set = (k, v) => onChange({ ...node.data, config:{ ...cfg, [k]:v } });
   const bts = Array.isArray(cfg.botoes)?cfg.botoes:[];
+  // Contextos selecionáveis = prompts existentes, menos os blocos injetáveis (regras/estilo).
+  const contextos = promptsIA.filter(p => !['regras', 'estilo'].includes(p.slug));
 
   return (
     <div style={{width:270,background:'rgba(6,10,18,.98)',border:'1px solid rgba(255,255,255,.1)',borderRadius:12,display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 8px 32px rgba(0,0,0,.6)'}}>
@@ -340,7 +345,7 @@ function PropsPanel({ node, onChange, onDelete }) {
 
         {node.data.tipo==='enviar_cta'&&<><Fld label="Corpo"><textarea value={cfg.corpo||''} onChange={e=>set('corpo',e.target.value)} rows={3} placeholder="Acesse sua fatura 👇" style={TA}/></Fld><Fld label="Texto do botão (máx 20)"><input value={cfg.label||''} onChange={e=>set('label',e.target.value.slice(0,20))} placeholder="Ver fatura" style={IS} maxLength={20}/></Fld><Fld label="URL"><input value={cfg.url||''} onChange={e=>set('url',e.target.value)} placeholder="https://..." style={IS}/></Fld><Fld label="Rodapé"><input value={cfg.rodape||''} onChange={e=>set('rodape',e.target.value.slice(0,60))} placeholder="Sua empresa" style={IS}/></Fld></>}
 
-        {node.data.tipo==='enviar_botoes'&&<><Fld label="Mensagem"><textarea value={cfg.corpo||''} onChange={e=>set('corpo',e.target.value)} rows={2} placeholder="Como posso te ajudar?" style={TA}/></Fld><Fld label="Botões (máx 3)">{bts.map((b,i)=><div key={i} style={{display:'flex',gap:6,marginBottom:5}}><input value={typeof b==='object'?(b.label||''):String(b)} onChange={e=>{const nb=[...bts];nb[i]={label:e.target.value,id:e.target.value.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'')};set('botoes',nb);}} placeholder={`Botão ${i+1}`} style={IS}/><button onClick={()=>{const nb=[...bts];nb.splice(i,1);set('botoes',nb);}} style={{background:'none',border:'none',color:'#ff4757',cursor:'pointer',fontSize:15,padding:'0 4px',flexShrink:0}}>×</button></div>)}{bts.length<3&&<button onClick={()=>set('botoes',[...bts,{label:'',id:''}])} style={{width:'100%',padding:'6px 0',background:'rgba(62,207,255,.08)',border:'1px dashed rgba(62,207,255,.3)',borderRadius:6,color:'#3ecfff',fontSize:11,cursor:'pointer'}}>+ Adicionar botão</button>}</Fld><Fld label=""><label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 10px',background:cfg.ia_menu_ativo?'rgba(244,114,182,.08)':'rgba(255,255,255,.03)',border:`1px solid ${cfg.ia_menu_ativo?'rgba(244,114,182,.3)':'rgba(255,255,255,.08)'}`,borderRadius:7}}><div onClick={()=>set('ia_menu_ativo',!cfg.ia_menu_ativo)} style={{width:32,height:18,borderRadius:9,background:cfg.ia_menu_ativo?'#f472b6':'rgba(255,255,255,.1)',position:'relative',transition:'.2s',flexShrink:0,cursor:'pointer'}}><div style={{position:'absolute',top:2,left:cfg.ia_menu_ativo?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'.2s'}}/></div><div><div style={{fontSize:11,fontWeight:700,color:cfg.ia_menu_ativo?'#f472b6':'rgba(255,255,255,.5)'}}>🤖 IA no menu</div><div style={{fontSize:10,color:'rgba(255,255,255,.3)'}}>Responde texto livre</div></div></label></Fld></>}
+        {node.data.tipo==='enviar_botoes'&&<><Fld label="Mensagem"><textarea value={cfg.corpo||''} onChange={e=>set('corpo',e.target.value)} rows={2} placeholder="Como posso te ajudar?" style={TA}/></Fld><Fld label="Botões (máx 3)">{bts.map((b,i)=><div key={i} style={{display:'flex',gap:6,marginBottom:5}}><input value={typeof b==='object'?(b.label||''):String(b)} onChange={e=>{const nb=[...bts];const cur=typeof b==='object'?b:{};nb[i]={...cur,label:e.target.value,id:cur.id||`btn_${Date.now().toString(36)}${i}`};set('botoes',nb);}} placeholder={`Botão ${i+1}`} style={IS}/><button onClick={()=>{const nb=[...bts];nb.splice(i,1);set('botoes',nb);}} style={{background:'none',border:'none',color:'#ff4757',cursor:'pointer',fontSize:15,padding:'0 4px',flexShrink:0}}>×</button></div>)}{bts.length<3&&<button onClick={()=>set('botoes',[...bts,{label:'',id:`btn_${Date.now().toString(36)}${bts.length}`}])} style={{width:'100%',padding:'6px 0',background:'rgba(62,207,255,.08)',border:'1px dashed rgba(62,207,255,.3)',borderRadius:6,color:'#3ecfff',fontSize:11,cursor:'pointer'}}>+ Adicionar botão</button>}</Fld><Fld label=""><label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 10px',background:cfg.ia_menu_ativo?'rgba(244,114,182,.08)':'rgba(255,255,255,.03)',border:`1px solid ${cfg.ia_menu_ativo?'rgba(244,114,182,.3)':'rgba(255,255,255,.08)'}`,borderRadius:7}}><div onClick={()=>set('ia_menu_ativo',!cfg.ia_menu_ativo)} style={{width:32,height:18,borderRadius:9,background:cfg.ia_menu_ativo?'#f472b6':'rgba(255,255,255,.1)',position:'relative',transition:'.2s',flexShrink:0,cursor:'pointer'}}><div style={{position:'absolute',top:2,left:cfg.ia_menu_ativo?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'.2s'}}/></div><div><div style={{fontSize:11,fontWeight:700,color:cfg.ia_menu_ativo?'#f472b6':'rgba(255,255,255,.5)'}}>🤖 IA no menu</div><div style={{fontSize:10,color:'rgba(255,255,255,.3)'}}>Responde texto livre</div></div></label></Fld></>}
 
         {node.data.tipo==='enviar_lista'&&<><Fld label="Mensagem"><textarea value={cfg.corpo||''} onChange={e=>set('corpo',e.target.value)} rows={2} placeholder="Selecione uma opção:" style={TA}/></Fld><Fld label="Label do botão"><input value={cfg.label_botao||''} onChange={e=>set('label_botao',e.target.value)} placeholder="Ver opções" style={IS}/></Fld><Fld label="Itens" hint="ID = porta de saída">{(()=>{const itens=Array.isArray(cfg.itens)?cfg.itens:[];const setI=arr=>set('itens',arr);return(<>{itens.map((it,i)=><div key={i} style={{display:'flex',gap:4,marginBottom:5,alignItems:'center'}}><input value={it.id||''} onChange={e=>{const n=[...itens];n[i]={...it,id:e.target.value.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'')};setI(n);}} placeholder="id" style={{...IS,width:80,fontFamily:'monospace',fontSize:10,flex:'0 0 80px'}}/><input value={it.titulo||''} onChange={e=>{const n=[...itens];n[i]={...it,titulo:e.target.value};setI(n);}} placeholder="Título" style={{...IS,flex:1,fontSize:10.5}}/><button onClick={()=>setI(itens.filter((_,j)=>j!==i))} style={{background:'none',border:'none',color:'#ff4757',cursor:'pointer',fontSize:14,padding:'0 3px'}}>×</button></div>)}<button onClick={()=>setI([...itens,{id:'',titulo:''}])} style={{width:'100%',padding:'5px 0',background:'rgba(62,207,255,.05)',border:'1px dashed rgba(62,207,255,.25)',borderRadius:5,color:'#3ecfff',fontSize:11,cursor:'pointer'}}>+ Adicionar item</button></>);})()}</Fld></>}
 
@@ -387,8 +392,18 @@ function PropsPanel({ node, onChange, onDelete }) {
           const cats = [...new Set(IA_TOOLS_LIST.map(t => t.cat))];
           return (
             <>
-              <Fld label="Contexto/assunto"><input value={cfg.contexto||''} onChange={e=>set('contexto',e.target.value)} placeholder="suporte, comercial, geral..." style={IS}/></Fld>
-              <Fld label="Instrução extra"><textarea value={cfg.prompt||''} onChange={e=>set('prompt',e.target.value)} rows={3} placeholder="O cliente já está identificado. Ajude com suporte técnico." style={TA}/></Fld>
+              <Fld label="Contexto (prompt base)" hint="Puxa o prompt da aba Prompts IA — o coração da IA neste nó">
+                <select value={cfg.contexto||''} onChange={e=>set('contexto',e.target.value)} style={{...IS,cursor:'pointer'}}>
+                  <option value="">— padrão (Outros/Fallback) —</option>
+                  {contextos.map(p => <option key={p.slug} value={p.slug}>{p.nome} ({p.slug})</option>)}
+                  {cfg.contexto && !contextos.some(p=>p.slug===cfg.contexto) && (
+                    <option value={cfg.contexto}>⚠ atual (não é um prompt válido): {cfg.contexto}</option>
+                  )}
+                </select>
+              </Fld>
+              <Fld label="Instruções extras (opcional)" hint="Somado por cima do prompt do contexto. Vazio = usa só o prompt da aba Prompts.">
+                <textarea value={cfg.prompt||''} onChange={e=>set('prompt',e.target.value)} rows={4} placeholder="Ex.: Neste nó, foque só em queda total de conexão." style={TA}/>
+              </Fld>
               <Fld label="Modelo">
                 <select value={cfg.modelo||'haiku'} onChange={e=>set('modelo',e.target.value)} style={{...IS,cursor:'pointer'}}>
                   <option value="haiku">⚡ Claude Haiku — rápido</option>

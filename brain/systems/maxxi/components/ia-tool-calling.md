@@ -2,9 +2,9 @@
 title: IA com Tool Calling
 type: component
 created: 2026-06-30
-last_updated: 2026-06-30
+last_updated: 2026-07-02
 status: active
-related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Motor de Fluxo]]", "[[Integração SGP]]", "[[Modelo de Dados]]", "[[SGP]]"]
+related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Motor de Fluxo]]", "[[Integração SGP]]", "[[Modelo de Dados]]", "[[SGP]]", "[[Auditoria SGP ↔ tools da IA (2026-07-02)]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
 aliases: ["IA com Tool Calling", "IA", "Claude", "tool calling", "iaTools", "promptService", "ia_responde", "ia_roteador", "prompts"]
 tags: [backend, ia, anthropic, tools]
@@ -19,8 +19,31 @@ A camada de IA do Maxxi usa **Anthropic Claude** (`claude-haiku-4-5-20251001` po
 Em `motorFluxo.js`, `processarIAResponde`:
 - Carrega o prompt do slug (`cfg.contexto`, default `outros`) via `resolverPrompt`, compõe o `system` com o contexto do cliente identificado e regras explícitas de uso de tool (executar silenciosamente, nunca inventar contrato/CPF/protocolo).
 - Roda um **loop de até 5 rounds** (`ai.messages.create` com `tools`): trata `stop_reason` `end_turn` (responde) e `tool_use` (executa as tools do bloco, anexa `tool_result`, continua).
-- Histórico por nó (`_ia_hist_<id>`, últimos 20 turns); `max_turnos` default 6 antes de sair pela porta `max_turnos`.
+- Histórico por nó (`_ia_hist_<id>`, **`.slice(-50)`** mensagens ≈ 25 trocas); `max_turnos` default 6 antes de sair pela porta `max_turnos`. ⚠️ **Limitação:** os dados coletados vivem só nesse histórico (sliding window), não em estrutura — cadastro longo perdia cidade/plano com a janela antiga de 20. O `-50` é paliativo; melhoria estrutural (extração de campos / sumário / "cache") na pauta de [[Ambiente de testes + próximos passos (2026-06-30)]].
 - Tools ativas: lista de suporte por padrão; `precadastrar_cliente` (sensível) só entra se `cfg.tools_ativas` incluir. Resultados especiais `__TRANSFERIR__`/`__ENCERRAR__` roteiam o fluxo (portas `transferir`/`resolvido`).
+
+### Campos do nó: `contexto` × `instrução` × `tools_ativas`
+
+São três campos com papéis distintos (fonte de confusão comum):
+
+| Campo | O que é | Efeito |
+|---|---|---|
+| `contexto` | **slug** de um prompt da tabela `prompts_ia` (default `outros`) | vira a **base** do system prompt (`resolverPrompt(slug)`). Se o slug **não existir**, cai no prompt genérico de fallback |
+| `instrucao` (editor: "instruções extras"; motor lê `cfg.instrucao ?? cfg.prompt`) | instrução **específica daquele nó** | é **somada por cima** da base — `montarSystemPrompt` ([[Motor de Fluxo|fluxoHelpers]]) compõe `base + "Instrução específica: {instrucao}" + dados do cliente + regras de tool` |
+| `tools_ativas` | lista de nomes de tool | define **quais** tools a IA pode chamar nesse nó. A IA só chama tools que estão em `IA_TOOLS` **E** nessa lista. **O prompt NÃO registra tools** — só orienta quando/como usar |
+
+**Armadilha real (vista no fluxo de produção):** alguns nós põem o prompt inteiro em `instrucao` e setam `contexto` para um valor que **não é um slug válido** (ex.: `"Suporte Técnico"` com espaço/maiúscula ≠ slug `suporte`). Resultado: a base vira o **genérico de fallback** e editar o prompt "Suporte técnico" na tela **não afeta o nó**. Para a tela Prompts IA ser a fonte da verdade, o `contexto` precisa bater **exatamente** com o slug e a `instrucao` ficar curta/vazia.
+
+> Mitigação no editor: o campo **Contexto** virou um **dropdown** que puxa os slugs de `prompts_ia` (menos `regras`/`estilo`), eliminando o erro de digitação; valores legados inválidos aparecem com `⚠` pra serem trocados. A **instrução extra** salva em `cfg.prompt` (o motor lê `cfg.instrucao ?? cfg.prompt`).
+>
+> ⚠️ **Detalhe de arquitetura:** o painel de propriedades do editor é uma função `PropsPanel` **inline dentro de `apps/web/src/pages/FluxoEditor.jsx`** (usada na linha do `<PropsPanel .../>`). O arquivo `apps/web/src/components/fluxo/PropsPanel.jsx` é **código morto** (não é importado em lugar nenhum) — mexer nele não afeta o editor. Edite sempre o inline do `FluxoEditor`.
+
+## Tela Prompts IA — 3 abas
+
+`apps/web/src/pages/PromptsIA.jsx` (`GET/PUT /prompts`):
+- **Prompts:** edita as linhas de `prompts_ia` (conteúdo + modelo/provedor/temperatura). `regras`/`estilo` são blocos reutilizáveis (sem modelo) injetados nos outros via placeholders. "Restaurar padrão" volta `conteudo = padrao`.
+- **Catálogo:** lista **read-only** das tools (referência: nome, categoria, endpoint SGP, params, status Ativo/Requer-config). É uma lista **fixa no front** (`TOOLS_CATALOG`), espelho manual do `iaTools.js` — e só renderiza as categorias Diagnóstico/Atendimento/Financeiro, **escondendo as tools Comercial** (pré-cadastro, listar planos/vencimentos).
+- **Testar Tools:** testador manual — escolhe a tool, preenche params e roda `POST /sysconfig/tools/test` (executa **de verdade** no SGP). As marcadas com ⚠️ (`criar_chamado`/`promessa_pagamento`/`precadastrar_cliente`) **gravam dados reais** — é o equivalente manual ao gate de sandbox dos [[Testes de Fluxo]].
 
 ## `ia_roteador` — classificador de intenção
 
@@ -28,7 +51,9 @@ Em `motorFluxo.js`, `processarIAResponde`:
 
 ## `iaTools.js` — 15 ferramentas
 
-Definições no formato Anthropic (`input_schema`) e o executor `executarTool(name, input, ctx)`. As tools: `verificar_conexao`, `consultar_manutencao`, `criar_chamado`, `segunda_via_boleto`, `promessa_pagamento`, `historico_ocorrencias`, `status_rede`, `consultar_onu_acs` (stub ACS), `reiniciar_onu_acs` (stub ACS), `consultar_radius`, `listar_planos_ativos` (lê a tabela `planos`), `listar_vencimentos`, `precadastrar_cliente`, `transferir_para_humano`, `encerrar_atendimento`. `executarTool` prioriza `input.contrato` e cai para `ctx.cliente.contrato`. Todas formatam um texto amigável de retorno para a IA. Implementação SGP em [[Integração SGP]].
+Definições no formato Anthropic (`input_schema`) e o executor `executarTool(name, input, ctx)`. As tools: `verificar_conexao`, `consultar_manutencao`, `criar_chamado`, `segunda_via_boleto`, `promessa_pagamento`, `historico_ocorrencias`, `status_rede`, `consultar_onu_acs` (stub ACS), `reiniciar_onu_acs` (stub ACS), `consultar_radius`, `listar_planos_ativos` (lê a tabela `planos`; **cidade vazia no cadastro = vale para todas as cidades** + multi-cidade por vírgula; cita **promoção** `valor_promocional`/`promo_meses` — "R$ X nos primeiros N meses, depois R$ Y" — e **benefícios** `beneficios` — "inclui: Globoplay, …"), `listar_vencimentos`, `precadastrar_cliente`, `transferir_para_humano`, `encerrar_atendimento`. `executarTool` prioriza `input.contrato` e cai para `ctx.cliente.contrato`. Todas formatam um texto amigável de retorno para a IA. Implementação SGP em [[Integração SGP]].
+
+> ⚠️ **Armadilha integração ↔ tool (mesma classe do editor↔motor):** o texto de retorno de cada tool tem de ler os **campos reais** que a função de `integrations.js` devolve — as tools foram escritas depois dos nós e algumas divergiram. Caso corrigido: `segunda_via_boleto` lia `r.link`/`r.pix`/`r.valor` (o retorno traz `link_cobranca`/`pix_copia_cola`/`valor_cobrado`) e **sempre** dizia "não encontrei boleto"; fix extraiu `formatarBoletoIA` para **`iaToolsHelpers.js`** (módulo puro testável, mesma ideia do `fluxoHelpers`, porque `iaTools.js` puxa knex e não roda em teste). Ainda abertos nesse eixo (`historico_ocorrencias`, `criar_chamado` extras, nó `promessa_pagamento`): ver [[Auditoria SGP ↔ tools da IA (2026-07-02)]].
 
 ## `promptService.js` — composição de prompts
 

@@ -31,7 +31,15 @@
       "date": "2026-06-30",
       "title": "integrations.js — referência completa (autoral)",
       "status": "absorbed"
+    },
+    {
+      "id": "sgp-api-postman",
+      "type": "docs",
+      "path": "raw/sources/docs/2026-07-01_sgp-api-postman.json",
+      "date": "2026-07-01",
+      "title": "SGP — API (coleção Postman oficial, 237 endpoints em 13 módulos). Extração legível em 2026-07-01_sgp-api-completa.md",
+      "status": "absorbed"
     }
   ],
-  "last_updated": "2026-06-30"
+  "last_updated": "2026-07-01"
 }

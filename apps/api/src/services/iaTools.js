@@ -6,10 +6,13 @@ import {
   consultarClientes, segundaViaBoleto, promessaPagamento,
   criarChamado, verificarConexao, consultarManutencao,
   historicoOcorrencias,
-  statusRede, consultarOnuAcs, reiniciarOnuAcs, consultarRadius,
+  statusRede, reiniciarOnuAcs, consultarRadius,
   precadastrarCliente, listarVencimentos,
 } from './integrations.js';
 import { getDb } from '../config/db.js';
+import { formatarBoletoIA } from './iaToolsHelpers.js';
+import { diagnosticoOnu } from './sgpDb.js';
+import { formatarDiagnosticoOnu } from './sgpHelpers.js';
 
 // ── DEFINIÇÃO DAS FERRAMENTAS ──────────────────────────────────────────────
 export const IA_TOOLS = [
@@ -26,7 +29,7 @@ export const IA_TOOLS = [
   },
   {
     name: 'consultar_manutencao',
-    description: 'Verifica se há manutenção ativa na área do cliente. Use quando cliente estiver offline.',
+    description: 'Verifica se há manutenção ativa que AFETE a região (POP) do cliente. Use quando o cliente estiver offline. Só retorna manutenção que realmente afeta este cliente; se não houver, siga o diagnóstico normal (não invente manutenção).',
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -80,12 +83,12 @@ export const IA_TOOLS = [
   },
   {
     name: 'status_rede',
-    description: 'Verifica o status geral da rede CITmax. Use para checar se há problemas generalizados antes de diagnosticar o cliente.',
+    description: 'Verifica o status geral da rede NetGo. Use para checar se há problemas generalizados antes de diagnosticar o cliente.',
     input_schema: { type: 'object', properties: {} },
   },
   {
     name: 'consultar_onu_acs',
-    description: 'Lê dados da ONU do cliente via ACS: sinal óptico Rx/Tx, uptime, firmware, IP WAN. Use quando suspeitar de falha óptica ou problema no equipamento.',
+    description: 'Lê o sinal óptico (Rx/Tx em dBm) e o status do equipamento (online/offline, uptime) do cliente. Use no diagnóstico de suporte quando o cliente estiver offline ou com lentidão, para saber se o problema é na fibra/equipamento. Não repasse números técnicos ao cliente — fale simples.',
     input_schema: {
       type: 'object',
       properties: {
@@ -159,6 +162,21 @@ export const IA_TOOLS = [
     },
   },
   {
+    name: 'salvar_dado',
+    description: 'Salva dados que o cliente informou, como variáveis persistentes da conversa. Sempre que o cliente fornecer um dado (nome, cpf, data de nascimento, email, celular, logradouro, numero, bairro, cidade, cep, plano, vencimento, etc.), salve TODOS os dados novos desta mensagem numa ÚNICA chamada. NUNCA pergunte de novo um dado já salvo. Use nomes de campo curtos e sem acento (ex.: cidade, plano, data_nasc).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        dados: {
+          type: 'object',
+          description: 'Mapa campo→valor. Ex.: {"cidade":"Natal","plano":"450M","vencimento":"10"}',
+          additionalProperties: { type: 'string' },
+        },
+      },
+      required: ['dados'],
+    },
+  },
+  {
     name: 'transferir_para_humano',
     description: 'Transfere para atendente humano. Use APENAS quando o cliente pedir explicitamente.',
     input_schema: {
@@ -181,11 +199,19 @@ export const IA_TOOLS = [
 ];
 
 // ── EXECUTOR DE FERRAMENTAS ────────────────────────────────────────────────
+// Tools que GRAVAM/agem no mundo real — simuladas em modo sandbox (teste de fluxo).
+const TOOLS_ESCRITA = new Set(['criar_chamado', 'promessa_pagamento', 'precadastrar_cliente', 'reiniciar_onu_acs']);
+
 export async function executarTool(name, input, ctx) {
   // input.contrato tem prioridade — IA pode selecionar contrato específico para clientes multi-contrato
   // Fallback para o contrato do contexto se IA não especificar
   const contrato = input.contrato || ctx?.cliente?.contrato;
   const cpfcnpj  = ctx?.cliente?.cpf || ctx?.cliente?.cpfcnpj || input.cpfcnpj;
+
+  // Sandbox (simulação de teste): não executa ações que gravam/alteram dados reais.
+  if (ctx?.sandbox && TOOLS_ESCRITA.has(name)) {
+    return `🧪 [sandbox] A ação "${name}" foi simulada — em produção, executaria de verdade.`;
+  }
 
   switch (name) {
     case 'verificar_conexao': {
@@ -196,9 +222,13 @@ export async function executarTool(name, input, ctx) {
     }
 
     case 'consultar_manutencao': {
-      const r = await consultarManutencao().catch(() => null);
-      if (!r?.ativa) return 'Não há manutenção ativa na sua área no momento.';
-      return `⚠️ Há manutenção ativa na sua área. Previsão de normalização: ${r.previsao || 'em breve'}. Protocolo: ${r.protocolo || 'N/A'}.`;
+      // Escopo por POP/cidade do cliente (fail-safe em consultarManutencao/sgpHelpers).
+      const scope = { popId: ctx?.cliente?.popId, cidade: ctx?.cliente?.cidade };
+      const r = await consultarManutencao(scope).catch(() => null);
+      if (!r?.ativa) return 'Não há manutenção ativa na região do cliente no momento. Siga o diagnóstico normal.';
+      const previsao = r.previsao ? ` Previsão de normalização: ${r.previsao}.` : '';
+      const central  = r.mensagemCentral ? ` (${r.mensagemCentral})` : '';
+      return `⚠️ Há manutenção ativa na região do cliente.${previsao}${central}`;
     }
 
     case 'criar_chamado': {
@@ -206,7 +236,7 @@ export async function executarTool(name, input, ctx) {
         contrato,
         input.ocorrenciatipo || 200,
         input.conteudo || 'Suporte técnico solicitado via chat',
-        { contato_nome: input.contato_nome || ctx?.cliente?.nome, contato_telefone: input.contato_telefone, usuario: 'ia_maxxi' }
+        { contato_nome: input.contato_nome || ctx?.cliente?.nome, contato_telefone: input.contato_telefone, usuario: 'ia_natalia' }
       ).catch(e => ({ erro: e.message }));
       if (r?.erro) return `Erro ao abrir chamado: ${r.erro}`;
       const protocolo = r?.protocolo || r?.id || r?.ocorrencia_id || JSON.stringify(r);
@@ -215,14 +245,7 @@ export async function executarTool(name, input, ctx) {
 
     case 'segunda_via_boleto': {
       const r = await segundaViaBoleto(cpfcnpj, contrato).catch(e => ({ erro: e.message }));
-      if (r?.erro) return `Erro ao buscar boleto: ${r.erro}`;
-      if (!r?.link && !r?.pix) return 'Não encontrei boletos em aberto para este contrato.';
-      let msg = '📄 Segunda via encontrada:\n';
-      if (r.valor)     msg += `💰 Valor: R$ ${r.valor}\n`;
-      if (r.vencimento) msg += `📅 Vencimento: ${r.vencimento}\n`;
-      if (r.pix)       msg += `\n🔑 *PIX:*\n\`${r.pix}\`\n`;
-      if (r.link)      msg += `\n🔗 [Link do boleto](${r.link})`;
-      return msg;
+      return formatarBoletoIA(r);
     }
 
     case 'promessa_pagamento': {
@@ -247,15 +270,9 @@ export async function executarTool(name, input, ctx) {
     }
 
     case 'consultar_onu_acs': {
-      const r = await consultarOnuAcs(input.serial || '').catch(e => ({ encontrado: false, mensagem: e.message }));
-      if (!r.encontrado) return r.mensagem;
-      let msg = `📡 Dados da ONU:\n`;
-      if (r.sinal_rx) msg += `• Sinal Rx: ${r.sinal_rx} dBm\n`;
-      if (r.sinal_tx) msg += `• Sinal Tx: ${r.sinal_tx} dBm\n`;
-      if (r.uptime)   msg += `• Uptime: ${r.uptime}\n`;
-      if (r.ip_wan)   msg += `• IP WAN: ${r.ip_wan}\n`;
-      if (r.status)   msg += `• Status: ${r.status}`;
-      return msg;
+      // Lê sinal óptico + status direto do banco read-only do SGP (sgpDb.js).
+      const row = await diagnosticoOnu(contrato);
+      return formatarDiagnosticoOnu(row, new Date());
     }
 
     case 'reiniciar_onu_acs': {
@@ -275,9 +292,13 @@ export async function executarTool(name, input, ctx) {
       const db = getDb();
       let q = db('planos').where({ ativo: true });
       if (input.cidade) {
-        // Match case-insensitive parcial — "natal" casa com "Natal", "Macaíba" com "macaiba" etc.
+        // cidade vazia/null = plano vale para TODAS as cidades (sempre incluído).
+        // Senão, match "contém" case-insensitive — permite multi-cidade separando por vírgula
+        // ("natal" casa com "Natal", "Macaíba" com "macaiba", e "Natal, Macaíba" casa com ambas).
         const termo = String(input.cidade).toLowerCase();
-        q = q.whereRaw('LOWER(cidade) LIKE ?', [`%${termo}%`]);
+        q = q.where(function () {
+          this.whereNull('cidade').orWhere('cidade', '').orWhereRaw('LOWER(cidade) LIKE ?', [`%${termo}%`]);
+        });
       }
       const rows = await q.orderBy([{ column: 'ordem', order: 'asc' }, { column: 'valor', order: 'asc' }]);
       if (!rows.length) {
@@ -285,11 +306,17 @@ export async function executarTool(name, input, ctx) {
           ? `Nenhum plano ativo encontrado para "${input.cidade}". Tente sem filtro de cidade.`
           : 'Nenhum plano ativo cadastrado. Avise o administrador.';
       }
+      const fmt = (v) => `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
       const linhas = rows.map(p => {
-        const valor = p.valor != null ? `R$ ${Number(p.valor).toFixed(2).replace('.', ',')}` : '—';
-        const fid   = p.fidelidade_meses ? ` · ${p.fidelidade_meses}m fidelidade` : '';
-        const cid   = p.cidade ? ` (${p.cidade})` : '';
-        return `• ${p.nome} — ${p.velocidade || '—'} — ${valor}${cid}${fid} | plano_id=${p.plano_id_sgp}`;
+        const temPromo = p.valor_promocional != null && p.promo_meses > 0;
+        const preco = temPromo
+          ? `${fmt(p.valor_promocional)} nos primeiros ${p.promo_meses} meses, depois ${p.valor != null ? fmt(p.valor) : '—'}/mês`
+          : (p.valor != null ? fmt(p.valor) : '—');
+        const fid = p.fidelidade_meses ? ` · ${p.fidelidade_meses}m fidelidade` : '';
+        const cid = p.cidade ? ` (${p.cidade})` : '';
+        const benef = String(p.beneficios || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+        const ben = benef.length ? ` · inclui: ${benef.join(', ')}` : '';
+        return `• ${p.nome} — ${p.velocidade || '—'} — ${preco}${cid}${fid}${ben} | plano_id=${p.plano_id_sgp}`;
       }).join('\n');
       return `📋 Planos disponíveis:\n${linhas}\n\n⚠️ Use o plano_id ao chamar precadastrar_cliente.`;
     }

@@ -3,6 +3,8 @@
  * Todos os endpoints, formatos e campos idênticos ao erp.js de referência
  */
 import { getDb } from '../config/db.js';
+import { normalizarData } from './fluxoHelpers.js';
+import { manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado } from './sgpHelpers.js';
 
 // ── CACHE DE CONFIG (5 min) ───────────────────────────────────────
 const cache = new Map();
@@ -54,7 +56,10 @@ async function sgpPost(path, params = {}) {
     body,
     signal: AbortSignal.timeout(12000),
   });
-  if (!res.ok) throw new Error(`SGP ${res.status} em ${path}`);
+  if (!res.ok) {
+    const corpo = await res.text().catch(() => '');
+    throw new Error(`SGP ${res.status} em ${path}${corpo ? ` — ${corpo.slice(0, 400)}` : ''}`);
+  }
   return res.json();
 }
 
@@ -250,12 +255,9 @@ export async function promessaPagamento(contrato, extras = {}) {
 // POST /api/ura/chamado/ — body JSON
 // Tipos: 5=Outros, 200=Reparo, 13=MudEndereco, 23=MudPlano, 22=ProbFatura
 export async function criarChamado(contrato, ocorrenciatipo, conteudo, extras = {}) {
-  console.log(`[SGP] criarChamado: contrato=${contrato} tipo=${ocorrenciatipo}`);
-  const raw = await sgpPostJSON('/api/ura/chamado/', {
-    contrato:       Number(contrato),
-    ocorrenciatipo: Number(ocorrenciatipo) || 5,
-    conteudo:       conteudo || 'Chamado aberto via GoCHAT',
-  });
+  const body = montarBodyChamado(contrato, ocorrenciatipo, conteudo, extras);
+  console.log(`[SGP] criarChamado: contrato=${contrato} tipo=${body.ocorrenciatipo}`);
+  const raw = await sgpPostJSON('/api/ura/chamado/', body);
   console.log(`[SGP] criarChamado resposta:`, JSON.stringify(raw));
 
   // SGP retorna diferentes formatos dependendo da versão
@@ -311,10 +313,11 @@ export async function historicoOcorrencias(contrato) {
 }
 
 // ── SGP: LISTAR PLANOS ────────────────────────────────────────────
-// POST /api/ura/planos/
+// POST /api/precadastro/plano/list — mesma família de /api/precadastro/vencimento/list.
+// (A rota antiga /api/ura/planos/ dá 404 na SGP da NetGo — mismatch de versão.)
 export async function listarPlanos(cidade) {
-  const raw = await sgpPost('/api/ura/planos/', cidade ? { cidade } : {});
-  const lista = Array.isArray(raw) ? raw : (raw?.planos || raw?.data || []);
+  const raw = await sgpPost('/api/precadastro/plano/list', cidade ? { cidade } : {});
+  const lista = Array.isArray(raw) ? raw : (raw?.planos || raw?.results || raw?.data || []);
   return lista.map(p => ({
     id:        p.id || p.plano_id,
     descricao: p.descricao || p.nome || p.plano,
@@ -324,25 +327,25 @@ export async function listarPlanos(cidade) {
 }
 
 // ── SGP: VERIFICAR MANUTENÇÃO ─────────────────────────────────────
-// GET /api/ura/manutencao/list
-export async function consultarManutencao() {
+// GET /api/ura/manutencao/list/ (endpoint é rede-inteira, sem filtro de cliente).
+// scope = { popId, cidade } → só manutenção que AFETA o cliente (escopo por POP,
+//   fail-safe: na dúvida NÃO afirma manutenção). Usado pela tool consultar_manutencao.
+// scope null → todas as manutenções ativas da rede (usado por status_rede).
+// A filtragem/escopo vive em sgpHelpers.js (pura, testada).
+export async function consultarManutencao(scope = null) {
   try {
-    const raw = await sgpGet('/api/ura/manutencao/list');
-    let itens = [];
-    if (Array.isArray(raw))                    itens = raw;
-    else if (Array.isArray(raw?.manutencoes))  itens = raw.manutencoes;
-    else if (Array.isArray(raw?.data))         itens = raw.data;
-    else if (raw?.em_manutencao || raw?.manutencao) itens = [{ descricao: 'Manutenção ativa', ativa: true }];
-
-    const ativas = itens.filter(m => m.ativa === true || m.status === 'ativo' || m.ativo === true);
-    const cidadesAfetadas = [...new Set(ativas.flatMap(m => (m.pops || []).map(p => p.cidade).filter(Boolean)))];
-    const mensagemCentral = ativas[0]?.mensagem_central || ativas[0]?.mensagem_ura || null;
-    const previsao = ativas[0]?.data_final
-      ? new Date(ativas[0].data_final).toLocaleTimeString('pt-BR', { timeZone: 'America/Fortaleza', hour:'2-digit', minute:'2-digit' })
+    const raw = await sgpGet('/api/ura/manutencao/list/');
+    console.log('[SGP] manutencao/list raw:', JSON.stringify(raw)?.slice(0, 600));
+    const itens = scope ? manutencaoParaCliente(raw, scope).itens : manutencoesAtivas(raw);
+    const cidadesAfetadas = [...new Set(itens.flatMap(m => (m.pops || []).map(p => p.cidade).filter(Boolean)))];
+    const mensagemCentral = itens[0]?.mensagem_central || itens[0]?.mensagem_ura || null;
+    const fim = parseDataSgp(itens[0]?.data_final);
+    const previsao = fim
+      ? fim.toLocaleTimeString('pt-BR', { timeZone: 'America/Fortaleza', hour:'2-digit', minute:'2-digit' })
       : null;
-
-    return { ativa: ativas.length > 0, total: ativas.length, itens: ativas, cidadesAfetadas, mensagemCentral, previsao };
-  } catch {
+    return { ativa: itens.length > 0, total: itens.length, itens, cidadesAfetadas, mensagemCentral, previsao };
+  } catch (e) {
+    console.error('[SGP] consultarManutencao:', e.message);
     return { ativa: false, total: 0, itens: [], cidadesAfetadas: [], mensagemCentral: null, previsao: null };
   }
 }
@@ -462,60 +465,75 @@ export async function listarVencimentos() {
 // logradouro, numero, bairro, cidade, plano_id, vencimento_id.
 // Os demais usam defaults sensatos (uf=RN, pais=BR, formacobranca=1, etc).
 export async function precadastrarCliente(d = {}) {
+  // SGP só exige nome + logradouro no /api/precadastro/F. Mantemos cpf/celular
+  // por qualidade de dado (lead sem contato/CPF é inútil).
   if (!d.nome)        throw new Error('nome é obrigatório');
   if (!d.cpf && !d.cpfcnpj) throw new Error('cpf é obrigatório');
   if (!d.celular)     throw new Error('celular é obrigatório');
-  if (!d.cidade)      throw new Error('cidade é obrigatória');
-  if (!d.plano_id)    throw new Error('plano_id é obrigatório');
-  if (!d.vencimento_id) throw new Error('vencimento_id é obrigatório');
+  if (!d.logradouro)  throw new Error('logradouro é obrigatório');
 
   const cpfDigits = String(d.cpf || d.cpfcnpj).replace(/\D/g, '');
   const celDigits = String(d.celular).replace(/\D/g, '');
   const cidade    = String(d.cidade || '').toLowerCase();
 
-  // Defaults inteligentes por cidade (NetGo opera em RN)
-  const popPadrao = (() => {
-    if (cidade.includes('gostoso'))                            return 3;
-    if (cidade.includes('gonçalo') || cidade.includes('goncalo')) return 4;
-    return 1; // Natal e Macaíba
-  })();
-  const portadorPadrao = cidade.includes('gostoso') ? 18 : 16;
+  // precadastro_ativar: 0 = LEAD (default — a equipe NetGo monta o contrato depois);
+  // 1 = cadastro definitivo (cria o contrato; exige os campos "[Para criação de contrato]").
+  const ativar = Number(d.precadastro_ativar ?? 0);
 
+  // O plano/vencimento desejados vão na observação p/ a equipe finalizar o contrato.
+  const desejo = [
+    d.plano_id      ? `Plano desejado (id ${d.plano_id})`      : '',
+    d.vencimento_id ? `Vencimento dia (id ${d.vencimento_id})` : '',
+  ].filter(Boolean).join(' · ');
+  const observacao = [d.observacao || 'Pré-cadastro via IA GoCHAT', desejo].filter(Boolean).join(' | ');
+
+  // Campos do CLIENTE (todos opcionais no SGP além de nome/logradouro).
   const params = {
     nome: d.nome,
     cpfcnpj: cpfDigits,
-    datanasc: d.datanasc || '',
+    datanasc: normalizarData(d.datanasc),
     email: d.email || '',
     celular: celDigits,
     logradouro: d.logradouro || '',
     numero: String(d.numero || ''),
     complemento: d.complemento || '',
     bairro: d.bairro || '',
-    cidade: d.cidade,
+    cidade: d.cidade || '',
     cep: String(d.cep || '').replace(/\D/g, ''),
     pontoreferencia: d.pontoreferencia || '',
-    plano_id: String(d.plano_id),
-    vencimento_id: String(d.vencimento_id),
     uf: d.uf || 'RN',
     pais: d.pais || 'BR',
-    login: d.login || cpfDigits,
-    senha: d.senha || '123456',
-    pop_id: String(d.pop_id || popPadrao),
-    portador_id: String(d.portador_id || portadorPadrao),
-    nas_id: String(d.nas_id || 2),
-    os_instalacao: d.os_instalacao === false ? 'False' : 'True',
-    formacobranca_id: String(d.formacobranca_id || 1),
-    precadastro_ativar: String(d.precadastro_ativar ?? 1),
-    observacao: d.observacao || 'Pré-cadastro via IA GoCHAT',
+    observacao,
+    precadastro_ativar: String(ativar),
     ...(d.rg ? { rg: d.rg } : {}),
     ...(d.rg_emissor ? { rg_emissor: d.rg_emissor } : {}),
     ...(d.map_ll ? { map_ll: d.map_ll } : {}),
-    ...(d.condominio ? { condominio: String(d.condominio) } : {}),
-    ...(d.vendedor_id ? { vendedor_id: String(d.vendedor_id) } : {}),
     ...(d.midia_id ? { midia_id: String(d.midia_id) } : {}),
   };
 
+  // Modo cadastro definitivo (B): só aqui mandamos os campos de criação de contrato.
+  if (ativar === 1) {
+    const popPadrao = cidade.includes('gostoso') ? 3
+      : (cidade.includes('gonçalo') || cidade.includes('goncalo')) ? 4 : 1;
+    const portadorPadrao = cidade.includes('gostoso') ? 18 : 16;
+    Object.assign(params, {
+      plano_id:         String(d.plano_id || ''),
+      vencimento_id:    String(d.vencimento_id || ''),
+      pop_id:           String(d.pop_id || popPadrao),
+      portador_id:      String(d.portador_id || portadorPadrao),
+      nas_id:           String(d.nas_id || 53),   // 53 = RTR_BNG_NETGO_02 (NetGo)
+      login:            d.login || cpfDigits,
+      senha:            d.senha || '123456',
+      os_instalacao:    '1',                       // doc: gerar OS de instalação = valor 1
+      formacobranca_id: String(d.formacobranca_id || 1),
+      ...(d.vendedor_id ? { vendedor_id: String(d.vendedor_id) } : {}),
+      ...(d.condominio ? { condominio: String(d.condominio) } : {}),
+    });
+  }
+
+  console.log('[SGP] precadastro/F params:', JSON.stringify(params));
   const raw = await sgpPost('/api/precadastro/F', params);
+  console.log('[SGP] precadastro/F resposta:', JSON.stringify(raw));
 
   // Normalização de resposta — SGP costuma retornar { message, id } ou erros variados
   const ok = !raw?.error && !raw?.errors && (

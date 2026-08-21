@@ -103,4 +103,4 @@ Persistir o estado de execução; `aguardar_tempo` é simulado (avança na hora 
 
 ## See Also
 
-- [[Catálogo de Nós]] · [[IA com Tool Calling]] · [[Integração SGP]] · [[Canais e Webhooks]]
+- [[Catálogo de Nós]] · [[IA com Tool Calling]] · [[Integração SGP]] · [[Canais e Webhooks]] · [[Testes de Fluxo]]

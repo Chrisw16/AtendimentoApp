@@ -18,7 +18,7 @@ import {
   evolutionEnviarCTA, evolutionEnviarImagem, evolutionEnviarAudio,
   evolutionEnviarArquivo,
 } from './integrations.js';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
 import { criarFilaPorChave } from './filaPorChave.js';
 
 // Estado de execução em memória (por conversa_id)
@@ -30,25 +30,37 @@ const estadosExecucao = new Map();
 const filaConversa = criarFilaPorChave();
 
 // ── ENTRY POINT ───────────────────────────────────────────────────
-export function processarConversa(conversa, mensagemCliente) {
-  return filaConversa(conversa.id, () => processarConversaInterno(conversa, mensagemCliente));
+export function processarConversa(conversa, mensagemCliente, opts = {}) {
+  // Sandbox/teste traz o PRÓPRIO Map de estados: o estado é isolado e não toca
+  // o `estadosExecucao` global, então não precisa da fila — e não deve entrar
+  // nela. A rota pública de teste usa um id fixo por fluxo (`share:<id>`), de
+  // modo que serializar ali colocaria TODOS os visitantes numa fila só, cada um
+  // esperando o round-trip de IA/SGP do anterior.
+  if (opts.estados) return processarConversaInterno(conversa, mensagemCliente, opts);
+
+  // Produção: uma conversa por vez, senão duas mensagens seguidas do mesmo
+  // cliente intercalam nos `await` e corrompem o estado compartilhado.
+  return filaConversa(conversa.id, () => processarConversaInterno(conversa, mensagemCliente, opts));
 }
 
-async function processarConversaInterno(conversa, mensagemCliente) {
-  const db = getDb();
+async function processarConversaInterno(conversa, mensagemCliente, opts = {}) {
+  const db      = opts.db      || getDb();
+  const estados = opts.estados || estadosExecucao;  // sandbox/teste injeta um Map isolado
+  const enviar  = opts.enviar  || enviarResposta;   // sandbox captura em vez de enviar no WhatsApp
+  const sandbox = !!opts.sandbox;
 
-  // Busca fluxo ativo — usa campo dados (editor visual) com fallback para nos/conexoes
-  const fluxo = await db('fluxos').where({ ativo: true }).first();
-  if (!fluxo) return processarIADireta(conversa, mensagemCliente);
+  // Busca fluxo ativo — ou usa o fluxo injetado (teste de um fluxo específico)
+  const fluxo = opts.fluxo || await db('fluxos').where({ ativo: true }).first();
+  if (!fluxo) return sandbox ? undefined : processarIADireta(conversa, mensagemCliente);
 
   const dados = parseDados(fluxo);
   console.log(`[Motor] Fluxo "${fluxo.nome}": ${dados.nodes?.length || 0} nós, ${dados.edges?.length || 0} edges`);
   if (!dados.nodes?.length) {
     console.warn('[Motor] Fluxo sem nós — caindo para IA direta');
-    return processarIADireta(conversa, mensagemCliente);
+    return sandbox ? undefined : processarIADireta(conversa, mensagemCliente);
   }
 
-  let estado = estadosExecucao.get(conversa.id) || {
+  let estado = estados.get(conversa.id) || {
     noAtual:  null,
     contexto: { cliente: {} },
     historico: [],
@@ -60,11 +72,12 @@ async function processarConversaInterno(conversa, mensagemCliente) {
     const noInicio = dados.nodes.find(n => n.tipo === 'inicio' || n.tipo === 'gatilho_keyword');
     estado.noAtual = noInicio?.id;
   }
-  if (!estado.noAtual) return processarIADireta(conversa, mensagemCliente);
+  if (!estado.noAtual) return sandbox ? undefined : processarIADireta(conversa, mensagemCliente);
 
   const ctx = {
     conversa, mensagem: mensagemCliente,
     dados, estado, db, respostas: [],
+    estados, sandbox,
     instancia: conversa.canal_instancia || conversa.canal || 'default',
     numero:    conversa.telefone,
   };
@@ -90,18 +103,18 @@ async function processarConversaInterno(conversa, mensagemCliente) {
     console.log(`[Motor] Resultado nó ${no.tipo}: tipo=${resultado.tipo} saida=${resultado.saida}`);
 
     if (resultado.tipo === 'aguardar_input') {
-      estadosExecucao.set(conversa.id, ctx.estado);
+      estados.set(conversa.id, ctx.estado);
       break;
     }
     if (resultado.tipo === 'avancar') {
       const proxId = encontrarProximo(no.id, resultado.saida, dados.edges);
       console.log(`[Motor] Próximo nó: ${proxId || 'NENHUM (fim do fluxo)'}`);
-      if (!proxId) { estadosExecucao.delete(conversa.id); break; }
+      if (!proxId) { estados.delete(conversa.id); break; }
       ctx.estado.noAtual = proxId;
       continue;
     }
     if (resultado.tipo === 'fim') {
-      estadosExecucao.delete(conversa.id);
+      estados.delete(conversa.id);
       break;
     }
     break;
@@ -109,8 +122,9 @@ async function processarConversaInterno(conversa, mensagemCliente) {
 
   console.log(`[Motor] Respostas geradas: ${ctx.respostas.length}`);
   for (const resp of ctx.respostas) {
-    await enviarResposta(conversa, resp, ctx.instancia);
+    await enviar(conversa, resp, ctx.instancia);
   }
+  return { respostas: ctx.respostas, estado: estados.get(conversa.id) || null };
 }
 
 // ── DESPACHANTE ───────────────────────────────────────────────────
@@ -285,6 +299,7 @@ async function processarNo(no, ctx) {
             status:   ct.status,
             cidade:   ct.cidade || '',
             email:    data.email || '',
+            fone:     data.fone || '',
             popId:    ct.popId,
             titulos_abertos: ct.titulos_abertos,
             valor_aberto:    ct.valor_aberto,
@@ -407,6 +422,10 @@ async function processarNo(no, ctx) {
     case 'abrir_chamado': {
       const contrato = getCtxVal(ctx, 'cliente.contrato');
       if (!contrato) return avancar('erro');
+      if (ctx.sandbox) {
+        ctx.estado.contexto.chamado = { protocolo: 'TESTE-0000', aberto: true, cliente: '' };
+        return avancar('sucesso');
+      }
       try {
         // criarChamado(contrato, tipo, descricao) — fiel ao erp.js original
         const data = await criarChamado(
@@ -429,6 +448,11 @@ async function processarNo(no, ctx) {
     case 'promessa_pagamento': {
       const contrato = getCtxVal(ctx, 'cliente.contrato');
       if (!contrato) return avancar('erro');
+      if (ctx.sandbox) {
+        ctx.estado.contexto.promessa = { dias: 3, data: '(simulado)', protocolo: 'TESTE-0000' };
+        ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem_sucesso || '✅ Promessa registrada! (simulado)', ctx) });
+        return avancar('sucesso');
+      }
       try {
         const data = await sgpPromessaPagamento(contrato);
         if (data.adimplente) {
@@ -515,9 +539,11 @@ async function processarNo(no, ctx) {
         ctx.respostas.push({ tipo: 'texto', texto: msg });
         return avancar('fora_horario');
       }
-      await conversaRepo.atualizar(ctx.conversa.id, { status: 'aguardando', aguardando_desde: new Date().toISOString(), agente_id: null });
-      broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id));
-      estadosExecucao.delete(ctx.conversa.id);
+      if (!ctx.sandbox) {
+        await conversaRepo.atualizar(ctx.conversa.id, { status: 'aguardando', aguardando_desde: new Date().toISOString(), agente_id: null });
+        broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id));
+      }
+      ctx.estados.delete(ctx.conversa.id);
       return fim();
     }
 
@@ -538,7 +564,7 @@ async function processarNo(no, ctx) {
     }
 
     case 'nota_interna':
-      await mensagemRepo.criar({ conversa_id: ctx.conversa.id, origem: 'sistema', tipo: 'nota', texto: interpolar(cfg.nota || '', ctx) }).catch(() => {});
+      if (!ctx.sandbox) await mensagemRepo.criar({ conversa_id: ctx.conversa.id, origem: 'sistema', tipo: 'nota', texto: interpolar(cfg.nota || '', ctx) }).catch(() => {});
       return avancar('saida');
 
     case 'enviar_email':
@@ -555,7 +581,7 @@ async function processarNo(no, ctx) {
           // Grava a escala junto: sem ela o dashboard assume 0-10 e a nota
           // máxima de uma escala 1-5 cai na faixa de detrator.
           const escala = parseInt(cfg.escala, 10) === 5 ? 5 : 10;
-          await ctx.db('satisfacao').insert({ conversa_id: ctx.conversa.id, nota, escala, canal: ctx.conversa.canal }).catch(() => {});
+          if (!ctx.sandbox) await ctx.db('satisfacao').insert({ conversa_id: ctx.conversa.id, nota, escala, canal: ctx.conversa.canal }).catch(() => {});
           return avancar(aval.porta);
         }
         ctx.estado.aguardando = no.id;
@@ -569,9 +595,11 @@ async function processarNo(no, ctx) {
 
     case 'encerrar': {
       if (cfg.mensagem) ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem, ctx) });
-      await conversaRepo.encerrar(ctx.conversa.id).catch(() => {});
-      broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id).catch(() => ({})));
-      estadosExecucao.delete(ctx.conversa.id);
+      if (!ctx.sandbox) {
+        await conversaRepo.encerrar(ctx.conversa.id).catch(() => {});
+        broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id).catch(() => ({})));
+      }
+      ctx.estados.delete(ctx.conversa.id);
       return fim();
     }
 
@@ -608,12 +636,16 @@ async function processarIAResponde(no, ctx) {
     .map(([k, v]) => `cliente.${k}: ${v}`)
     .join('\n');
 
+  // Ficha de dados já coletados (reinjetada todo turno para a IA não re-perguntar).
+  const ficha = montarFichaColetada(ctx.estado.contexto);
+
   // O editor salva a instrução extra em cfg.instrucao; mantém cfg.prompt por compatibilidade.
   const instrucao = cfg.instrucao ?? cfg.prompt;
   const system = montarSystemPrompt({
     systemBase,
     instrucao,
     ctxCliente,
+    ficha,
     regrasTools: `## REGRAS CRÍTICAS DE FERRAMENTAS
 - Você tem acesso a ferramentas reais (tool_use). Use-as diretamente — NUNCA escreva o nome delas no texto.
 - ERRADO: "Deixa eu verificar... verificar_conexao"
@@ -644,11 +676,13 @@ async function processarIAResponde(no, ctx) {
     'promessa_pagamento', 'historico_ocorrencias',
     'transferir_para_humano', 'encerrar_atendimento',
   ];
-  const tools = IA_TOOLS.filter(t => toolsAtivas.includes(t.name));
+  // salvar_dado sempre disponível — memória não pode ser desligada por config de nó.
+  const tools = IA_TOOLS.filter(t => toolsAtivas.includes(t.name) || t.name === 'salvar_dado');
 
   try {
     const ai = await getAnthropicClient();
     let texto = '';
+    let faladoNoTurno = '';   // tudo que a IA falou neste turno (p/ histórico coerente)
     let transferiu = false;
     let resolveu = false;
 
@@ -672,15 +706,44 @@ async function processarIAResponde(no, ctx) {
       }
 
       if (res.stop_reason === 'tool_use') {
+        // A IA pode mandar texto JUNTO de um tool_use (ex.: "confirmo seus dados,
+        // posso finalizar?" + salvar_dado). Sem empilhar aqui, essa fala se perde e a
+        // conversa trava esperando um "sim" que o cliente nunca viu (Respostas geradas: 0).
+        const textoJunto = res.content.find(b => b.type === 'text')?.text?.trim();
+        if (textoJunto) {
+          ctx.respostas.push({ tipo: 'texto', texto: textoJunto });
+          faladoNoTurno = faladoNoTurno ? `${faladoNoTurno}\n${textoJunto}` : textoJunto;
+        }
+
         // Processa todos os tool_use do bloco
         const toolUses = res.content.filter(b => b.type === 'tool_use');
         const toolResults = [];
 
         for (const tu of toolUses) {
+          // salvar_dado é tratada aqui (não no executarTool) porque precisa mutar
+          // o estado do fluxo, que o executarTool(name,input,{cliente,conversa,sandbox}) não vê.
+          if (tu.name === 'salvar_dado') {
+            const dados = tu.input?.dados || {};
+            const salvos = [];
+            for (const [campo, valor] of Object.entries(dados)) {
+              const chave = normalizarNomeCampo(campo);
+              if (!chave || CAMPOS_RESERVADOS.has(chave)) continue;
+              ctx.estado.contexto[chave] = String(valor ?? '');
+              salvos.push(`${chave}=${ctx.estado.contexto[chave]}`);
+            }
+            console.log(`[IA] salvar_dado →`, salvos.length ? salvos.join(', ') : '(nada salvo)', '| raw:', dados);
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: tu.id,
+              content: salvos.length ? `✓ Salvei: ${salvos.join(', ')}` : 'Nenhum dado para salvar.',
+            });
+            continue;
+          }
           console.log(`[IA] Executando tool: ${tu.name}`, tu.input);
           const result = await executarTool(tu.name, tu.input || {}, {
             cliente: ctx.estado.contexto.cliente || {},
             conversa: ctx.conversa,
+            sandbox: ctx.sandbox,
           }).catch(e => `Erro ao executar ${tu.name}: ${e.message}`);
 
           // Detecta ações especiais
@@ -715,13 +778,14 @@ async function processarIAResponde(no, ctx) {
 
     if (texto) ctx.respostas.push({ tipo: 'texto', texto });
 
-    // Atualiza histórico (últimos 20 turns)
+    // Atualiza histórico (últimas 50 mensagens ≈ 25 trocas — cadastro comercial
+    // longo precisa lembrar cidade/plano/dados coletados no começo da conversa)
     ctx.estado.contexto[turnosKey] = turnosUsados + 1;
     ctx.estado.contexto[histKey]   = [
       ...histSessao,
       { role: 'user',      content: ctx.mensagem.texto || '' },
-      { role: 'assistant', content: texto },
-    ].slice(-20);
+      { role: 'assistant', content: [faladoNoTurno, texto].filter(Boolean).join('\n') },
+    ].slice(-50);
 
     if (transferiu) {
       ctx.estado.contexto[turnosKey] = 0;

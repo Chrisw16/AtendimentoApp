@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, agregarNps } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, agregarNps, normalizarNomeCampo, montarFichaColetada, CAMPOS_RESERVADOS, normalizarData } from './fluxoHelpers.js';
 
 test('resolverTipoChamado mapeia tipo "tecnico" para 200 (Reparo)', () => {
   assert.equal(resolverTipoChamado({ tipo: 'tecnico' }), 200);
@@ -149,4 +149,96 @@ test('agregarNps sem respostas devolve score nulo (não zero)', () => {
 test('agregarNps trata escala ausente como 0-10 (linhas antigas)', () => {
   const r = agregarNps([{ nota: 9 }]);
   assert.equal(r.promotores, 1);
+});
+
+// ── normalizarNomeCampo ─────────────────────────────────────────
+test('normalizarNomeCampo remove acentos e minusculiza', () => {
+  assert.equal(normalizarNomeCampo('Endereço'), 'endereco');
+});
+
+test('normalizarNomeCampo troca espaços por _', () => {
+  assert.equal(normalizarNomeCampo('Data Nasc'), 'data_nasc');
+});
+
+test('normalizarNomeCampo mantém nome já simples', () => {
+  assert.equal(normalizarNomeCampo('cidade'), 'cidade');
+});
+
+test('normalizarNomeCampo colapsa não-alfanuméricos e apara as bordas', () => {
+  assert.equal(normalizarNomeCampo('CPF/CNPJ '), 'cpf_cnpj');
+});
+
+test('normalizarNomeCampo devolve string vazia para entrada vazia', () => {
+  assert.equal(normalizarNomeCampo(''), '');
+});
+
+// ── montarFichaColetada ─────────────────────────────────────────
+test('montarFichaColetada lista escalares flat e ignora objetos/internos/vazios', () => {
+  const bloco = montarFichaColetada({
+    cidade: 'Natal',
+    plano: '450M',
+    cliente: { nome: 'Fulano' },   // objeto → ignora
+    _ia_turnos_n1: 3,              // interno → ignora
+    _ia_hist_n1: [],              // interno → ignora
+    obs: '',                      // vazio → ignora
+  });
+  assert.match(bloco, /cidade: Natal/);
+  assert.match(bloco, /plano: 450M/);
+  assert.match(bloco, /NUNCA/);
+  assert.doesNotMatch(bloco, /Fulano/);
+  assert.doesNotMatch(bloco, /_ia_turnos/);
+  assert.doesNotMatch(bloco, /obs:/);
+});
+
+test('montarFichaColetada devolve string vazia quando não há dados coletados', () => {
+  assert.equal(montarFichaColetada({ cliente: {}, _ia_hist_n1: [] }), '');
+});
+
+// ── normalizarData ──────────────────────────────────────────────
+test('normalizarData converte DD/MM/AAAA para AAAA-MM-DD', () => {
+  assert.equal(normalizarData('09/05/2004'), '2004-05-09');
+});
+
+test('normalizarData aceita dígitos únicos e separadores variados', () => {
+  assert.equal(normalizarData('9/5/2004'), '2004-05-09');
+  assert.equal(normalizarData('09-05-2004'), '2004-05-09');
+});
+
+test('normalizarData mantém AAAA-MM-DD já correto', () => {
+  assert.equal(normalizarData('2004-05-09'), '2004-05-09');
+});
+
+test('normalizarData expande ano de 2 dígitos com pivô 30', () => {
+  assert.equal(normalizarData('09/05/04'), '2004-05-09');
+  assert.equal(normalizarData('09/05/95'), '1995-05-09');
+});
+
+test('normalizarData devolve vazio p/ vazio e passa adiante o irreconhecível', () => {
+  assert.equal(normalizarData(''), '');
+  assert.equal(normalizarData('sei lá'), 'sei lá');
+});
+
+// ── montarSystemPrompt: ficha ───────────────────────────────────
+test('montarSystemPrompt injeta o bloco da ficha quando fornecido', () => {
+  const s = montarSystemPrompt({ systemBase: 'Base', ficha: '## DADOS JÁ COLETADOS\ncidade: Natal' });
+  assert.match(s, /DADOS JÁ COLETADOS/);
+  assert.match(s, /cidade: Natal/);
+});
+
+test('montarSystemPrompt sem ficha não inclui o bloco de memória', () => {
+  const s = montarSystemPrompt({ systemBase: 'Base' });
+  assert.doesNotMatch(s, /DADOS JÁ COLETADOS/);
+});
+
+// ── CAMPOS_RESERVADOS ───────────────────────────────────────────
+test('CAMPOS_RESERVADOS contém os objetos aninhados do contexto', () => {
+  for (const k of ['cliente', 'boleto', 'chamado', 'promessa', 'planos']) {
+    assert.ok(CAMPOS_RESERVADOS.has(k), `esperava ${k} reservado`);
+  }
+});
+
+test('montarFichaColetada ignora chaves reservadas mesmo se escalares', () => {
+  const bloco = montarFichaColetada({ cliente: 'Fulano', cidade: 'Natal' });
+  assert.match(bloco, /cidade: Natal/);
+  assert.doesNotMatch(bloco, /cliente/);
 });

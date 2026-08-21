@@ -1,6 +1,6 @@
 # Brain Index — Maxxi v2
 
-Last rebuilt: 2026-06-30
+Last rebuilt: 2026-07-01
 
 > Índice do conhecimento sobre o Maxxi v2 / GoCHAT. Rode `/brain rebuild-index` após mudanças manuais.
 
@@ -23,6 +23,9 @@ Last rebuilt: 2026-06-30
 - **Frontend Maxxi** (apps/web, React, Zustand, useChat) — painel e suas 21 páginas — `systems/maxxi/components/frontend.md`
 - **Design System Maxxi** (tokens, tema light) — paleta navy+laranja, fontes — `systems/maxxi/components/design-system.md`
 - **API Backend Maxxi** (Express, rotas) — superfície REST (~62 endpoints) — `systems/maxxi/components/api-backend.md`
+- **Testes de Fluxo** (validador estático, simulador de conversa, motorLoop) — pega trava/limbo/cliente perdido sem subir nada — `systems/maxxi/components/testes-de-fluxo.md`
+- **Memória estruturada da IA** (salvar_dado, ficha, cache da IA) — a IA não re-pergunta dado coletado; vira variável de fluxo — `systems/maxxi/components/memoria-estruturada-ia.md`
+- **Pré-cadastro real** (precadastrarCliente, lead, cadastro comercial SGP) — grava cliente no SGP em modo lead; correções da validação real — `systems/maxxi/components/precadastro-real.md`
 
 ### Telas (abas)
 - **Telas e Navegação** (abas, menu, sidebar, rotas) — mapa das telas, guards e integração entre abas — `systems/maxxi/telas/telas-e-navegacao.md`
@@ -33,12 +36,33 @@ Last rebuilt: 2026-06-30
 ## Domains
 - **SGP** (Sistema de Gestão de Provedores, ERP ISP) — domínio do ERP e vocabulário ISP — `domains/sgp.md`
 
+### SGP API (estudo — 237 endpoints, 13 módulos)
+- **SGP API — Visão geral** (SGP API, API do SGP, endpoints) — mapa dos módulos, auth, o que o GoCHAT usa, correções — `domains/sgp-api/overview.md`
+- **SGP API — URA** (69 endpoints) — consulta cliente, faturas, chamado, list de NAS/POP/portador/plano — `domains/sgp-api/ura.md`
+- **SGP API — Central Assinante** (33) — área do assinante: NF, faturas, PIX, cartão — `domains/sgp-api/central-assinante.md`
+- **SGP API — Estoque** (32) — produtos, kits, comodato, compras — `domains/sgp-api/estoque.md`
+- **SGP API — FTTH** (29) — OLT/ONU/CTO — `domains/sgp-api/ftth.md`
+- **SGP API — Ordem de Serviço** (26) — OS: listar, alterar, checklist — `domains/sgp-api/ordem-de-servico.md`
+- **SGP API — CRM** (12) — cadastro completo de cliente PF/PJ — `domains/sgp-api/crm.md`
+- **SGP API — Gerenciador CPE** (12) — TR-069: WiFi, reboot, speedtest — `domains/sgp-api/gerenciador-cpe.md`
+- **SGP API — Suporte** (9) — serviços, documentos do cliente — `domains/sgp-api/suporte.md`
+- **SGP API — Pré-Cadastro** (5) — F/J + list de plano/vencimento/vendedor — `domains/sgp-api/pre-cadastro.md`
+- **SGP API — RADIUS** (5) — sessão PPPoE — `domains/sgp-api/radius.md`
+- **SGP API — Remessa / Retorno** (2) — CNAB — `domains/sgp-api/remessa-retorno.md`
+- **SGP API — Termo de Aceite** (2) — termo do contrato — `domains/sgp-api/termo-de-aceite.md`
+- **SGP API — Outros** (1) — info do usuário — `domains/sgp-api/outros.md`
+
 ## Strategy / Decisions
 - **Adotar o Maxxi v2 como base** (Maxxi vs Atendechat, multi-tenancy por instância) — decisão de base do produto — `strategy/decisions/2026-06-30_adotar-maxxi-base.md`
 
 ## People
 - **Christian** (Chrisw16, dono do produto) — dono/dev do Maxxi, ligado à NetGo Internet — `people/christian.md`
 
+## Prompts (referência)
+- **Prompt Comercial (Netzinha)** (prompt comercial, vendas, slug comercial) — prompt-coração da IA vendedora (apresentação→coleta→pré-cadastro) — `systems/maxxi/prompts/comercial.md`
+
 ## Work
 - **Achados de código (2026-06-30)** (bugs, dívida técnica, segurança) — levantamento do estudo estático — `work/bugs/2026-06-30_achados-codigo.md`
 - **Auditoria profunda (2026-06-30)** (auditoria pesada, mismatches editor↔motor) — 4 agentes + verificação; CONFIRMADO vs PLAUSÍVEL — `work/bugs/2026-06-30_auditoria-profunda.md`
+- **Auditoria SGP ↔ tools da IA (2026-07-02)** (chamadas de API dos nós, auditoria SGP) — 2ª via boleto corrigida; demais mismatches integração↔tool abertos — `work/bugs/2026-07-02_auditoria-sgp-tools.md`
+- **Ambiente de testes + próximos passos (2026-06-30)** (pauta de amanhã: janela/memória da IA, pré-cadastro real) — recap da sessão + agenda — `work/tasks/2026-06-30_ambiente-testes-e-proximos-passos.md`
