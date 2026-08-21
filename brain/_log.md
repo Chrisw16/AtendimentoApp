@@ -203,3 +203,22 @@ Também confirmado que o `encontrarProximo` do `motorLoop` continua idêntico ao
 
 ### Aberto
 Branch `merge/harness` **não** mergeada no main nem deployada. As migrations 008/009 (main) e 011/012/013 (branch) seguem sem validação contra Postgres real.
+
+## [2026-08-21 · fluxo] WORK | Fluxo "Atendimento NetGo — v2" (híbrido menu+IA)
+
+Fluxo novo construído a pedido do Christian, em `apps/api/examples/fluxo-netgo-v2.json`. Importável direto pelo botão 📂 Importar do editor (o importador aceita `{nome, nodes, edges}` com `posX`/`posY`).
+
+**Desenho:** menu de botões na entrada (2ª via · sem internet · quero ser cliente) para o volume alto resolver sem gastar token, e `ia_responde` só nos ramos que precisam de conversa (`suporte` e `comercial`, com `tools_ativas` explícitas por ramo — `precadastrar_cliente` só no comercial).
+
+**13 nós, 32 arestas, todas as portas conectadas** — inclusive o `saida` dos menus (que no fluxo antigo estava solto em 4 nós) voltando ao menu via "não entendi".
+
+Decisões de produto embutidas:
+- **Suspenso/reduzido reaproveita o ramo do boleto**: quem está sem internet por débito recebe a 2ª via na hora, em vez de ir para a fila humana. É o caso mais comum de "sem internet" num ISP.
+- **Detrator no NPS vai para humano** (recuperação), promotor/neutro encerram.
+- **Saída para humano em todos os ramos** como escape (CPF que falha, IA que não resolve, status inativo/cancelado).
+
+**Verificado:** validador `0 erros, 0 avisos`; simulador conclui as jornadas de boleto e de suspenso→boleto (`cpf_sup → status → msg_debito → busca_boleto → nps → fim`).
+
+**Achados durante a construção (abertos):**
+- `consultar_cliente`, `consultar_boleto`, `verificar_status`, `promessa_pagamento`, `listar_planos` **não têm bloco no PropsPanel** — são inconfiguráveis pela interface. Como o motor lê `cfg.pergunta` no `consultar_cliente` e ninguém consegue setar isso pela tela, hoje **o cliente nunca é perguntado pelo CPF**: o nó fica em silêncio esperando. No fluxo v2 o campo foi preenchido direto no JSON (funciona e sobrevive ao salvar).
+- **Divergência simulador↔motor:** `motorSimulador.js:88` lê `cfg.mensagem` com default embutido `'Informe seu CPF:'`; o motor lê `cfg.pergunta`. O simulador mostra a pergunta do CPF mesmo quando o motor real não mandaria nada — falso positivo de confiança justamente no nó de entrada de dados.

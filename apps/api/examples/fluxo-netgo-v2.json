@@ -1,0 +1,325 @@
+{
+  "_comment": "Atendimento NetGo v2 — híbrido (menu de botões na entrada + IA nos ramos de conversa). Todas as portas conectadas: alvo é passar no validador com 0 erros e 0 avisos. Valide com: node src/services/fluxoValidador.cli.js examples/fluxo-netgo-v2.json",
+  "nome": "Atendimento NetGo — v2",
+  "nodes": [
+    {
+      "id": "inicio",
+      "tipo": "inicio",
+      "config": {},
+      "posX": 0,
+      "posY": 0
+    },
+    {
+      "id": "saudacao",
+      "tipo": "enviar_botoes",
+      "posX": 260,
+      "posY": 0,
+      "config": {
+        "corpo": "Olá! 👋 Aqui é a NetGo Internet.\n\nComo posso te ajudar hoje?",
+        "botoes": [
+          {
+            "id": "boleto",
+            "label": "2ª via de boleto"
+          },
+          {
+            "id": "suporte",
+            "label": "Estou sem internet"
+          },
+          {
+            "id": "vendas",
+            "label": "Quero ser cliente"
+          }
+        ]
+      }
+    },
+    {
+      "id": "nao_entendi",
+      "tipo": "enviar_texto",
+      "posX": 260,
+      "posY": -230,
+      "config": {
+        "texto": "Desculpa, não entendi. 😅\nToca em uma das opções abaixo pra eu te ajudar direitinho."
+      }
+    },
+    {
+      "id": "cpf_fin",
+      "tipo": "consultar_cliente",
+      "posX": 520,
+      "posY": -300,
+      "config": {
+        "pergunta": "Certo! Pra localizar seu boleto, me informa o *CPF ou CNPJ* do titular (pode mandar só os números).",
+        "mensagem_erro": "Hmm, não localizei esse documento na nossa base. Confere e manda de novo? 🙏",
+        "max_tentativas": 3
+      }
+    },
+    {
+      "id": "busca_boleto",
+      "tipo": "consultar_boleto",
+      "posX": 800,
+      "posY": -300,
+      "config": {
+        "mensagem_boleto": "Achei aqui, {{cliente.nome}}! 📄\n\n💰 Valor: *R$ {{boleto.valor}}*\n📅 Vencimento: *{{boleto.vencimento}}*\n\n💠 *PIX copia e cola:*\n{{boleto.pix}}\n\n🔗 Boleto: {{boleto.link}}",
+        "mensagem_sem_boleto": "Boa notícia: não encontrei nenhum boleto em aberto no contrato *#{{cliente.contrato}}*. Sua conta está em dia! 🎉"
+      }
+    },
+    {
+      "id": "cpf_sup",
+      "tipo": "consultar_cliente",
+      "posX": 520,
+      "posY": 0,
+      "config": {
+        "pergunta": "Vamos resolver isso! 🔧\nMe informa o *CPF ou CNPJ* do titular da conta (só os números).",
+        "mensagem_erro": "Não localizei esse documento. Pode conferir e mandar de novo?",
+        "max_tentativas": 3
+      }
+    },
+    {
+      "id": "status",
+      "tipo": "verificar_status",
+      "posX": 800,
+      "posY": 0,
+      "config": {}
+    },
+    {
+      "id": "msg_debito",
+      "tipo": "enviar_texto",
+      "posX": 800,
+      "posY": -150,
+      "config": {
+        "texto": "Encontrei o motivo: seu acesso está *bloqueado por falta de pagamento*. 😕\n\nAssim que o pagamento for identificado, a conexão volta automaticamente. Deixa eu já te mandar o boleto:"
+      }
+    },
+    {
+      "id": "ia_suporte",
+      "tipo": "ia_responde",
+      "posX": 1080,
+      "posY": 0,
+      "config": {
+        "contexto": "suporte",
+        "instrucao": "Você está atendendo um cliente com a conexão ATIVA no sistema, mas relatando problema. Siga esta ordem: 1) verifique manutenção na região do cliente; 2) confira o sinal da ONU e o status da conexão; 3) se o sinal estiver ruim ou a ONU offline, oriente o cliente a checar cabos e reiniciar o equipamento; 4) se nada resolver, abra um chamado técnico e informe o número do protocolo. Seja direto e use linguagem simples — nada de jargão técnico com o cliente.",
+        "max_turnos": 8,
+        "tools_ativas": [
+          "consultar_manutencao",
+          "status_rede",
+          "verificar_conexao",
+          "consultar_onu_acs",
+          "reiniciar_onu_acs",
+          "consultar_radius",
+          "historico_ocorrencias",
+          "criar_chamado",
+          "transferir_para_humano",
+          "encerrar_atendimento"
+        ]
+      }
+    },
+    {
+      "id": "ia_vendas",
+      "tipo": "ia_responde",
+      "posX": 520,
+      "posY": 300,
+      "config": {
+        "contexto": "comercial",
+        "instrucao": "Você está falando com um POSSÍVEL cliente (ainda não é assinante). Objetivo: descobrir a cidade dele, apresentar os planos disponíveis ali, e — se houver interesse — coletar os dados e fazer o pré-cadastro como lead. Use salvar_dado a cada informação coletada para não repetir perguntas. Nunca invente plano, valor ou prazo: use sempre a lista real de planos.",
+        "max_turnos": 12,
+        "tools_ativas": [
+          "listar_planos_ativos",
+          "listar_vencimentos",
+          "salvar_dado",
+          "precadastrar_cliente",
+          "transferir_para_humano",
+          "encerrar_atendimento"
+        ]
+      }
+    },
+    {
+      "id": "nps",
+      "tipo": "nps_inline",
+      "posX": 1360,
+      "posY": -150,
+      "config": {
+        "pergunta": "Uma última coisa: de *0 a 10*, o quanto você recomendaria a NetGo para um amigo? ⭐",
+        "escala": "10"
+      }
+    },
+    {
+      "id": "humano",
+      "tipo": "transferir_agente",
+      "posX": 1080,
+      "posY": 320,
+      "config": {
+        "msg_fora": "Nosso atendimento humano está fora do horário agora. 🌙\nAssim que abrirmos, um atendente retoma essa conversa por aqui — não precisa mandar de novo."
+      }
+    },
+    {
+      "id": "fim",
+      "tipo": "encerrar",
+      "posX": 1620,
+      "posY": 0,
+      "config": {
+        "mensagem": "Obrigado pelo contato com a NetGo! 💙\nQualquer coisa, é só chamar por aqui."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "inicio",
+      "to": "saudacao",
+      "port": "saida"
+    },
+    {
+      "from": "saudacao",
+      "to": "cpf_fin",
+      "port": "boleto"
+    },
+    {
+      "from": "saudacao",
+      "to": "cpf_sup",
+      "port": "suporte"
+    },
+    {
+      "from": "saudacao",
+      "to": "ia_vendas",
+      "port": "vendas"
+    },
+    {
+      "from": "saudacao",
+      "to": "nao_entendi",
+      "port": "saida"
+    },
+    {
+      "from": "nao_entendi",
+      "to": "saudacao",
+      "port": "saida"
+    },
+    {
+      "from": "cpf_fin",
+      "to": "busca_boleto",
+      "port": "encontrado"
+    },
+    {
+      "from": "cpf_fin",
+      "to": "busca_boleto",
+      "port": "multiplos_contratos"
+    },
+    {
+      "from": "cpf_fin",
+      "to": "humano",
+      "port": "max_tentativas"
+    },
+    {
+      "from": "busca_boleto",
+      "to": "nps",
+      "port": "encontrado"
+    },
+    {
+      "from": "busca_boleto",
+      "to": "fim",
+      "port": "nao_encontrado"
+    },
+    {
+      "from": "cpf_sup",
+      "to": "status",
+      "port": "encontrado"
+    },
+    {
+      "from": "cpf_sup",
+      "to": "status",
+      "port": "multiplos_contratos"
+    },
+    {
+      "from": "cpf_sup",
+      "to": "humano",
+      "port": "max_tentativas"
+    },
+    {
+      "from": "status",
+      "to": "ia_suporte",
+      "port": "ativo"
+    },
+    {
+      "from": "status",
+      "to": "msg_debito",
+      "port": "suspenso"
+    },
+    {
+      "from": "status",
+      "to": "msg_debito",
+      "port": "reduzido"
+    },
+    {
+      "from": "status",
+      "to": "humano",
+      "port": "inativo"
+    },
+    {
+      "from": "status",
+      "to": "humano",
+      "port": "cancelado"
+    },
+    {
+      "from": "status",
+      "to": "humano",
+      "port": "inviabilidade"
+    },
+    {
+      "from": "status",
+      "to": "humano",
+      "port": "novo"
+    },
+    {
+      "from": "msg_debito",
+      "to": "busca_boleto",
+      "port": "saida"
+    },
+    {
+      "from": "ia_suporte",
+      "to": "nps",
+      "port": "resolvido"
+    },
+    {
+      "from": "ia_suporte",
+      "to": "humano",
+      "port": "transferir"
+    },
+    {
+      "from": "ia_suporte",
+      "to": "humano",
+      "port": "max_turnos"
+    },
+    {
+      "from": "ia_vendas",
+      "to": "fim",
+      "port": "resolvido"
+    },
+    {
+      "from": "ia_vendas",
+      "to": "humano",
+      "port": "transferir"
+    },
+    {
+      "from": "ia_vendas",
+      "to": "humano",
+      "port": "max_turnos"
+    },
+    {
+      "from": "nps",
+      "to": "fim",
+      "port": "promotor"
+    },
+    {
+      "from": "nps",
+      "to": "fim",
+      "port": "neutro"
+    },
+    {
+      "from": "nps",
+      "to": "humano",
+      "port": "detrator"
+    },
+    {
+      "from": "humano",
+      "to": "fim",
+      "port": "fora_horario"
+    }
+  ]
+}
