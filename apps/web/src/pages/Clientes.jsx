@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { clientesApi } from '../lib/api';
 import {
@@ -11,10 +11,14 @@ import styles from './Clientes.module.css';
 // ── DEBOUNCE HOOK ─────────────────────────────────────────────────
 function useDebounce(value, delay = 400) {
   const [debouncedValue, setDebouncedValue] = useState(value);
-  useState(() => {
+  // Era `useState` aqui: o callback virava inicializador lazy, rodava uma única
+  // vez na montagem com o valor inicial (vazio) e o "cleanup" virava o valor do
+  // state, nunca sendo chamado. Resultado: o valor debounced nunca mudava e a
+  // busca de clientes não funcionava.
+  useEffect(() => {
     const timer = setTimeout(() => setDebouncedValue(value), delay);
     return () => clearTimeout(timer);
-  });
+  }, [value, delay]);
   return debouncedValue;
 }
 

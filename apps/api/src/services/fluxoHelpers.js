@@ -50,3 +50,32 @@ export function camposLista(cfg = {}) {
     titulo_secao: cfg.secao ?? cfg.titulo_secao ?? '',
   };
 }
+
+/**
+ * Agrega respostas de NPS em promotores/neutros/detratores + score.
+ *
+ * Fonte ÚNICA das faixas: delega a classificação a `avaliarNps`, que conhece a
+ * escala de cada resposta. O dashboard antes reimplementava as faixas em SQL
+ * com 0-10 fixo, então uma nota 5 numa escala de 5 (nota máxima) era promotora
+ * no fluxo e detratora no relatório — todo respondente virava detrator.
+ *
+ * @param {Array<{nota: number|string, escala?: string|number}>} respostas
+ */
+export function agregarNps(respostas = []) {
+  let promotores = 0, neutros = 0, detratores = 0, total = 0;
+
+  for (const r of respostas) {
+    const { valida, porta } = avaliarNps(r?.nota, r?.escala);
+    if (!valida) continue;               // nota fora da escala não vira detrator
+    total++;
+    if      (porta === 'promotor') promotores++;
+    else if (porta === 'neutro')   neutros++;
+    else                           detratores++;
+  }
+
+  // Sem respostas o score é indefinido, não zero — zero significaria
+  // "promotores e detratores se anulam", que é uma afirmação diferente.
+  const score = total > 0 ? Math.round(((promotores - detratores) / total) * 100) : null;
+
+  return { total, promotores, neutros, detratores, score };
+}

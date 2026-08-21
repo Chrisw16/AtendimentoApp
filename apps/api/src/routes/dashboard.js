@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler } from '../middlewares/errorHandler.js';
 import { getDb } from '../config/db.js';
+import { agregarNps } from '../services/fluxoHelpers.js';
 
 export const dashboardRouter = Router();
 dashboardRouter.use(authMiddleware, adminMiddleware);
@@ -15,25 +16,35 @@ async function safeCount(db, table, where = '') {
 }
 
 // Helper: busca NPS de qualquer tabela disponível
+//
+// A classificação NÃO é feita aqui. Antes este SQL reimplementava as faixas com
+// 0-10 fixo, enquanto o motor classificava com `avaliarNps` ciente da escala —
+// as duas discordavam e uma nota 5 numa escala de 5 (máxima) era contada como
+// detratora. Agora só busca as linhas e delega a `agregarNps`.
 async function getNPS(db, days) {
-  const since = `NOW() - INTERVAL '${days} days'`;
-  // Tenta satisfacao primeiro, depois avaliacoes
-  for (const table of ['satisfacao', 'avaliacoes']) {
+  // `avaliacoes` é a tabela legada, documentada como escala 1-5; `satisfacao`
+  // carrega a escala por linha (migration 009; linhas antigas = 10).
+  const fontes = [
+    { tabela: 'satisfacao', escalaFixa: null },
+    { tabela: 'avaliacoes', escalaFixa: 5    },
+  ];
+
+  let primeiro = null;
+  for (const { tabela, escalaFixa } of fontes) {
     try {
-      const r = await db.raw(`
-        SELECT
-          ROUND(AVG(nota)::numeric, 1) as media,
-          COUNT(*) as total,
-          COUNT(*) FILTER (WHERE nota >= 9) as promotores,
-          COUNT(*) FILTER (WHERE nota BETWEEN 7 AND 8) as neutros,
-          COUNT(*) FILTER (WHERE nota <= 6) as detratores
-        FROM ${table}
-        WHERE criado_em >= ${since}
-      `);
-      return r.rows?.[0] || {};
+      // SELECT * de propósito: funciona mesmo se a coluna `escala` ainda não
+      // existir (migration pendente) — aí `escala` vem undefined e agregarNps
+      // trata como 0-10, que é o comportamento histórico.
+      const r = await db.raw(
+        `SELECT * FROM ${tabela} WHERE criado_em >= NOW() - INTERVAL '${days} days'`
+      );
+      const linhas   = (r.rows || []).map(l => ({ nota: l.nota, escala: escalaFixa ?? l.escala }));
+      const agregado = agregarNps(linhas);
+      if (agregado.total > 0) return agregado;      // tabela com dados vence
+      primeiro ??= agregado;                        // guarda o vazio como fallback
     } catch { continue; }
   }
-  return {};
+  return primeiro ?? agregarNps([]);
 }
 
 // GET /api/dashboard/kpis?range=30d
@@ -68,10 +79,10 @@ dashboardRouter.get('/kpis', asyncHandler(async (req, res) => {
   const comHumano  = Number(total?.com_humano || 0);
   const pctIA      = totalN > 0 ? Math.round((soIA / totalN) * 100) : 0;
 
-  const npsTotal   = Number(nps?.total      || 0);
-  const promotores = Number(nps?.promotores  || 0);
-  const detratores = Number(nps?.detratores  || 0);
-  const npsScore   = npsTotal > 0 ? Math.round(((promotores - detratores) / npsTotal) * 100) : null;
+  const npsTotal   = nps?.total      ?? 0;
+  const promotores = nps?.promotores ?? 0;
+  const detratores = nps?.detratores ?? 0;
+  const npsScore   = nps?.score ?? null;   // já calculado por agregarNps
   const npsLabel   = npsScore === null ? null
     : npsScore >= 75 ? 'Excelente' : npsScore >= 50 ? 'Ótimo'
     : npsScore >= 25 ? 'Bom' : npsScore >= 0 ? 'Regular' : 'Crítico';
@@ -89,7 +100,7 @@ dashboardRouter.get('/kpis', asyncHandler(async (req, res) => {
     nps_label:           npsLabel,
     nps_total_respostas: npsTotal,
     nps_promotores:      promotores,
-    nps_neutros:         Number(nps?.neutros    || 0),
+    nps_neutros:         nps?.neutros ?? 0,
     nps_detratores:      detratores,
     canais: canais.map(r => ({ canal: r.canal || 'desconhecido', total: Number(r.n) })),
   });

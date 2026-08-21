@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, agregarNps } from './fluxoHelpers.js';
 
 test('resolverTipoChamado mapeia tipo "tecnico" para 200 (Reparo)', () => {
   assert.equal(resolverTipoChamado({ tipo: 'tecnico' }), 200);
@@ -100,4 +100,53 @@ test('camposLista faz fallback para label_botao/titulo_secao (fluxos antigos)', 
 
 test('camposLista retorna strings vazias quando nada está configurado', () => {
   assert.deepEqual(camposLista({}), { label_botao: '', titulo_secao: '' });
+});
+
+// ── agregarNps ────────────────────────────────────────────────────
+// As faixas do NPS viviam em DOIS lugares: avaliarNps (JS, ciente da escala) e
+// o SQL do dashboard (0-10 fixo). Por isso divergiam — nota 5 numa escala de 5
+// era promotor no fluxo e detrator no relatório. Agora há uma fonte só.
+test('agregarNps conta nota máxima da escala 5 como promotor (era detrator no dashboard)', () => {
+  const r = agregarNps([{ nota: 5, escala: '5' }]);
+  assert.equal(r.promotores, 1);
+  assert.equal(r.detratores, 0);
+  assert.equal(r.score, 100);
+});
+
+test('agregarNps mantém a escala 10 clássica', () => {
+  const r = agregarNps([{ nota: 9, escala: '10' }, { nota: 5, escala: '10' }]);
+  assert.equal(r.promotores, 1);
+  assert.equal(r.detratores, 1);
+  assert.equal(r.score, 0);
+});
+
+test('agregarNps soma escalas diferentes na mesma janela', () => {
+  const r = agregarNps([
+    { nota: 5,  escala: '5'  },   // promotor
+    { nota: 10, escala: '10' },   // promotor
+    { nota: 1,  escala: '5'  },   // detrator
+    { nota: 3,  escala: '5'  },   // neutro
+  ]);
+  assert.deepEqual(
+    { total: r.total, p: r.promotores, n: r.neutros, d: r.detratores },
+    { total: 4, p: 2, n: 1, d: 1 }
+  );
+  assert.equal(r.score, 25);      // (2-1)/4 = 25%
+});
+
+test('agregarNps ignora nota inválida em vez de contá-la como detrator', () => {
+  const r = agregarNps([{ nota: 99, escala: '10' }, { nota: 9, escala: '10' }]);
+  assert.equal(r.total, 1);
+  assert.equal(r.promotores, 1);
+});
+
+test('agregarNps sem respostas devolve score nulo (não zero)', () => {
+  const r = agregarNps([]);
+  assert.equal(r.total, 0);
+  assert.equal(r.score, null, 'zero respostas não é "NPS 0"');
+});
+
+test('agregarNps trata escala ausente como 0-10 (linhas antigas)', () => {
+  const r = agregarNps([{ nota: 9 }]);
+  assert.equal(r.promotores, 1);
 });

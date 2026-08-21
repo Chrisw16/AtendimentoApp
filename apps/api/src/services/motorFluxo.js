@@ -552,7 +552,10 @@ async function processarNo(no, ctx) {
         const aval = avaliarNps(ctx.mensagem.texto, cfg.escala);
         if (aval.valida) {
           const nota = parseInt(ctx.mensagem.texto, 10);
-          await ctx.db('satisfacao').insert({ conversa_id: ctx.conversa.id, nota, canal: ctx.conversa.canal }).catch(() => {});
+          // Grava a escala junto: sem ela o dashboard assume 0-10 e a nota
+          // máxima de uma escala 1-5 cai na faixa de detrator.
+          const escala = parseInt(cfg.escala, 10) === 5 ? 5 : 10;
+          await ctx.db('satisfacao').insert({ conversa_id: ctx.conversa.id, nota, escala, canal: ctx.conversa.canal }).catch(() => {});
           return avancar(aval.porta);
         }
         ctx.estado.aguardando = no.id;

@@ -231,9 +231,9 @@ export default function Dashboard() {
               <NpsGauge score={kpis?.nps_score} label={kpis?.nps_label}/>
               <div className={styles.statList}>
                 <div className={styles.statRow}><span>Total respostas</span><strong>{kpis?.nps_total_respostas ?? '—'}</strong></div>
-                <div className={[styles.statRow, styles.statGreen].join(' ')}><span>Promotores (9–10)</span><strong>{kpis?.nps_promotores ?? '—'}</strong></div>
-                <div className={[styles.statRow, styles.statYellow].join(' ')}><span>Neutros (7–8)</span><strong>{kpis?.nps_neutros ?? '—'}</strong></div>
-                <div className={[styles.statRow, styles.statRed].join(' ')}><span>Detratores (1–6)</span><strong>{kpis?.nps_detratores ?? '—'}</strong></div>
+                <div className={[styles.statRow, styles.statGreen].join(' ')}><span>Promotores</span><strong>{kpis?.nps_promotores ?? '—'}</strong></div>
+                <div className={[styles.statRow, styles.statYellow].join(' ')}><span>Neutros</span><strong>{kpis?.nps_neutros ?? '—'}</strong></div>
+                <div className={[styles.statRow, styles.statRed].join(' ')}><span>Detratores</span><strong>{kpis?.nps_detratores ?? '—'}</strong></div>
               </div>
             </>
           )}
