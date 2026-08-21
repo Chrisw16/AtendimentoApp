@@ -58,3 +58,36 @@ Correção dos mismatches mais diretos da auditoria, em worktree isolada + TDD (
 - Brain atualizado: `Motor de Fluxo` (seção "Funções puras testáveis") e `Auditoria profunda (2026-06-30)` (itens ✅). CLAUDE.md ganhou seção de Testes + nota dos mismatches.
 - **Aberto ainda:** `gatilho_keyword` (matching), `aguardar_resposta` (timeout/scheduler), `condicao_multipla` (editor + portas), portas mortas (`solicitar_localizacao`, `transferir_agente`), `enviar_cta` rodapé.
 - Próximo passo decidido com o Christian: **ambiente de testes de fluxo** (detectar trava/limbo/cliente perdido).
+
+## [2026-08-21 · retomada] WORK | Os 4 críticos da auditoria corrigidos (+ Redis SSE)
+
+Retomada do projeto após pausa. Objetivo declarado pelo Christian: **colocar em produção na NetGo**. Frente escolhida: fechar os críticos antes de subir ambiente.
+
+- **Race de estado do fluxo**: criado `apps/api/src/services/filaPorChave.js` (fila FIFO por chave) + `filaPorChave.test.js` (7 testes, TDD — RED verificado por `ERR_MODULE_NOT_FOUND` antes de implementar). `processarConversa` virou wrapper que serializa por `conversa.id` sobre `processarConversaInterno`; os 3 webhooks ficaram protegidos sem mudança. Suíte foi de 21 → 28 testes.
+- **URL do SGP não salva**: `onChange={setSgpUrl}` → `onChange={e => setSgpUrl(e.target.value)}`.
+- **Canais apaga config**: **a causa registrada na auditoria estava errada** (a página *tem* guard de `isLoading`). Causa real: o estado nunca ressincronizava com o servidor. Corrigido com `useEffect` sobre a config do servidor.
+- **Webhook duplica mensagem**: migration `008_dedup_mensagens.js` (limpa duplicatas + unique index em `external_id`) + `mensagemRepo.criar` com `onConflict().ignore()` retornando `null` + guard nos 3 webhooks.
+- **Bônus — Redis SSE**: `sseManager.js` migrado de `redis` (não instalado) para `ioredis`, com `lazyConnect` e handlers de `error`. Contrato da API do ioredis verificado rodando.
+
+**Verificado:** 31/31 testes passam; `node --check` nos arquivos de API alterados; `apps/web` builda (`vite build` ✓).
+**NÃO verificado:** a migration 008 e o `onConflict` contra Postgres real; a conexão Redis de fato.
+
+### Correção no meio da sessão: o sistema JÁ ESTÁ EM PRODUÇÃO
+
+Eu havia concluído (do estado da máquina local) que o sistema "nunca rodou" e que o próximo passo era subir ambiente. **Errado** — o Christian informou e comprovou por print: roda numa **VPS via Coolify**, em `https://gochat.netgo.net.br`. Login, dashboard e navegação funcionam; 3 agentes cadastrados (Administrador, Christian, Atendente).
+
+Mas o dashboard mostra **tudo zerado** em 30 dias: 0 atendimentos, 0 conversas, 0 respostas NPS, sem dados por canal. Ou seja: **deployado e de pé, ainda não em operação real**. A distinção importa — o risco de mexer em dados é baixo agora, e essa é justamente a janela boa para aplicar correções estruturais.
+
+### Bug que EU ia introduzir (pego a tempo)
+
+A correção do Redis SSE tinha um defeito sério que só apareceu ao saber que existe produção com `REDIS_URL`: `broadcast()` entrega local **e** publica no Redis; o subscriber vive **no mesmo processo**, e pub/sub entrega a todos os inscritos — inclusive a quem publicou. Com o Redis finalmente conectando, **toda mensagem seria entregue duas vezes** na tela do agente. Antes isso estava mascarado porque o import de `redis` sempre falhava.
+
+Corrigido com `INSTANCIA_ID` (randomUUID) carimbado em `origem` nos payloads publicados + `ehEcoProprio()` descartando o próprio eco na recepção. 3 testes novos (fail-open: payload sem `origem`, de instância antiga em deploy gradual, é entregue — perder mensagem é pior que duplicar). Lição: **habilitar um caminho que estava morto exige revisar o caminho inteiro**, não só o ponto do erro.
+
+### Risco operacional descoberto em `server.js`
+
+Se qualquer migration falha no boot, o `.catch` (server.js:101) só loga warning — mas o `.then` que inicia o **monitor de SLA** e a **supervisora IA** é pulado. Uma migration quebrada **desliga os monitores silenciosamente**, com o app parecendo saudável. Por isso a 008 foi endurecida (conta e loga antes de apagar, idempotente). **A falha de acoplamento em si continua aberta** — vale desacoplar os monitores das migrations.
+
+**Ambiente local:** a máquina de dev não tem Docker, Postgres nem Redis. A porta 6379 responde, mas é um **túnel SSH** (`ssh -f -N workflow-vps`) para um Redis remoto — não apontar o `.env` do Maxxi para `localhost:6379` achando que é local.
+
+**Próximo passo:** validar em produção — aplicar as correções e conferir a 008 rodando contra o Postgres real (janela ideal: base ainda vazia), e então fazer o primeiro atendimento ponta-a-ponta de verdade pelo WhatsApp.

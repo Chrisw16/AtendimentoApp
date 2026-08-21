@@ -75,6 +75,28 @@ As respostas são **agnósticas de canal** (`{tipo, texto, botoes, url…}`) e t
 
 Padrão a manter: nova lógica de leitura de config do editor entra aqui **com teste primeiro** (TDD), e o motor só chama o helper.
 
+## Serialização por conversa (`filaPorChave.js`)
+
+`processarConversa` lê `estadosExecucao.get(conversa.id)` no começo, faz vários `await` (SGP, IA) e só grava o estado no fim. Os 3 webhooks chamam a função **sem `await`** (fire-and-forget). Duas mensagens seguidas do mesmo cliente entravam nessa janela ao mesmo tempo e corrompiam o estado — saltos de nó, resposta duplicada.
+
+`apps/api/src/services/filaPorChave.js` resolve com uma **fila FIFO por chave**:
+
+```js
+const filaConversa = criarFilaPorChave();
+export function processarConversa(conversa, mensagemCliente) {
+  return filaConversa(conversa.id, () => processarConversaInterno(conversa, mensagemCliente));
+}
+```
+
+- Mesma `conversa.id` → uma tarefa de cada vez, em ordem de chegada.
+- Conversas diferentes → seguem em paralelo (sem gargalo global).
+- Tarefa que falha **não trava** a fila da conversa; o erro sobe para quem chamou.
+- A chave sai do Map quando a fila esvazia (sem vazamento de memória).
+
+Como o wrapper está na própria entry point, os webhooks ficaram protegidos sem nenhuma mudança neles. Coberto por `filaPorChave.test.js` (7 testes) — um deles reproduz a race *sem* a fila, para documentar o bug que motivou o módulo.
+
+**Isto não substitui persistir o estado**: o `Map` continua em memória e ainda se perde no restart (ver Limitações).
+
 ## Limitações e melhorias conhecidas
 
 Persistir o estado de execução; `aguardar_tempo` é simulado (avança na hora — falta scheduler/job); `enviar_email` só loga; ACS é stub. Padronizar o formato de aresta. Nota: a branch `dev` alterou o comportamento "sem fluxo" e o break do loop agêntico — revalidar ao alinhar branches. Mismatches editor↔motor parcialmente corrigidos (ver tabela acima); restam `gatilho_keyword`, `aguardar_resposta` (timeout), `condicao_multipla`, portas mortas. Bugs em [[Achados de código (2026-06-30)]] e [[Auditoria profunda (2026-06-30)]].

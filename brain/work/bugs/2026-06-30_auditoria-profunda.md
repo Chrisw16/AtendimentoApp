@@ -2,10 +2,10 @@
 title: Auditoria profunda (2026-06-30)
 type: bug
 created: 2026-06-30
-last_updated: 2026-06-30
+last_updated: 2026-08-21
 status: active
 priority: p1
-progress: "mismatches editor↔motor: 1ª leva corrigida (enviar_lista/abrir_chamado/ia_responde/nps_inline)"
+progress: "4 críticos corrigidos (race, sgp_url, canais, dedup) + Redis; mismatches: 1ª leva. Aberto: gatilho_keyword, aguardar_resposta, condicao_multipla, portas mortas"
 knowledge_refs: ["systems/maxxi/components/motor-fluxo", "systems/maxxi/components/catalogo-de-nos", "systems/maxxi/components/canais-e-webhooks", "systems/maxxi/components/integracoes-sgp"]
 related: ["[[Achados de código (2026-06-30)]]", "[[Motor de Fluxo]]", "[[Catálogo de Nós]]", "[[Canais e Webhooks]]", "[[Integração SGP]]", "[[Frontend Maxxi]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
@@ -23,10 +23,18 @@ O grupo mais importante é o de **mismatches editor↔motor**: o painel de propr
 
 ## Crítico
 
-- **Race de estado do fluxo** `[CONFIRMADO]` — os webhooks chamam `processarConversa(...)` **sem `await`** e o `estadosExecucao` é um `Map` mutável compartilhado por referência; duas mensagens do mesmo cliente em sequência rápida intercalam (há `await` SGP/IA no meio) e corrompem o estado (saltos de nó, respostas duplicadas). Serializar por `conversa_id` (fila/lock) ou persistir estado.
-- **URL do SGP não salva** `[CONFIRMADO]` — [Configuracoes.jsx:383](apps/web/src/pages/Configuracoes.jsx#L383): `onChange={setSgpUrl}` passa o **evento** em vez de `e.target.value` (o campo Evolution ao lado faz certo). `sgp_url` é gravado como objeto → integração SGP nunca conecta.
-- **Canais apaga config salva** `[CONFIRMADO]` — [Canais.jsx:82](apps/web/src/pages/Canais.jsx#L82): `useState(canal.config || {})` inicializa uma vez; a página renderiza os 6 cards do catálogo **antes** do fetch resolver (config `{}`) e o card não remonta. Toggle/salvar envia `config:{}` → sobrescreve credenciais já salvas. Perda de dados.
-- **Webhook duplica mensagem** `[CONFIRMADO]` — não há **unique constraint** em `mensagens.external_id` (migration 001 cria só índice não-único); reentrega concorrente da Evolution passa pelos dois `porExternalId` antes de inserir → 2 inserts + `processarConversa` 2x → IA responde em dobro e cobra a Anthropic 2x.
+> **Todos os 4 críticos corrigidos em 2026-08-21.** Detalhe abaixo, item a item. Ver [[Motor de Fluxo]] → "Serialização por conversa" para o mecanismo.
+
+- ✅ **Race de estado do fluxo** `[CONFIRMADO]` — os webhooks chamam `processarConversa(...)` **sem `await`** e o `estadosExecucao` é um `Map` mutável compartilhado por referência; duas mensagens do mesmo cliente em sequência rápida intercalam (há `await` SGP/IA no meio) e corrompem o estado (saltos de nó, respostas duplicadas). **Corrigido**: novo `filaPorChave.js` (fila FIFO por chave) envolvendo a entry point — `processarConversa` virou um wrapper que serializa por `conversa.id` e delega a `processarConversaInterno`. Os 3 webhooks ficam protegidos sem mudar. **Coberto por 7 testes**, incluindo um que reproduz a race sem a fila.
+- ✅ **URL do SGP não salva** `[CONFIRMADO]` — [Configuracoes.jsx:383](apps/web/src/pages/Configuracoes.jsx#L383): `onChange={setSgpUrl}` passa o **evento** em vez de `e.target.value`. **Corrigido** para `onChange={e => setSgpUrl(e.target.value)}`, alinhando com o padrão dos outros inputs do arquivo.
+- ✅ **Canais apaga config salva** `[CONFIRMADO, mecanismo corrigido]` — [Canais.jsx:82](apps/web/src/pages/Canais.jsx#L82). **A causa registrada na auditoria estava errada**: a página *tem* guard de `isLoading` e não renderiza os cards antes do fetch. A causa real é que `useState(canal.config || {})` **nunca ressincroniza** com o servidor — o estado do primeiro render (que pode ser o placeholder `config: {}` criado pelo merge do catálogo em `canaisMerge`) persiste, e todo toggle/salvar manda esse `{}` por cima. **Corrigido** com um `useEffect` que ressincroniza quando a config do servidor muda.
+- ✅ **Webhook duplica mensagem** `[CONFIRMADO]` — não há **unique constraint** em `mensagens.external_id` (migration 001 cria só índice não-único); reentrega concorrente passa pelos dois `porExternalId` antes de inserir → 2 inserts + `processarConversa` 2x → IA responde em dobro e cobra a Anthropic 2x. **Corrigido em 3 camadas**: migration `008_dedup_mensagens.js` (limpa duplicatas existentes + unique index), `mensagemRepo.criar` com `onConflict('external_id').ignore()` retornando `null` quando o banco barra, e guard `if (!mensagem) return;` nos 3 webhooks. ⚠️ **Não validado contra Postgres real** (sem banco na máquina de dev) — validar ao subir o ambiente.
+
+### Bônus corrigido junto
+
+- ✅ **Redis SSE nunca conectava** — `sseManager.js` importava `'redis'` mas o pacote instalado é `ioredis`; o import falhava sempre e o SSE caía em modo local silenciosamente (broadcast não cruzava instâncias). **Corrigido** migrando para a API do ioredis (`new Redis()`, entrega por evento `'message'`, `lazyConnect` para que falha de conexão caia no fallback em vez de reconectar para sempre).
+
+  ⚠️ **Ligar o Redis expôs um segundo bug, corrigido junto:** `broadcast()` entrega local **e** publica; o subscriber está no mesmo processo e o pub/sub devolve o próprio anúncio → **entrega duplicada de todo evento SSE**. Estava mascarado enquanto o Redis nunca conectava. Resolvido com `INSTANCIA_ID` em `origem` + `ehEcoProprio()` (3 testes, fail-open para payload sem `origem`).
 
 ## Alto
 
