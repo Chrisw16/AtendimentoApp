@@ -83,10 +83,10 @@ consulta. Caminho quente do sistema, não debug esquecido. Detalhe no commit
 
 ## O que a FASE 0 descobriu (divergências)
 
-### `001` e `002` não sobrevivem a um replay ⚠️
+### `001` e `002` não sobreviviam a um replay — **corrigido** ✅
 
 O CLAUDE.md manda *"escreva idempotente… renomear uma migration já aplicada faz
-ela rodar de novo"*. Testadas uma a uma, **10 das 12 sobrevivem; `001` e `002`
+ela rodar de novo"*. Testadas uma a uma, **10 das 12 sobreviviam; `001` e `002`
 não**:
 
 ```
@@ -94,15 +94,28 @@ não**:
 002_tabelas_adicionais ❌ create index "zonas_cobertura_tipo_index" already exists
 ```
 
-Causa: as duas usam `createTableIfNotExists` do knex — **deprecado**, e o
-próprio knex avisa no boot. Ele emite o `CREATE TABLE IF NOT EXISTS` mas depois
-dispara `ALTER TABLE ADD CONSTRAINT` e `CREATE INDEX` **incondicionalmente**.
+Causa: `createTableIfNotExists` do knex — **deprecado**, e o próprio knex avisa
+18 vezes no boot. Ele emite o `CREATE TABLE IF NOT EXISTS` mas dispara
+`ALTER TABLE ADD CONSTRAINT` e `CREATE INDEX` **incondicionalmente**.
 
-Não é risco vivo hoje (produção já tem as duas em `_migrations`). Vira risco se
-alguém renomear os arquivos ou se uma linha de `_migrations` se perder — e uma
-migration que falha no boot **pula a inicialização dos monitores de SLA e da
-supervisora** (`server.js`). Corrigir o conteúdo é seguro; **renomear é o que
-não pode**.
+Corrigido com um helper local `criarTabela()` + guarda `hasTable` — o padrão que
+o próprio aviso do knex prescreve. Local em cada arquivo de propósito: migration
+é registro histórico e não deve depender de módulo compartilhado que mude depois.
+
+Verificado dos dois lados, que é o que importa numa mudança de migration:
+- **replay** sobre schema pronto: 12/12 (antes 10/12)
+- **banco do zero**, código novo vs. antigo: `pg_dump -s` **idêntico** — 414
+  linhas, 22 tabelas, 21 índices
+
+Travado por `tests/integracao/migrations-replay.test.js`, para não voltar em
+silêncio na próxima migration.
+
+**Efeito colateral encontrado no caminho:** com dois arquivos de teste aplicando
+migrations no mesmo banco, rodá-los em paralelo faz dois processos criarem
+`_migrations` ao mesmo tempo (`Key (typname, typnamespace)=(_migrations, 2200)
+already exists`) e o schema sai pela metade. O script usa
+`--test-concurrency=1`. **Teste de integração que compartilha banco não pode
+rodar em paralelo.**
 
 ### `onConflict` e a migration 008 são acoplados — e isso responde a pauta
 
@@ -137,15 +150,60 @@ inteira**, não faz rollback parcial. Nunca rodar em produção.
 
 ## Aberto ao fim da FASE 0
 
-- **Deploy.** O Coolify não deploya (webhook 200, nada sobe). Confirmado ao vivo
-  nesta sessão: `GET /api/webhooks/meta?hub.mode=subscribe&hub.challenge=X`
-  ainda responde `text/html` refletindo o challenge — **o XSS corrigido em
-  `f8ed98f` continua vivo em produção**. Mitigação sem deploy: definir
-  `META_VERIFY_TOKEN` no ambiente.
-- **Idempotência de `001`/`002`** — diagnosticada, não corrigida. Decisão
-  pendente.
+### Deploy — o diagnóstico antigo estava errado
+
+A tese registrada era *"o Coolify recebe 200 e nunca deploya"*. **Falso.**
+Reconstruída a linha do tempo de 21/08 (UTC):
+
+| Hora | Evento |
+|---|---|
+| 19:17 | commit `32a558c` |
+| 19:20 | entrega #1 do webhook → 200 |
+| 19:26 | commit `f8ed98f` — **a correção do XSS** |
+| 19:55 | entrega #2 → 200 |
+| **20:06** | **`index.html` de produção reconstruído — um deploy COMPLETOU** |
+| 22:54 | entrega #3 → 200 |
+
+Ou seja: a entrega #1 **virou deploy**; a #2, que carregava a correção de
+segurança, **se perdeu**. O deploy é **intermitente**, não morto — o que é um
+problema diferente e pior, porque parece funcionar.
+
+Config do webhook (`gh api repos/Chrisw16/AtendimentoApp/hooks`):
+
+```
+url    http://72.60.53.164:8000/webhooks/source/github/events/manual
+       ↑ HTTP puro, IP cru, insecure_ssl=1, SEM SECRET
+events ["push"]   active true
+```
+
+É o webhook do tipo **`manual`** do Coolify, que **responde 200 mesmo quando
+recusa** e põe o motivo no *corpo* da resposta. Foi por isso que "200 OK" foi
+lido como sucesso por semanas. **Ninguém nunca leu o corpo.**
+
+Para fechar o diagnóstico faltam duas leituras que exigem acesso humano:
+1. **Corpo da resposta das entregas #2 e #3** — GitHub → Settings → Webhooks →
+   Recent Deliveries → Response. (Ou `gh auth refresh -h github.com -s
+   admin:repo_hook`, que destrava `gh api .../hooks/611298182/deliveries/<id>`.)
+2. **Log da aba Deployments no Coolify** — diz se #2 chegou a virar build.
+
+Independente da causa, três correções valem por si:
+- **Pôr um secret no webhook** e trocar para **HTTPS**. Hoje o payload do push
+  trafega em claro e não há como verificar assinatura.
+- **`META_VERIFY_TOKEN` no ambiente** — fecha o XSS **agora**, sem depender de
+  deploy.
+- **Deploy manual** pelo painel para subir o `f8ed98f`.
+
+### Sonda de deploy
+
+`/health` devolve `2.0.0` **fixo** e não serve para saber o que está no ar. O
+carimbo confiável é o **`last-modified` de `GET /`**, que reflete o build do
+`index.html`. Hoje: `Fri, 21 Aug 2026 20:06:00 GMT`.
+
+### Resto
+
 - **Sem CI.** Os testes de integração só rodam quando alguém roda. Pipeline é
   FASE 13.
+- **`npm run seed`** ainda imprime `admin/admin123` — item §123, FASE 3.
 
 ## See Also
 

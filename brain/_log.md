@@ -311,3 +311,37 @@ Os logs de PII eram **6**, não os 3 que o CLAUDE.md listava. O pior não estava
 Sondada a produção: o XSS do handshake da Meta corrigido em `f8ed98f` **continua vivo** — `text/html` refletindo o challenge. O Coolify segue sem deployar.
 
 Detalhe em [[FASE 0 — Reconciliação e linha de base]].
+
+## [2026-08-21 · pontos soltos] WORK | Migrations idempotentes + o diagnóstico do deploy revisto
+
+Fechamento dos dois itens que a FASE 0 deixou abertos.
+
+### `001` e `002` corrigidas
+
+Teste escrito primeiro (`migrations-replay.test.js`), reproduziu as duas falhas, e só então a correção: helper local `criarTabela()` com guarda `hasTable`, no lugar do `createTableIfNotExists` deprecado.
+
+O que dá confiança aqui não é o teste de replay passar — é a **segunda** verificação: criei um banco do zero com o código antigo e outro com o novo, e comparei `pg_dump -s`. **Idênticos**, 414 linhas. Numa mudança de migration, provar que o replay parou de estourar sem provar que o schema do zero não mudou seria meia verificação.
+
+Efeito colateral encontrado no caminho: dois arquivos de teste aplicando migrations no mesmo banco em paralelo fazem dois processos criarem `_migrations` ao mesmo tempo e o schema sai pela metade. Script passou a usar `--test-concurrency=1`.
+
+Integração: 9 → **22 testes**. Suíte pura: 185.
+
+### O diagnóstico do deploy estava errado
+
+Estava registrado que *"o Coolify recebe 200 e nunca deploya"*. Investigado com `gh` (autenticado como Chrisw16), a linha do tempo de hoje desmente:
+
+- 19:20 entrega #1 → **virou deploy** (`index.html` de produção reconstruído às 20:06 UTC)
+- 19:55 entrega #2, que levava a correção do XSS → **se perdeu**
+- 22:54 entrega #3 → se perdeu
+
+O deploy é **intermitente**, não morto. Pior que a tese anterior, porque parece funcionar.
+
+A razão de ninguém ter visto: o webhook é do tipo **`manual`** do Coolify, que **responde 200 mesmo quando recusa**, com o motivo no *corpo*. Todo mundo leu o status e ninguém leu o corpo. Fica a lição: **num webhook, 200 não é confirmação de nada** — é preciso ler a resposta ou sondar o efeito.
+
+Descoberto junto: o webhook é `http://` puro, IP cru, `insecure_ssl=1` e **sem secret**. O payload do push trafega em claro.
+
+Ficaram duas leituras que exigem acesso humano (corpo das entregas #2/#3 e o log da aba Deployments), mas três correções valem independente da causa: pôr secret + HTTPS no webhook, definir `META_VERIFY_TOKEN` (fecha o XSS **sem** depender de deploy) e um deploy manual para subir o `f8ed98f`.
+
+Registrada também a sonda certa: `/health` devolve `2.0.0` **fixo** e é inútil para saber o que está no ar. O carimbo é o **`last-modified` de `GET /`**.
+
+Detalhe em [[FASE 0 — Reconciliação e linha de base]].
