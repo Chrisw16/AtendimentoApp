@@ -42,6 +42,12 @@ sysconfigRouter.put('/', asyncHandler(async (req, res) => {
 }));
 
 sysconfigRouter.get('/:chave', asyncHandler(async (req, res) => {
+  // Sem esta checagem a rota lia QUALQUER chave do sistema_kv — a allowlist
+  // CHAVES_PUBLICAS governava só o PUT e o GET agregado, então bastava pedir
+  // pelo nome para ler qualquer segredo gravado fora dela.
+  if (!CHAVES_PUBLICAS.includes(req.params.chave)) {
+    return res.status(404).json({ valor: null });
+  }
   const db  = getDb();
   const row = await db('sistema_kv').where({ chave: req.params.chave }).first();
   if (!row) return res.json({ valor: null });

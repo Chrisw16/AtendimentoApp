@@ -10,14 +10,23 @@ webhookRouter.post('/meta', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-webhookRouter.get('/meta', (req, res) => {
-  const mode      = req.query['hub.mode'];
-  const token     = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-  if (mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN) {
-    return res.send(challenge);
+webhookRouter.get('/meta', async (req, res) => {
+  const { verificarHandshake } = await import('../services/webhooks/metaSeguranca.js');
+  const r = verificarHandshake({
+    mode:      req.query['hub.mode'],
+    token:     req.query['hub.verify_token'],
+    challenge: req.query['hub.challenge'],
+  }, process.env.META_VERIFY_TOKEN);
+
+  if (!r.ok) {
+    if (r.motivo === 'nao_configurado') {
+      console.warn('[Webhook Meta] handshake recusado: META_VERIFY_TOKEN não configurada');
+    }
+    return res.status(403).type('text/plain').send('Forbidden');
   }
-  res.status(403).send('Forbidden');
+  // type('text/plain'): `res.send(string)` responde text/html e transformava
+  // esta rota pública num refletor de HTML na origem do painel.
+  res.type('text/plain').send(r.challenge);
 });
 
 // Webhook Evolution API
