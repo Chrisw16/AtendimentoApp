@@ -97,7 +97,7 @@
       "config": {
         "contexto": "suporte",
         "instrucao": "Você está atendendo um cliente com a conexão ATIVA no sistema, mas relatando problema. Siga esta ordem: 1) verifique manutenção na região do cliente; 2) confira o sinal da ONU e o status da conexão; 3) se o sinal estiver ruim ou a ONU offline, oriente o cliente a checar cabos e reiniciar o equipamento; 4) se nada resolver, abra um chamado técnico e informe o número do protocolo. Seja direto e use linguagem simples — nada de jargão técnico com o cliente.",
-        "max_turnos": 8,
+        "max_turnos": 12,
         "tools_ativas": [
           "consultar_manutencao",
           "status_rede",
@@ -120,7 +120,7 @@
       "config": {
         "contexto": "comercial",
         "instrucao": "Você está falando com um POSSÍVEL cliente (ainda não é assinante). Objetivo: descobrir a cidade dele, apresentar os planos disponíveis ali, e — se houver interesse — coletar os dados e fazer o pré-cadastro como lead. Use salvar_dado a cada informação coletada para não repetir perguntas. Nunca invente plano, valor ou prazo: use sempre a lista real de planos.",
-        "max_turnos": 12,
+        "max_turnos": 25,
         "tools_ativas": [
           "listar_planos_ativos",
           "listar_vencimentos",
@@ -139,6 +139,15 @@
       "config": {
         "pergunta": "Uma última coisa: de *0 a 10*, o quanto você recomendaria a NetGo para um amigo? ⭐",
         "escala": "10"
+      }
+    },
+    {
+      "id": "msg_humano",
+      "tipo": "enviar_texto",
+      "posX": 1080,
+      "posY": 180,
+      "config": {
+        "texto": "Vou te encaminhar para um dos nossos atendentes. 🙂\nJá te respondem por aqui mesmo — não precisa mandar de novo."
       }
     },
     {
@@ -203,7 +212,7 @@
     },
     {
       "from": "cpf_fin",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "max_tentativas"
     },
     {
@@ -228,7 +237,7 @@
     },
     {
       "from": "cpf_sup",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "max_tentativas"
     },
     {
@@ -248,22 +257,22 @@
     },
     {
       "from": "status",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "inativo"
     },
     {
       "from": "status",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "cancelado"
     },
     {
       "from": "status",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "inviabilidade"
     },
     {
       "from": "status",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "novo"
     },
     {
@@ -278,12 +287,12 @@
     },
     {
       "from": "ia_suporte",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "transferir"
     },
     {
       "from": "ia_suporte",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "max_turnos"
     },
     {
@@ -293,12 +302,12 @@
     },
     {
       "from": "ia_vendas",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "transferir"
     },
     {
       "from": "ia_vendas",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "max_turnos"
     },
     {
@@ -313,13 +322,18 @@
     },
     {
       "from": "nps",
-      "to": "humano",
+      "to": "msg_humano",
       "port": "detrator"
     },
     {
       "from": "humano",
       "to": "fim",
       "port": "fora_horario"
+    },
+    {
+      "from": "msg_humano",
+      "to": "humano",
+      "port": "saida"
     }
   ]
 }
