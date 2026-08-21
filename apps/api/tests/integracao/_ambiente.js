@@ -54,3 +54,11 @@ export async function criarConversa(db, dados = {}) {
     .returning('*');
   return conversa;
 }
+
+/**
+ * ⚠️ Os testes deste diretório compartilham UM banco e cada arquivo aplica as
+ * migrations no `before()`. Rodá-los em paralelo faz dois processos criarem
+ * `_migrations` ao mesmo tempo e o schema sai pela metade. Por isso o script
+ * `test:integracao` usa `--test-concurrency=1`. Ao adicionar um arquivo aqui,
+ * não o rode fora desse script.
+ */

@@ -3,16 +3,31 @@
  * Schema base do Maxxi v2
  */
 
+/**
+ * Substitui `db.schema.createTableIfNotExists`, que é deprecado no knex e
+ * ENGANOSO: ele emite o `CREATE TABLE IF NOT EXISTS`, mas dispara
+ * `ADD CONSTRAINT` e `CREATE INDEX` INCONDICIONALMENTE. Rodar a migration de
+ * novo sobre um schema já pronto estourava com "relation already exists".
+ *
+ * O runner rastreia por NOME DE ARQUIVO — renomear esta migration a faz rodar
+ * de novo, e migration que falha no boot pula os monitores de SLA e da
+ * supervisora. Aqui, se a tabela existe, nada é executado.
+ */
+async function criarTabela(db, nome, definicao) {
+  if (await db.schema.hasTable(nome)) return;
+  await db.schema.createTable(nome, definicao);
+}
+
 export async function up(db) {
   // ── SISTEMA KV ───────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('sistema_kv', t => {
+  await criarTabela(db, 'sistema_kv', t => {
     t.string('chave').primary();
     t.jsonb('valor').notNullable();
     t.timestamp('atualizado').defaultTo(db.fn.now());
   });
 
   // ── AGENTES ──────────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('agentes', t => {
+  await criarTabela(db, 'agentes', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('nome').notNullable();
     t.string('login').notNullable().unique();
@@ -27,7 +42,7 @@ export async function up(db) {
   });
 
   // ── CANAIS ────────────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('canais', t => {
+  await criarTabela(db, 'canais', t => {
     t.string('tipo').primary();
     t.string('nome').notNullable();
     t.string('icone');
@@ -37,7 +52,7 @@ export async function up(db) {
   });
 
   // ── CONVERSAS ─────────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('conversas', t => {
+  await criarTabela(db, 'conversas', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('canal').notNullable();          // 'whatsapp' | 'telegram' | 'widget' | 'email' | 'voip' | 'sms'
     t.string('telefone');
@@ -66,7 +81,7 @@ export async function up(db) {
   });
 
   // ── MENSAGENS ─────────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('mensagens', t => {
+  await criarTabela(db, 'mensagens', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.uuid('conversa_id').notNullable().references('id').inTable('conversas').onDelete('CASCADE');
     t.string('origem').notNullable();         // 'cliente' | 'agente' | 'ia' | 'sistema'
@@ -87,7 +102,7 @@ export async function up(db) {
   });
 
   // ── NOTAS INTERNAS ────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('notas', t => {
+  await criarTabela(db, 'notas', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.uuid('conversa_id').notNullable().references('id').inTable('conversas').onDelete('CASCADE');
     t.uuid('agente_id').references('id').inTable('agentes').onDelete('SET NULL');
@@ -96,7 +111,7 @@ export async function up(db) {
   });
 
   // ── RESPOSTAS RÁPIDAS ─────────────────────────────────────────
-  await db.schema.createTableIfNotExists('respostas_rapidas', t => {
+  await criarTabela(db, 'respostas_rapidas', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('titulo').notNullable();
     t.text('texto').notNullable();
@@ -106,7 +121,7 @@ export async function up(db) {
   });
 
   // ── FLUXOS ───────────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('fluxos', t => {
+  await criarTabela(db, 'fluxos', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('nome').notNullable();
     t.boolean('ativo').defaultTo(false);
@@ -118,7 +133,7 @@ export async function up(db) {
   });
 
   // ── AGENDAMENTOS ──────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('agendamentos', t => {
+  await criarTabela(db, 'agendamentos', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.uuid('conversa_id').notNullable().references('id').inTable('conversas').onDelete('CASCADE');
     t.uuid('agente_id').references('id').inTable('agentes').onDelete('SET NULL');
@@ -129,7 +144,7 @@ export async function up(db) {
   });
 
   // ── TAREFAS ───────────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('tarefas', t => {
+  await criarTabela(db, 'tarefas', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('titulo').notNullable();
     t.text('descricao');
@@ -143,7 +158,7 @@ export async function up(db) {
   });
 
   // ── SATISFAÇÃO (NPS) ──────────────────────────────────────────
-  await db.schema.createTableIfNotExists('avaliacoes', t => {
+  await criarTabela(db, 'avaliacoes', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.uuid('conversa_id').references('id').inTable('conversas').onDelete('SET NULL');
     t.uuid('agente_id').references('id').inTable('agentes').onDelete('SET NULL');
@@ -153,7 +168,7 @@ export async function up(db) {
   });
 
   // ── OCORRÊNCIAS ───────────────────────────────────────────────
-  await db.schema.createTableIfNotExists('ocorrencias', t => {
+  await criarTabela(db, 'ocorrencias', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('titulo').notNullable();
     t.text('descricao');
@@ -172,7 +187,7 @@ export async function up(db) {
   });
 
   // ── LOGS DE AUDITORIA ─────────────────────────────────────────
-  await db.schema.createTableIfNotExists('auditoria', t => {
+  await criarTabela(db, 'auditoria', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.uuid('agente_id').references('id').inTable('agentes').onDelete('SET NULL');
     t.string('acao').notNullable();
