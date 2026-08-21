@@ -276,3 +276,38 @@ A correção de segurança está no `origin/main` e **ainda não subiu**. Mitiga
 Separei os lotes: `main` fica só com a correção de segurança, e a Fase 1 espera na branch `feat/canais-registry`. Misturar os dois faria o rollback do refactor levar a correção de segurança junto.
 
 Suíte: 155 → **185 testes**.
+
+## [2026-08-21 · plano de evolução] WORK | FASE 0 — reconciliação e linha de base
+
+Entrou o **Plano Mestre de Evolução V1.0** (`docs/ers/`, 2579 linhas, 26 partes, 13 fases) somado à **ERS AS-IS** (1038 linhas). Os dois estavam só no disco; agora versionados. O plano manda executar **uma fase por vez** — começamos pela FASE 0.
+
+Antes de qualquer código, o merge de `feat/canais-registry` no `main` fechou o lote pendente da Fase 1 do WhatsApp Oficial. Trabalho em `chore/fase-0-baseline`.
+
+### O bloqueio real era o ambiente
+
+A documentação toda assume `docker-compose`. **Não há Docker nesta máquina** — nem Colima, nem Podman. É por isso que os itens de banco da ERS §8.2 seguiam como aposta havia meses: ninguém tinha como rodá-los. Resolvido com Postgres 16 nativo via Homebrew, mesmas credenciais do compose.
+
+### Duas apostas viraram fato
+
+- **Deduplicação de webhook** (migration 008 + `onConflict`) — 6 testes, incluindo o caso **concorrente**, que é o TOCTOU original. Verificado com dentes: derrubado o índice único, os 6 falham.
+- **Redis pub/sub** (`ioredis`) — 3 testes com duas instâncias reais do módulo (query-string no import ESM). Broadcast cruzando, destinatário respeitado, sem eco duplo. Com Redis morto, as travessias falham.
+
+Contrato do diretório novo: sem `DATABASE_URL_TEST`/`REDIS_URL_TEST` os testes se **pulam**. `npm test` segue 185/185 em qualquer máquina.
+
+### O que a fase descobriu
+
+**`001` e `002` não sobrevivem a replay.** Testadas uma a uma: 10 das 12 sobrevivem, essas duas não. Usam `createTableIfNotExists`, deprecado no knex, que emite o `CREATE TABLE IF NOT EXISTS` e depois dispara `ADD CONSTRAINT`/`CREATE INDEX` incondicionalmente. Contradiz o "escreva idempotente" do CLAUDE.md. Não é risco vivo — vira risco se alguém renomear os arquivos.
+
+**`onConflict` e a 008 são acoplados.** Sem o índice, o Postgres recusa *todo* insert de mensagem, não só duplicata. Isso responde à pauta por outro caminho: uma instância que armazena mensagens **prova por comportamento** que a 008 aplicou — não é mais preciso ler o log do Coolify. Em troca, fica o alerta de que o `down()` da 008 derruba a ingestão inteira.
+
+### Erro meu, registrado
+
+Montei o teste de replay por migration com `$PSQL` numa variável — **o zsh não faz word-splitting**, então todos os comandos de setup falharam em silêncio (eu tinha redirecionado para `/dev/null`) e a tabela saiu com 12 ✅ falsos. Só percebi porque o resultado contradizia um teste anterior meu. Refeito com função de shell. Lição: quando um resultado novo contradiz um resultado antigo, o suspeito é o instrumento, não o achado.
+
+### Segurança
+
+Os logs de PII eram **6**, não os 3 que o CLAUDE.md listava. O pior não estava na lista: `[SGP] consultacliente` imprimia o **CPF completo** a cada consulta — caminho quente, não debug esquecido. Em cada sítio saiu o dado e ficou o diagnóstico.
+
+Sondada a produção: o XSS do handshake da Meta corrigido em `f8ed98f` **continua vivo** — `text/html` refletindo o challenge. O Coolify segue sem deployar.
+
+Detalhe em [[FASE 0 — Reconciliação e linha de base]].

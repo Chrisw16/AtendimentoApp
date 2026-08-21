@@ -927,10 +927,12 @@ PostgreSQL 16 via Knex. **21 tabelas** definidas por **12 migrations**, mais a t
 
 Estes itens estão implementados no código mas **nunca foram exercitados no ambiente em que importam**. Tratá-los como funcionais é uma aposta, não uma conclusão.
 
+> **Atualização de 2026-08-21 (FASE 0 do Plano de Evolução).** Os dois primeiros itens deixaram de ser aposta: foram exercitados contra PostgreSQL 16 e Redis 7 reais, com testes de integração em `apps/api/tests/integracao/`. Permanecem na tabela, marcados, para que o registro do que era desconhecido não se perca.
+
 | Item | Por que não foi validado | Risco se estiver errado |
 |---|---|---|
-| Migration `008` e cláusula `onConflict` de deduplicação | Máquina de desenvolvimento sem PostgreSQL local | Mensagem duplicada sob reentrega de webhook |
-| Conexão Redis pub/sub (`ioredis`) | Nunca houve execução com Redis real | Eventos não cruzam processos; impede escalar |
+| ~~Migration `008` e cláusula `onConflict` de deduplicação~~ **✅ VALIDADO 2026-08-21** | ~~Máquina de desenvolvimento sem PostgreSQL local~~ — resolvido com PostgreSQL nativo (não há Docker na máquina) | Risco eliminado. Descoberto no caminho: `onConflict` é incondicional, então sem o índice da `008` **todo** insert de mensagem falha, não só o duplicado |
+| ~~Conexão Redis pub/sub (`ioredis`)~~ **✅ VALIDADO 2026-08-21** | ~~Nunca houve execução com Redis real~~ — exercitado com duas instâncias do módulo contra Redis 7.4.8 | Risco eliminado. Broadcast cruza instâncias, `sendToAgente` respeita o destinatário e `ehEcoProprio` impede entrega dupla |
 | Análise profunda de sentimento ao encerrar | Depende de execução da rota | Sentimento, tópico e resumo permanecem vazios |
 | Religamento de `motorLoop` no motor | Exige Docker para validar | Laço duplicado continua a divergir com o tempo |
 | Memória estruturada em conversa longa real | Validada apenas no pré-cadastro isolado | IA volta a re-perguntar em cadastro extenso |
