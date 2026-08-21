@@ -74,6 +74,16 @@ Para compartilhar o chat de teste com pessoas **sem login**: botão "Testar flux
 - **Stateless** (estado vive no cliente) → aguenta vários testadores ao mesmo tempo.
 - ⚠️ Modo escolhido: **Real** — IA gasta tokens por uso e, em fluxos com `consultar_cliente`, o testador veria dado real. Seguro para o fluxo **comercial** (leads, sem PII de cliente existente).
 
+## Divergências conhecidas simulador ↔ motor
+
+O simulador é fiel no **roteamento** (usa o `executarLoop` real e o `encontrarProximo` idêntico), mas **não** no texto de alguns nós — ele reimplementa o "que mensagem sai" em `executorFiel`. Onde as duas leituras discordam, a aba Simulação dá **falso positivo de confiança**:
+
+| Nó | Simulador lê | Motor lê | Efeito |
+|---|---|---|---|
+| `consultar_cliente` | `cfg.mensagem`, com default embutido `'Informe seu CPF:'` | `cfg.pergunta` | A simulação mostra a pergunta do CPF **mesmo quando o motor real não mandaria nada**. Some-se a isto que `consultar_cliente` **não tem bloco no PropsPanel**: hoje ninguém consegue setar `pergunta` pela tela, então em produção o nó fica em silêncio esperando o CPF. |
+
+Regra ao mexer: o simulador **espelha** o motor; qualquer nome de campo lido lá tem que ser o mesmo que o `processarNo` lê. Vale um teste em `motorSimulador.test.js` fixando o nome do campo.
+
 ## Limitações / próximos passos
 
 - O `motorSimulador` (modo Roteiro) **não roda** o `processarNo` real — roteiriza as decisões. Quem roda o motor real é o modo **Conversa real** (sandbox). Religar o `motorLoop` no `processarConversa` para remover a duplicação do loop segue **deferido** (precisa Docker pra validar).

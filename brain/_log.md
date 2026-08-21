@@ -222,3 +222,17 @@ Decisões de produto embutidas:
 **Achados durante a construção (abertos):**
 - `consultar_cliente`, `consultar_boleto`, `verificar_status`, `promessa_pagamento`, `listar_planos` **não têm bloco no PropsPanel** — são inconfiguráveis pela interface. Como o motor lê `cfg.pergunta` no `consultar_cliente` e ninguém consegue setar isso pela tela, hoje **o cliente nunca é perguntado pelo CPF**: o nó fica em silêncio esperando. No fluxo v2 o campo foi preenchido direto no JSON (funciona e sobrevive ao salvar).
 - **Divergência simulador↔motor:** `motorSimulador.js:88` lê `cfg.mensagem` com default embutido `'Informe seu CPF:'`; o motor lê `cfg.pergunta`. O simulador mostra a pergunta do CPF mesmo quando o motor real não mandaria nada — falso positivo de confiança justamente no nó de entrada de dados.
+
+## [2026-08-21 · fechamento] FECHAMENTO DO DIA | Retomada: críticos, revisão, harness reconciliado e fluxo v2
+
+Sessão de retomada após ~7 semanas parado. Pauta de continuação em [[Fechamento 2026-08-21 + pauta]].
+
+**Entregue:** 4 críticos da auditoria + 3 bugs novos da revisão de código + reconciliação do harness (51 commits parados, nunca testados → 128/128 na 1ª execução) + fluxo `Atendimento NetGo — v2` (validador 0/0) + Coolify migrado da branch para o `main`. Suíte: **21 → 148 testes**.
+
+**Dois erros meus nesta sessão, registrados para não repetir:**
+1. Concluí que o sistema "nunca tinha rodado" a partir do estado da máquina local (sem Docker/Postgres/.env). Ele estava em produção o tempo todo. **Estado da máquina de dev não é evidência sobre produção.**
+2. Afirmei que a correção do `JWT_SECRET` era "sem risco de downtime" sem ter lido o Dockerfile, que fixa `NODE_ENV=production` — exatamente o caso que dispara a falha dura. **Verificar a config de deploy antes de afirmar consequência de deploy.**
+
+**O que a sessão ensinou sobre o produto:** o harness pega problema de *grafo*, não de *configuração*. O `max_turnos: 12` que encerrou o atendimento comercial no meio passou por validador e simulador sem alarme — só o chat de conversa real pegou. Validador e simulador são rede ampla; conversa real continua insubstituível.
+
+**Aberto e importante:** as migrations 008/009 nunca foram confirmadas rodando (a 008 apaga linhas) — ler o log de boot do Coolify é o item 1 da pauta.
