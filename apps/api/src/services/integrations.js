@@ -105,9 +105,9 @@ export async function consultarClientes(cpfcnpj) {
   let raw = null;
   try {
     const { url } = await getSGPConfig();
-    console.log(`[SGP] consultacliente: URL=${url} CPF=${digits}`);
+    console.log(`[SGP] consultacliente: URL=${url}`);
     raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: digits });
-    console.log(`[SGP] Resposta (digits):`, JSON.stringify(raw)?.slice(0, 200));
+    console.log(`[SGP] consultacliente (digits): ${raw?.contratos?.length ?? 0} contrato(s)`);
   } catch(e) {
     console.error('[SGP] Erro consultacliente (digits):', e.message);
     raw = null;
@@ -115,7 +115,7 @@ export async function consultarClientes(cpfcnpj) {
   if (!raw?.contratos?.length) {
     try {
       raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: formatted });
-      console.log(`[SGP] Resposta (formatted):`, JSON.stringify(raw)?.slice(0, 200));
+      console.log(`[SGP] consultacliente (formatted): ${raw?.contratos?.length ?? 0} contrato(s)`);
     } catch(e) {
       console.error('[SGP] Erro consultacliente (formatted):', e.message);
       raw = null;
@@ -258,7 +258,6 @@ export async function criarChamado(contrato, ocorrenciatipo, conteudo, extras = 
   const body = montarBodyChamado(contrato, ocorrenciatipo, conteudo, extras);
   console.log(`[SGP] criarChamado: contrato=${contrato} tipo=${body.ocorrenciatipo}`);
   const raw = await sgpPostJSON('/api/ura/chamado/', body);
-  console.log(`[SGP] criarChamado resposta:`, JSON.stringify(raw));
 
   // SGP retorna diferentes formatos dependendo da versão
   const protocolo = raw?.protocolo
@@ -267,6 +266,9 @@ export async function criarChamado(contrato, ocorrenciatipo, conteudo, extras = 
     || raw?.id
     || raw?.ocorrencia_id
     || null;
+
+  // Só o desfecho: a resposta crua traz nome e dados do assinante.
+  console.log(`[SGP] criarChamado resposta: protocolo=${protocolo ?? 'nenhum'} status=${raw?.status ?? '-'}`);
 
   return {
     ...raw,
@@ -531,9 +533,11 @@ export async function precadastrarCliente(d = {}) {
     });
   }
 
-  console.log('[SGP] precadastro/F params:', JSON.stringify(params));
+  // Nunca logar `params`: carrega CPF, nome, endereço completo e a senha padrão
+  // do assinante. Só os campos enviados, para diagnosticar payload incompleto.
+  console.log('[SGP] precadastro/F campos:', Object.keys(params).join(','));
   const raw = await sgpPost('/api/precadastro/F', params);
-  console.log('[SGP] precadastro/F resposta:', JSON.stringify(raw));
+  console.log(`[SGP] precadastro/F resposta: id=${raw?.id ?? raw?.cliente_id ?? 'nenhum'} msg=${raw?.message ?? raw?.error ?? '-'}`);
 
   // Normalização de resposta — SGP costuma retornar { message, id } ou erros variados
   const ok = !raw?.error && !raw?.errors && (
