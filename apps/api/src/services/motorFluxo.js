@@ -14,9 +14,8 @@ import {
   criarChamado, verificarConexao, listarPlanos, consultarManutencao,
   sgpBuscarCliente, sgpBuscarBoletos, sgpVerificarStatus,
   sgpAbrirChamado, sgpPromessaPagamento, sgpListarPlanos,
-  evolutionEnviarTexto, evolutionEnviarBotoes, evolutionEnviarLista,
-  evolutionEnviarCTA, evolutionEnviarImagem, evolutionEnviarAudio,
-  evolutionEnviarArquivo,
+  // As funções evolutionEnviar* saíram daqui: o envio por canal mora em
+  // `canais/evolution.js`, que as recebe por injeção.
 } from './integrations.js';
 import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
 import { criarFilaPorChave } from './filaPorChave.js';
@@ -938,69 +937,10 @@ async function enviarResposta(conversa, resp, instancia) {
   if (!chatId) return;
 
   try {
-    if (conversa.canal === 'telegram') {
-      // ── Envio via Telegram ──────────────────────────────────
-      const { tgEnviarTexto, tgEnviarBotoes, tgEnviarImagem } = await import('./telegram.js');
-      switch (resp.tipo) {
-        case 'texto':
-          if (resp.texto) await tgEnviarTexto(chatId, resp.texto); break;
-        case 'botoes':
-          if (resp.botoes?.length) await tgEnviarBotoes(chatId, resp.corpo || resp.texto || '', resp.botoes);
-          break;
-        case 'lista': {
-          // Telegram não tem lista nativa — converte para botões (máx 8 itens)
-          console.log('[Motor] lista resp:', JSON.stringify(resp).slice(0, 300));
-          let itens = resp.itens || [];
-          // Garante array — pode vir como string JSON
-          if (typeof itens === 'string') { try { itens = JSON.parse(itens); } catch { itens = []; } }
-          if (!Array.isArray(itens)) itens = [];
-          console.log('[Motor] lista itens count:', itens.length, 'tipo:', typeof resp.itens);
-          if (!itens.length) {
-            // Sem itens configurados — envia só o corpo como texto para não travar
-            if (resp.corpo) await tgEnviarTexto(chatId, resp.corpo);
-            break;
-          }
-          if (itens.length <= 8) {
-            // Até 8 itens: usa botões inline
-            const botoes = itens.map(it => ({ id: it.id, label: it.titulo || it.id }));
-            await tgEnviarBotoes(chatId, resp.corpo || 'Selecione uma opção:', botoes);
-          } else {
-            // Muitos itens: texto numerado
-            const emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
-            const linhas = itens.slice(0,10).map((it, i) => `${emojis[i]||`${i+1}.`} ${it.titulo||it.id}`).join('\n');
-            await tgEnviarTexto(chatId, `${resp.corpo || 'Selecione uma opção:'}\n\n${linhas}\n\nDigite o *número* da opção:`);
-          }
-          break;
-        }
-        case 'cta':
-          if (resp.corpo) await tgEnviarTexto(chatId, `${resp.corpo}\n\n🔗 [${resp.label || 'Acessar'}](${resp.url})`); break;
-        case 'imagem':
-          if (resp.url) await tgEnviarImagem(chatId, resp.url, resp.legenda); break;
-        default:
-          if (resp.texto) await tgEnviarTexto(chatId, resp.texto); break;
-      }
-    } else {
-      // ── Envio via Evolution API (WhatsApp) ───────────────────
-      if (!instancia) return;
-      switch (resp.tipo) {
-        case 'texto':
-          await evolutionEnviarTexto(instancia, chatId, resp.texto); break;
-        case 'cta':
-          await evolutionEnviarCTA(instancia, chatId, resp); break;
-        case 'botoes':
-          if (resp.botoes?.length) await evolutionEnviarBotoes(instancia, chatId, resp);
-          break;
-        case 'lista':
-          if (resp.itens?.length) await evolutionEnviarLista(instancia, chatId, resp);
-          break;
-        case 'imagem':
-          if (resp.url) await evolutionEnviarImagem(instancia, chatId, resp); break;
-        case 'audio':
-          if (resp.url) await evolutionEnviarAudio(instancia, chatId, resp); break;
-        case 'arquivo':
-          if (resp.url) await evolutionEnviarArquivo(instancia, chatId, resp); break;
-      }
-    }
+    // O despacho por canal vive em `canais/` (um adapter por provedor).
+    // Aqui fica só o que NÃO é envio: persistência, broadcast e guards acima.
+    const { enviarPorCanal } = await import('./canais/index.js');
+    await enviarPorCanal(conversa.canal, { numero: chatId, instancia }, resp);
   } catch (err) {
     console.error(`[Motor] Envio ${conversa.canal} falhou:`, err.message);
   }
