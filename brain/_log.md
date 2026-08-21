@@ -174,3 +174,32 @@ Revisão pedida pelo Christian ("código quebrado, sem sentido, sem lógica, bug
 Lido a fundo: motor de fluxo, auth, dashboard, monitor de SLA, Clientes, sysconfig, contrato FE↔BE. **Não** revisado linha a linha: `iaTools.js`, `integrations.js`, `supervisoraIA.js` e a maioria das rotas e páginas de frontend — os achados de médio porte da auditoria nessas áreas seguem sem revalidação.
 
 Suíte: 31 → 41 testes.
+
+## [2026-08-21 · reconciliação] WORK | Harness de testes de fluxo reconciliado com o main
+
+O Christian pediu para construir um ambiente de testes de fluxo. **Ele já existia** — na branch `worktree-ambiente-testes-fluxo`, parada com **51 commits** nunca mergeados. Descoberto antes de escrever qualquer código, ao checar as branches remotas.
+
+### O que a branch tinha (e o main não)
+Harness completo (validador estático, `motorSimulador`, `motorLoop`, sandbox no `processarConversa`, link público `/teste/<token>`), memória estruturada da IA (`salvar_dado` + ficha), diagnóstico de ONU via banco do SGP, correções do SGP (`listarPlanos` com endpoint certo, 2ª via lendo os campos reais, `nas_id`, pré-cadastro em modo lead) e planos com promoção/benefícios.
+
+### Por que estava parada
+A própria doc dizia: *"escrito mas não rodado neste ambiente (sem node_modules/banco)"*. Eram ~880 linhas de teste jamais executadas. Com as deps instaladas nesta máquina, rodaram **pela primeira vez: 128/128 passando**. O bloqueio era ambiental, não de qualidade.
+
+### Reconciliação
+Feita em worktree isolada (revisar+testar antes de mergear, a pedido do Christian). 4 conflitos, todos resolvidos **combinando** os dois lados:
+
+- **`motorFluxo.js`** — a branch injeta deps em `processarConversa` (`db`/`estados`/`enviar`/`sandbox`); o main envolveu a mesma função com a fila de serialização. Complementares.
+  ⚠️ **Achado da revisão:** a fila **não pode** valer no sandbox. A rota pública usa `conversa.id = share:<fluxoId>` — **fixo por fluxo**, não por visitante. Serializar ali colocaria todos os testadores numa fila única, cada um esperando o round-trip de IA/SGP do anterior. Resolvido com `if (opts.estados) return processarConversaInterno(...)`: estado injetado é isolado e dispensa fila. **Um merge ingênuo teria introduzido esse gargalo.**
+- **`nps_inline`** — mantém a escala gravada (main) E o guard de sandbox (branch).
+- **`fluxoHelpers.js` / `.test.js`** — aditivo puro, os dois lados preservados.
+- **`_log.md`** — reordenado por data.
+
+Migrations da branch renumeradas **008/009/010 → 011/012/013** (as 008/009 do main já rodaram em produção; o runner registra por nome de arquivo). Referências na doc atualizadas.
+
+### Verificado
+**148/148** testes na suíte reconciliada · `apps/web` builda · as duas CLIs rodam no código merjado (o validador acusa os avisos esperados, incluindo a aresta órfã de `transferir_agente`; o simulador conclui a conversa de 3 turnos).
+
+Também confirmado que o `encontrarProximo` do `motorLoop` continua idêntico ao do motor (só diferem `export` e um comentário) — o espelho segue fiel.
+
+### Aberto
+Branch `merge/harness` **não** mergeada no main nem deployada. As migrations 008/009 (main) e 011/012/013 (branch) seguem sem validação contra Postgres real.
