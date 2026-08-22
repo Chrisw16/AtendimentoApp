@@ -251,6 +251,27 @@ FASE 0: 21/22 em 4,6 s pelo túnel, **22/22 em 1,4 s** com um Redis local na 638
 | pura (`npm test`) | 185 | 185 |
 | integração (`npm run test:integracao`) | 22 | **44** |
 
+## ⚠️ Mergeada no `main` LOCAL, **não pushada** — de propósito
+
+`push` neste repo é `deploy` (webhook do Coolify no `main`). Esta entrega não é
+como as anteriores:
+
+1. **É o primeiro deploy que EXIGE a migration antes de aceitar tráfego.**
+   `criar()` depende de `protocolo_seq` e `obterOuCriar` usa `onConflict` sobre a
+   unique parcial — sem elas, nenhuma conversa nasce.
+2. **A migration 014 MEXE EM DADO DE PRODUÇÃO**: encerra conversas vivas
+   duplicadas do mesmo (telefone, canal) antes de criar a unique.
+3. **Migration quebrada agora derruba o site inteiro**, não só o schema — o
+   `HEALTHCHECK` passou a apontar para `/health/ready`.
+4. **O deploy do Coolify é intermitente** e ninguém estaria olhando.
+
+Antes de pushar, confirmar **duas** coisas que não dá para verificar daqui:
+
+- o proxy do Coolify **não roteia para container unhealthy** (é o que faz o 503
+  do readiness valer alguma coisa; o `HEALTHCHECK` do Docker sozinho não garante);
+- o `stop_grace_period` é **maior que os 8 s** do dreno, senão o SIGKILL chega
+  antes de o turno terminar.
+
 ## Fica para a FASE 4 (Inbox)
 
 Morte no meio do turno perde o **gatilho**, não o estado: a mensagem já foi
