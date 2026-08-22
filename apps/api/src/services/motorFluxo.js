@@ -19,23 +19,26 @@ import {
 } from './integrations.js';
 import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
 import { criarFilaPorChave } from './filaPorChave.js';
-
-// Estado de execução em memória (por conversa_id)
-const estadosExecucao = new Map();
+import { estadoStore }      from './estadoStore.js';
 
 // Serializa o processamento por conversa. Sem isto, duas mensagens seguidas do
-// mesmo cliente intercalam nos `await` de SGP/IA e corrompem `estadosExecucao`
-// (o estado é lido no começo e só gravado no fim).
-const filaConversa = criarFilaPorChave();
+// mesmo cliente intercalam nos `await` de SGP/IA e corrompem o estado
+// (é lido no começo e só gravado no fim).
+// Exportada para o shutdown gracioso saber se ainda há turno em voo.
+export const filaConversa = criarFilaPorChave();
 
 // ── ENTRY POINT ───────────────────────────────────────────────────
 export function processarConversa(conversa, mensagemCliente, opts = {}) {
   // Sandbox/teste traz o PRÓPRIO Map de estados: o estado é isolado e não toca
-  // o `estadosExecucao` global, então não precisa da fila — e não deve entrar
-  // nela. A rota pública de teste usa um id fixo por fluxo (`share:<id>`), de
-  // modo que serializar ali colocaria TODOS os visitantes numa fila só, cada um
-  // esperando o round-trip de IA/SGP do anterior.
-  if (opts.estados) return processarConversaInterno(conversa, mensagemCliente, opts);
+  // o `flow_executions` de produção, então não precisa da fila — e não deve
+  // entrar nela. A rota pública de teste usa um id fixo por fluxo
+  // (`share:<id>`), de modo que serializar ali colocaria TODOS os visitantes
+  // numa fila só, cada um esperando o round-trip de IA/SGP do anterior.
+  //
+  // O guard é `opts.sandbox`, NÃO `opts.estados`: era a presença de `estados`
+  // que desligava a fila, então injetar um store por `opts.estados` em produção
+  // mataria a serialização em silêncio e a race de 2026-08-21 voltaria.
+  if (opts.sandbox) return processarConversaInterno(conversa, mensagemCliente, opts);
 
   // Produção: uma conversa por vez, senão duas mensagens seguidas do mesmo
   // cliente intercalam nos `await` e corrompem o estado compartilhado.
@@ -44,32 +47,43 @@ export function processarConversa(conversa, mensagemCliente, opts = {}) {
 
 async function processarConversaInterno(conversa, mensagemCliente, opts = {}) {
   const db      = opts.db      || getDb();
-  const estados = opts.estados || estadosExecucao;  // sandbox/teste injeta um Map isolado
+  const estados = opts.estados || estadoStore;      // sandbox/teste injeta um Map isolado
   const enviar  = opts.enviar  || enviarResposta;   // sandbox captura em vez de enviar no WhatsApp
   const sandbox = !!opts.sandbox;
 
-  // Busca fluxo ativo — ou usa o fluxo injetado (teste de um fluxo específico)
-  const fluxo = opts.fluxo || await db('fluxos').where({ ativo: true }).first();
+  let estado = await estados.get(conversa.id);
+  const retomando = !!estado;
+  if (!estado) estado = { noAtual: null, contexto: { cliente: {} }, historico: [], aguardando: null };
+
+  // Versão fixa por conversa (§12). A execução congela o grafo ao nascer e passa
+  // a rodar sobre a própria cópia: publicar uma versão nova — ou ativar OUTRO
+  // fluxo, que troca `ativo` inteiro — não move mais quem está no meio do
+  // atendimento. `opts.fluxo` mantém precedência absoluta: é o que faz o botão
+  // "Testar fluxo" exercitar o rascunho e não a versão publicada.
+  let fluxo = opts.fluxo;
+  if (!fluxo && estado._grafo) fluxo = { id: estado._fluxoId, nome: estado._fluxoNome, dados: estado._grafo };
+  if (!fluxo) fluxo = await db('fluxos').where({ ativo: true }).first();
   if (!fluxo) return sandbox ? undefined : processarIADireta(conversa, mensagemCliente);
 
   const dados = parseDados(fluxo);
-  console.log(`[Motor] Fluxo "${fluxo.nome}": ${dados.nodes?.length || 0} nós, ${dados.edges?.length || 0} edges`);
+  console.log(`[Motor] Fluxo "${fluxo.nome}": ${dados.nodes?.length || 0} nós, ${dados.edges?.length || 0} edges${retomando ? ' (retomando)' : ''}`);
   if (!dados.nodes?.length) {
     console.warn('[Motor] Fluxo sem nós — caindo para IA direta');
     return sandbox ? undefined : processarIADireta(conversa, mensagemCliente);
   }
 
-  let estado = estados.get(conversa.id) || {
-    noAtual:  null,
-    contexto: { cliente: {} },
-    historico: [],
-    aguardando: null,
-  };
-
-  // Se não tem nó atual, começa pelo nó de início
+  // Se não tem nó atual, começa pelo nó de início — e é aqui que o grafo congela.
   if (!estado.noAtual) {
     const noInicio = dados.nodes.find(n => n.tipo === 'inicio' || n.tipo === 'gatilho_keyword');
     estado.noAtual = noInicio?.id;
+    // No sandbox NÃO congela: `opts.fluxo` já manda em todo turno (é o rascunho
+    // que a tela quer testar) e o estado volta ao navegador no corpo da
+    // resposta — congelar ali jogaria o grafo inteiro pela rede a cada turno.
+    if (!sandbox) {
+      estado._fluxoId   = fluxo.id;
+      estado._fluxoNome = fluxo.nome;
+      estado._grafo     = dados;
+    }
   }
   if (!estado.noAtual) return sandbox ? undefined : processarIADireta(conversa, mensagemCliente);
 
@@ -81,49 +95,61 @@ async function processarConversaInterno(conversa, mensagemCliente, opts = {}) {
     numero:    conversa.telefone,
   };
 
-  let iteracoes = 0;
-  while (iteracoes++ < 15) {
-    const no = dados.nodes.find(n => n.id === ctx.estado.noAtual);
-    if (!no) {
-      console.warn(`[Motor] Nó não encontrado: ${ctx.estado.noAtual} — encerrando`);
+  // `viva` responde "esta execução continua?" — o `finally` grava ou apaga a
+  // linha uma vez, no fim do turno. Antes o único `set` estava no
+  // `aguardar_input`: tudo que a travessia acumulava (ficha do SGP, contadores
+  // da IA, `salvar_dado`) sumia se o processo morresse antes da pausa.
+  let viva = true;
+  try {
+    let iteracoes = 0;
+    while (iteracoes++ < 15) {
+      const no = dados.nodes.find(n => n.id === ctx.estado.noAtual);
+      if (!no) {
+        // Não pode persistir uma execução apontando para o vazio: em memória isso
+        // se curava no restart, em tabela travaria a conversa para sempre.
+        console.warn(`[Motor] Nó não encontrado: ${ctx.estado.noAtual} — encerrando`);
+        viva = false;
+        break;
+      }
+
+      console.log(`[Motor] Executando nó: ${no.tipo} (id=${no.id})`);
+      let resultado;
+      try {
+        resultado = await processarNo(no, ctx);
+      } catch (err) {
+        console.error(`[Motor] Erro no nó ${no.tipo}:`, err.message, err.stack?.split('\n')[1]);
+        ctx.respostas.push({ tipo: 'texto', texto: `⚠️ Erro interno: ${err.message.slice(0, 100)}` });
+        resultado = { tipo: 'fim' };
+      }
+
+      console.log(`[Motor] Resultado nó ${no.tipo}: tipo=${resultado.tipo} saida=${resultado.saida}`);
+
+      if (resultado.tipo === 'aguardar_input') break;
+      if (resultado.tipo === 'avancar') {
+        const proxId = encontrarProximo(no.id, resultado.saida, dados.edges);
+        console.log(`[Motor] Próximo nó: ${proxId || 'NENHUM (fim do fluxo)'}`);
+        if (!proxId) { viva = false; break; }
+        ctx.estado.noAtual = proxId;
+        continue;
+      }
+      if (resultado.tipo === 'fim') {
+        // `manter` = a execução continua viva esperando alguém de fora (hoje só
+        // `transferir_agente`, que precisa do estado para devolver à automação).
+        viva = !!resultado.manter;
+        break;
+      }
       break;
     }
-
-    console.log(`[Motor] Executando nó: ${no.tipo} (id=${no.id})`);
-    let resultado;
-    try {
-      resultado = await processarNo(no, ctx);
-    } catch (err) {
-      console.error(`[Motor] Erro no nó ${no.tipo}:`, err.message, err.stack?.split('\n')[1]);
-      ctx.respostas.push({ tipo: 'texto', texto: `⚠️ Erro interno: ${err.message.slice(0, 100)}` });
-      resultado = { tipo: 'fim' };
-    }
-
-    console.log(`[Motor] Resultado nó ${no.tipo}: tipo=${resultado.tipo} saida=${resultado.saida}`);
-
-    if (resultado.tipo === 'aguardar_input') {
-      estados.set(conversa.id, ctx.estado);
-      break;
-    }
-    if (resultado.tipo === 'avancar') {
-      const proxId = encontrarProximo(no.id, resultado.saida, dados.edges);
-      console.log(`[Motor] Próximo nó: ${proxId || 'NENHUM (fim do fluxo)'}`);
-      if (!proxId) { estados.delete(conversa.id); break; }
-      ctx.estado.noAtual = proxId;
-      continue;
-    }
-    if (resultado.tipo === 'fim') {
-      estados.delete(conversa.id);
-      break;
-    }
-    break;
+  } finally {
+    if (viva) await estados.set(conversa.id, ctx.estado);
+    else      await estados.delete(conversa.id);
   }
 
   console.log(`[Motor] Respostas geradas: ${ctx.respostas.length}`);
   for (const resp of ctx.respostas) {
     await enviar(conversa, resp, ctx.instancia);
   }
-  return { respostas: ctx.respostas, estado: estados.get(conversa.id) || null };
+  return { respostas: ctx.respostas, estado: viva ? ctx.estado : null };
 }
 
 // ── DESPACHANTE ───────────────────────────────────────────────────
@@ -542,8 +568,14 @@ async function processarNo(no, ctx) {
         await conversaRepo.atualizar(ctx.conversa.id, { status: 'aguardando', aguardando_desde: new Date().toISOString(), agente_id: null });
         broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id));
       }
-      ctx.estados.delete(ctx.conversa.id);
-      return fim();
+      // Ponto de retorno para quando o agente devolver a conversa à automação
+      // (§13). Usa a porta `transferido`, que já existe em `nodeTypes.js` e é
+      // ligável na tela hoje — sem porta ligada, encerra como sempre encerrou.
+      const retomarNo = encontrarProximo(no.id, 'transferido', ctx.dados.edges);
+      ctx.estado._retomarNo = retomarNo || null;
+      // No sandbox não existe humano para devolver a conversa: segue terminal,
+      // que é o que a tela de teste sempre mostrou.
+      return fim({ manter: !ctx.sandbox && !!retomarNo });
     }
 
     case 'chamada_http': {
@@ -598,7 +630,6 @@ async function processarNo(no, ctx) {
         await conversaRepo.encerrar(ctx.conversa.id).catch(() => {});
         broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id).catch(() => ({})));
       }
-      ctx.estados.delete(ctx.conversa.id);
       return fim();
     }
 
@@ -611,6 +642,12 @@ async function processarNo(no, ctx) {
 // ── IA RESPONDE — com suporte a tool calls (igual ao sistema de inspiração) ──
 async function processarIAResponde(no, ctx) {
   const cfg       = no.config || {};
+  // Retomada vinda do humano (§13) chega com mensagem sintética vazia. Sem esta
+  // guarda o histórico sai vazio, a Anthropic recusa (`at least one message is
+  // required`), o catch devolve `avancar('transferir')` e a conversa volta para
+  // o humano num laço. Espera o cliente falar em vez de chamar a API à toa.
+  if (!String(ctx.mensagem?.texto || '').trim()) return aguardar();
+
   const slug      = cfg.contexto || 'outros';
   const maxTurnos = parseInt(cfg.max_turns || cfg.max_turnos) || 6;
   const turnosKey = `_ia_turnos_${no.id}`;
@@ -955,7 +992,7 @@ async function enviarResposta(conversa, resp, instancia) {
 // ── HELPERS ───────────────────────────────────────────────────────
 const avancar = (saida) => ({ tipo: 'avancar', saida: saida || 'saida' });
 const aguardar = () => ({ tipo: 'aguardar_input' });
-const fim = () => ({ tipo: 'fim' });
+const fim = (opts = {}) => ({ tipo: 'fim', manter: !!opts.manter });
 
 function parseDados(fluxo) {
   let nodes = [], edges = [];
@@ -1052,7 +1089,3 @@ async function verificarHorario(db) {
   return { dentro };
 }
 
-// Limpa estado de conversa encerrada
-export function limparEstado(conversaId) {
-  estadosExecucao.delete(conversaId);
-}

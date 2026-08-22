@@ -133,6 +133,26 @@ chatRouter.post('/conversas/:id/devolver-ia', asyncHandler(async (req, res) => {
   if (!conv) throw new HttpError(404, 'Conversa não encontrada');
   await mensagemRepo.criar({ conversa_id: conv.id, origem: 'sistema', tipo: 'texto', texto: '🤖 Devolvido para atendimento da IA' });
   broadcast('conversa_atualizada', conv);
+
+  // §13 — a automação retoma de onde parou. `transferir_agente` gravou
+  // `_retomarNo` (o destino da porta `transferido`) antes de entregar ao humano;
+  // sem essa porta ligada no fluxo não há execução viva e nada acontece aqui,
+  // que é o comportamento de sempre.
+  const { estadoStore } = await import('../services/estadoStore.js');
+  const estado = await estadoStore.get(conv.id);
+  if (estado?._retomarNo) {
+    estado.noAtual    = estado._retomarNo;
+    estado._retomarNo = null;
+    estado.aguardando = null;
+    await estadoStore.set(conv.id, estado);
+
+    const { processarConversa } = await import('../services/motorFluxo.js');
+    // Mensagem sintética: não há fala do cliente numa devolução. Os nós que
+    // consomem texto (`ia_responde`) pausam e esperam — ver a guarda lá.
+    processarConversa(conv, { texto: '', tipo: 'sistema' }).catch(err =>
+      console.error('[Chat] Retomada do fluxo falhou:', err.message));
+  }
+
   res.json(conv);
 }));
 

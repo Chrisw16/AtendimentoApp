@@ -30,7 +30,7 @@ EXPOSE 4000
 ENV NODE_ENV=production
 ENV PORT=4000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
-  CMD wget -qO- http://localhost:4000/health || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
+  CMD wget -qO- http://localhost:4000/health/ready || exit 1
 
 CMD ["node", "src/server.js"]
