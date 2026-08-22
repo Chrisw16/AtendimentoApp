@@ -103,6 +103,18 @@ async function seed() {
   }
   console.log('  ✓ Respostas rápidas inseridas');
 
+  // ── FILAS DE ATENDIMENTO (FASE 5) ─────────────────────────────
+  // O `slug` é o que o nó "Transferir para fila" grava em `cfg.fila` — mudar
+  // aqui quebra fluxo já montado, então trate como identificador, não rótulo.
+  for (const f of [
+    { slug: 'suporte',    nome: 'Suporte Técnico', cor: '#2050B8', ordem: 1, sla_atencao_min: 5,  sla_critico_min: 15 },
+    { slug: 'comercial',  nome: 'Comercial',       cor: '#E8572A', ordem: 2, sla_atencao_min: 3,  sla_critico_min: 10 },
+    { slug: 'financeiro', nome: 'Financeiro',      cor: '#16a34a', ordem: 3, sla_atencao_min: 10, sla_critico_min: 30 },
+  ]) {
+    await db('filas').insert(f).onConflict('slug').ignore();
+  }
+  console.log('  ✓ Filas de atendimento inseridas');
+
   // ── FLUXO PADRÃO ──────────────────────────────────────────────
   const fluxoExiste = await db('fluxos').where({ nome: 'Atendimento Padrão' }).first();
   if (!fluxoExiste) {

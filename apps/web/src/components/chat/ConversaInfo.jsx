@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { filasApi } from '../../lib/api';
 import {
   Phone, Mail, MapPin, Clock, User, Tag,
   ChevronDown, ExternalLink, AlertCircle, X,
@@ -36,9 +37,17 @@ function InfoRow({ icon: Icon, label, value }) {
 }
 
 export default function ConversaInfo({ conversa, chat }) {
-  const { encerrar, transferir } = chat;
+  const { encerrar, transferir, transferirFila } = chat;
   const [showEncerrar, setShowEncerrar] = useState(false);
   const [motivo, setMotivo] = useState('');
+  const [filas, setFilas]   = useState([]);
+
+  // Carrega as filas só quando o painel abre numa conversa viva — o agente
+  // comum tem permissão de LER a lista (é o que precisa para transferir).
+  useEffect(() => {
+    if (conversa.status === 'encerrada') return;
+    filasApi.list().then(setFilas).catch(() => setFilas([]));
+  }, [conversa.status]);
 
   const confirmarEncerrar = () => {
     encerrar(conversa.id, motivo);
@@ -111,6 +120,29 @@ export default function ConversaInfo({ conversa, chat }) {
                 Encerrar conversa
               </Button>
             </div>
+
+            {/* FASE 5 — devolver para uma fila. Transferir para FILA é abrir mão
+                da conversa (volta para "aguardando"); transferir para AGENTE
+                entrega direto a alguém. São ações diferentes de propósito. */}
+            {filas.length > 0 && (
+              <div className={styles.filaWrap}>
+                <label className={styles.filaLabel} htmlFor="fila-destino">Transferir para fila</label>
+                <select
+                  id="fila-destino"
+                  className={styles.filaSelect}
+                  value=""
+                  onChange={e => e.target.value && transferirFila(conversa.id, e.target.value)}
+                >
+                  <option value="">Escolher fila…</option>
+                  {filas.filter(f => f.ativa && f.id !== conversa.fila_id).map(f => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}{f.aguardando ? ` (${f.aguardando} na fila)` : ''}
+                    </option>
+                  ))}
+                </select>
+                {conversa.fila_nome && <p className={styles.filaAtual}>Fila atual: {conversa.fila_nome}</p>}
+              </div>
+            )}
 
             {showEncerrar && (
               <div className={styles.encerrarForm}>

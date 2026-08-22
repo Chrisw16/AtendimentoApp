@@ -1,0 +1,74 @@
+/* Filas.module.css — filas de atendimento humano (FASE 5). */
+.root { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+.header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.subtitulo { font-size: 12px; color: var(--text-secondary); margin: 0; }
+
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.skel { height: 148px; border-radius: 10px; }
+.vazio { grid-column: 1 / -1; color: var(--text-tertiary); font-size: 13px; padding: 24px; text-align: center; }
+
+.card {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg-elevated);
+  padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  border-left: 3px solid var(--fila-cor, var(--accent));
+}
+.cardTop { display: flex; align-items: flex-start; gap: 10px; }
+.cardTop > div:first-of-type { flex: 1; }
+.bolinha { width: 10px; height: 10px; border-radius: 50%; background: var(--fila-cor, var(--accent)); margin-top: 5px; flex: none; }
+.cardNome { font-size: 14px; font-weight: 600; margin: 0; color: var(--text-primary); }
+.slug { font-family: var(--font-mono, monospace); font-size: 11px; color: var(--text-tertiary); }
+.cardAcoes { display: flex; gap: 2px; margin-left: auto; }
+.desc { font-size: 12px; color: var(--text-secondary); margin: 0; }
+
+.metricas { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11px; color: var(--text-secondary); }
+.metrica, .metricaAlerta { display: inline-flex; align-items: center; gap: 4px; }
+.metricaAlerta { color: var(--danger, #dc2626); font-weight: 600; }
+
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tagOff, .tagAviso {
+  font-size: 10px; padding: 2px 7px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em;
+  background: var(--bg-subtle, #f1f5f9); color: var(--text-tertiary);
+}
+.tagAviso { background: #fef3c7; color: #92400e; }
+
+/* ── Modal ── */
+.overlay {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, .45);
+  display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 60;
+}
+.modal {
+  background: var(--bg-surface, #fff); border: 1px solid var(--border); border-radius: 12px;
+  width: min(620px, 100%); max-height: 90vh; overflow: auto;
+}
+.modalHeader { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.modalTitle { font-size: 15px; font-weight: 600; margin: 0; }
+.modalForm { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.modalActions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.formRow { display: flex; gap: 12px; flex-wrap: wrap; }
+.formRow > * { flex: 1; min-width: 120px; }
+
+.field { display: flex; flex-direction: column; gap: 4px; }
+.label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+.hint { font-size: 11px; color: var(--text-tertiary); margin: 0; }
+.color { width: 100%; height: 34px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: none; }
+
+.bloco { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.checkLine { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); cursor: pointer; }
+
+.dias { display: flex; gap: 4px; flex-wrap: wrap; }
+.dia {
+  border: 1px solid var(--border); background: none; border-radius: 6px; padding: 4px 8px;
+  font-size: 11px; color: var(--text-tertiary); cursor: pointer;
+}
+.diaOn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+.membros { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; }
+.membro { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tagSup {
+  font-size: 10px; padding: 2px 8px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: none; color: var(--text-tertiary);
+}
+.tagSupOn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+.error { font-size: 12px; color: var(--danger, #dc2626); margin: 0; }

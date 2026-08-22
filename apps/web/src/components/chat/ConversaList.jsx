@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import { Search, Bot, User, RefreshCw } from 'lucide-react';
+import { useRef, useEffect, useState } from 'react';
+import { Search, Bot, User, RefreshCw , ArrowDownToLine } from 'lucide-react';
 import styles from './ConversaList.module.css';
 
 const FILTROS = [
@@ -90,7 +90,17 @@ function ConversaItem({ conv, ativa, onClick }) {
 
 export default function ConversaList({ chat }) {
   const { conversasFiltradas, conversaAtiva, filtro, busca,
-          setFiltro, setBusca, selecionarConversa, modo, setModo } = chat;
+          setFiltro, setBusca, selecionarConversa, modo, setModo, assumirProximo } = chat;
+  const [puxando, setPuxando] = useState(false);
+
+  // Não dá para desabilitar o botão pelo contador local: `/chat/conversas`
+  // devolve ao agente comum só as conversas DELE, então quem está na fila nem
+  // aparece aqui — o botão ficaria eternamente cinza. Quem responde "não tem
+  // ninguém" é o 204 do servidor.
+  const puxarProxima = async () => {
+    setPuxando(true);
+    try { await assumirProximo(); } finally { setPuxando(false); }
+  };
 
   const searchRef = useRef(null);
 
@@ -114,6 +124,17 @@ export default function ConversaList({ chat }) {
           <span className={styles.title}>Conversas</span>
           <div className={styles.headerActions}>
             {/* Toggle modo bot/humano */}
+            {/* FASE 5: pega a mais urgente das filas do agente, atomicamente —
+                dois agentes clicando junto recebem conversas diferentes. */}
+            <button
+              className={styles.proximaBtn}
+              onClick={puxarProxima}
+              disabled={puxando}
+              title="Assumir a próxima conversa da fila"
+            >
+              <ArrowDownToLine size={13} />
+              <span>{puxando ? '…' : 'Próxima'}</span>
+            </button>
             <button
               className={[styles.modeBtn, modo === 'bot' && styles.modeBot].join(' ')}
               onClick={() => setModo(modo === 'bot' ? 'humano' : 'bot')}
