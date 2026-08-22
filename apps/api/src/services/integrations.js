@@ -558,11 +558,47 @@ export async function precadastrarCliente(d = {}) {
 }
 
 
-export async function getAnthropicClient() {
+/**
+ * Cliente da Anthropic, com o `messages.create` ENVELOPADO para telemetria
+ * (FASE 12).
+ *
+ * O envelope mora aqui, e não nos chamadores, porque os cinco call sites
+ * (`llmGateway`, `motorFluxo` ×3, `supervisoraIA` ×2) usam todos
+ * `ai.messages.create` — instrumentar num lugar cobre os cinco sem editar
+ * nenhum. É também o que fecha, para efeito de CUSTO, a dívida da FASE 9 (o
+ * gateway não é o único caminho) sem precisar migrar o laço agêntico.
+ *
+ * `res.usage` já vem na resposta do SDK; o que faltava era gravar.
+ */
+export async function getAnthropicClient({ conversaId = null, origem = 'motor', sandbox = false } = {}) {
   const key = await getKV('anthropic_api_key');
   if (!key) throw new Error('Anthropic API Key não configurada. Acesse Configurações → Integrações de IA.');
   const { default: Anthropic } = await import('@anthropic-ai/sdk');
-  return new Anthropic({ apiKey: key });
+  const cliente = new Anthropic({ apiKey: key });
+
+  const criarOriginal = cliente.messages.create.bind(cliente.messages);
+  cliente.messages.create = async (params, ...resto) => {
+    const inicio = Date.now();
+    const anotar = (ok, erro, res) => {
+      if (sandbox) return;   // teste de fluxo não é custo real
+      import('./telemetria.js').then(({ registrar }) => registrar({
+        tipo: 'llm', nome: params?.model || 'desconhecido', origem,
+        conversaId, ok, erro, ms: Date.now() - inicio,
+        tokensIn:  res?.usage?.input_tokens  ?? null,
+        tokensOut: res?.usage?.output_tokens ?? null,
+      })).catch(() => {});
+    };
+    try {
+      const res = await criarOriginal(params, ...resto);
+      anotar(true, null, res);
+      return res;
+    } catch (err) {
+      const { classificarErro } = await import('./telemetria.js');
+      anotar(false, classificarErro(err), null);
+      throw err;
+    }
+  };
+  return cliente;
 }
 
 // ── EVOLUTION API ─────────────────────────────────────────────────

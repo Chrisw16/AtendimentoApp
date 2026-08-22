@@ -43,9 +43,11 @@ function normalizar(err) {
 export async function generate({
   system, messages, tools = null, modelo = MODELO_PADRAO,
   temperatura = 0.3, maxTokens = 1024,
+  // FASE 12: quem chama diz de onde veio, para o custo ter dono.
+  conversaId = null, origem = 'gateway', sandbox = false,
 } = {}) {
   if (!messages?.length) throw new LLMError('Nenhuma mensagem para enviar ao modelo.');
-  const ai = await getAnthropicClient();
+  const ai = await getAnthropicClient({ conversaId, origem, sandbox });
   try {
     return await ai.messages.create({
       model: modelo,

@@ -203,6 +203,15 @@ export const qualityApi = {
   coaching:    (agenteId, dias) => api.get(`/quality/coaching/${agenteId}?dias=${dias || 30}`),
 };
 
+// ── ENDPOINTS — ANALYTICS (FASE 12) ───────────────────────────────
+export const analyticsApi = {
+  executivo:    (dias = 30) => api.get(`/analytics/executivo?dias=${dias}`),
+  ia:           (dias = 30) => api.get(`/analytics/ia?dias=${dias}`),
+  filas:        (dias = 30) => api.get(`/analytics/filas?dias=${dias}`),
+  conhecimento: (dias = 30) => api.get(`/analytics/conhecimento?dias=${dias}`),
+  nps:   (dias = 30, corte) => api.get(`/analytics/nps?dias=${dias}${corte ? `&corte=${corte}` : ''}`),
+};
+
 // ── ENDPOINTS — AGENTES ───────────────────────────────────────────
 export const promptsApi = {
   list:      ()           => api.get('/prompts'),

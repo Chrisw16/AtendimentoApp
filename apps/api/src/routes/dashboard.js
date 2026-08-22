@@ -59,13 +59,20 @@ dashboardRouter.get('/kpis', asyncHandler(async (req, res) => {
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'encerrada') as encerradas,
         COUNT(*) FILTER (WHERE status IN ('ia','aguardando','ativa')) as ativas,
-        COUNT(*) FILTER (WHERE agente_id IS NOT NULL) as com_humano,
+        COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM mensagens m WHERE m.conversa_id = conversas.id AND m.origem = 'agente')) as com_humano,
         COUNT(*) FILTER (WHERE status = 'aguardando') as aguardando,
-        COUNT(*) FILTER (WHERE status = 'encerrada' AND agente_id IS NULL) as so_ia
+        -- FASE 12: era "status='encerrada' AND agente_id IS NULL" — e o
+        -- encerrar() ZERA o agente_id, então TODA conversa encerrada entrava
+        -- aqui e a "resolução IA" dava ~100% por construção. O sinal honesto
+        -- é: existiu mensagem de agente nesta conversa?
+        COUNT(*) FILTER (WHERE status = 'encerrada' AND NOT EXISTS (
+          SELECT 1 FROM mensagens m WHERE m.conversa_id = conversas.id AND m.origem = 'agente')) as so_ia
       `)).first(),
 
     db('conversas').whereRaw(`criado_em >= ${since}`)
-      .where('status', 'encerrada').whereNull('agente_id')
+      .where('status', 'encerrada')
+      .whereNotExists(q => q.select(1).from('mensagens')
+        .whereRaw('mensagens.conversa_id = conversas.id').where('mensagens.origem', 'agente'))
       .count('id as n').first(),
 
     getNPS(db, days),
