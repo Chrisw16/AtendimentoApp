@@ -103,8 +103,11 @@ export const NODE_TYPES = {
     label: 'Aguardar resposta',
     group: 'logica',
     color: '#f5c518',
+    // `timeout`/`max_tentativas` só aparecem quando `cfg.timeout` > 0 — ver
+    // `portasDe()` abaixo e o descritor gêmeo em fluxoValidador.js.
     portas: ['saida'],
-    descricao: 'Aguarda a próxima mensagem do cliente e salva em variável',
+    portasSeTimeout: ['timeout', 'max_tentativas'],
+    descricao: 'Aguarda a próxima mensagem do cliente e salva em variável (com timeout opcional)',
   },
   condicao: {
     label: 'Condição',
@@ -139,7 +142,7 @@ export const NODE_TYPES = {
     group: 'logica',
     color: '#f5c518',
     portas: ['saida'],
-    descricao: 'Pausa o fluxo por N segundos antes de continuar',
+    descricao: 'Pausa o fluxo por N segundos de verdade (agenda retomada) antes de continuar',
   },
 
   // ── SGP / ERP ─────────────────────────────────────────────────────
@@ -269,6 +272,7 @@ export const PORTA_META = {
   nao_encontrado:      { color: '#ff4757',  label: 'não encontrado' },
   multiplos_contratos: { color: '#3ecfff',  label: 'múltiplos' },
   max_tentativas:      { color: '#ff4757',  label: 'max tentativas' },
+  timeout:             { color: '#f5c518',  label: 'timeout' },
   ativo:               { color: '#00E5A0',  label: '① Ativo' },
   inativo:             { color: '#ff4757',  label: '② Inativo' },
   cancelado:           { color: '#ff6b35',  label: '③ Cancelado' },

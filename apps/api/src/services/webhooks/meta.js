@@ -7,18 +7,33 @@ import { conversaRepo } from '../../repositories/conversaRepository.js';
 import { mensagemRepo } from '../../repositories/mensagemRepository.js';
 import { broadcast }    from '../sseManager.js';
 
-export async function handleMeta(body) {
+/**
+ * @param {object} opts `{reprocessando}` — ver a nota em evolution.js.
+ *
+ * ⚠️ Teto declarado (FASE 4): a Meta entrega N mensagens num único POST, e a
+ * entrada do inbox é o POST inteiro. Uma que falhe no meio não impede as
+ * outras (o erro é acumulado e lançado no fim), mas **reprocessar a entrada
+ * re-executa o turno das que já tinham sido respondidas**. Por isso o
+ * reprocessamento é manual e auditado (§132), nunca automático.
+ */
+export async function handleMeta(body, opts = {}) {
   const entry = body?.entry?.[0];
   if (!entry) return;
 
+  const erros = [];
   const changes = entry.changes || [];
   for (const change of changes) {
     if (change.field !== 'messages') continue;
     const value = change.value;
 
-    // Mensagens recebidas
+    // Mensagens recebidas — uma quebrada não pode engolir as seguintes.
     for (const msg of value?.messages || []) {
-      await processarMensagemMeta(msg, value);
+      try {
+        await processarMensagemMeta(msg, value, opts);
+      } catch (err) {
+        console.error(`[Webhook Meta] mensagem ${msg?.id} falhou:`, err.message);
+        erros.push(`${msg?.id}: ${err.message}`);
+      }
     }
 
     // Atualizações de status (entregue, lido, etc.)
@@ -26,15 +41,18 @@ export async function handleMeta(body) {
       await atualizarStatusMeta(status);
     }
   }
+
+  // Lançar no fim é o que manda a entrada para a DLQ com o diagnóstico junto.
+  if (erros.length) throw new Error(`${erros.length} mensagem(ns) falharam — ${erros.join(' | ')}`);
 }
 
-async function processarMensagemMeta(msg, value) {
+async function processarMensagemMeta(msg, value, { reprocessando = false } = {}) {
   const telefone = msg.from;
   const canal    = 'whatsapp';
 
   // Deduplica por external_id
-  const existe = await mensagemRepo.porExternalId(msg.id);
-  if (existe) return;
+  const jaExistia = await mensagemRepo.porExternalId(msg.id);
+  if (jaExistia && !reprocessando) return;
 
   // Encontra ou cria conversa — atômico, ver `obterOuCriar` e a migration 014.
   const contato = value?.contacts?.find(c => c.wa_id === telefone);
@@ -47,33 +65,37 @@ async function processarMensagemMeta(msg, value) {
   // Extrai conteúdo da mensagem
   const { texto, tipo, url, mime } = extrairConteudo(msg);
 
-  const mensagem = await mensagemRepo.criar({
-    conversa_id: conversa.id,
-    origem:      'cliente',
-    tipo,
-    texto,
-    url,
-    mime,
-    external_id: msg.id,
-    meta: { timestamp: msg.timestamp },
-  });
+  let mensagem = jaExistia;
+  if (!mensagem) {
+    mensagem = await mensagemRepo.criar({
+      conversa_id: conversa.id,
+      origem:      'cliente',
+      tipo,
+      texto,
+      url,
+      mime,
+      external_id: msg.id,
+      meta: { timestamp: msg.timestamp },
+    });
 
-  // Reentrega concorrente: a unique de external_id barrou o insert duplicado.
-  // Sem isto o motor rodaria 2x e a IA responderia (e cobraria) em dobro.
-  if (!mensagem) return;
-
-  // Incrementa não lidas se conversa não estiver aberta por nenhum agente
-  await conversaRepo.incrementarNaoLidas(conversa.id);
-
-  broadcast('mensagem', { ...mensagem, conversa_id: conversa.id });
-  broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));
+    if (mensagem) {
+      // Incrementa não lidas se conversa não estiver aberta por nenhum agente
+      await conversaRepo.incrementarNaoLidas(conversa.id);
+      broadcast('mensagem', { ...mensagem, conversa_id: conversa.id });
+      broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));
+    } else {
+      // Reentrega concorrente: a unique de external_id barrou o insert.
+      if (!reprocessando) return;
+      mensagem = await mensagemRepo.porExternalId(msg.id);
+      if (!mensagem) return;
+    }
+  }
 
   // Aciona motor de fluxo se conversa estiver com IA
   if (conversa.status === 'ia') {
+    // `await`: ver a nota em evolution.js — é o que dá durabilidade ao turno.
     const { processarConversa } = await import('../motorFluxo.js');
-    processarConversa(conversa, mensagem).catch(err =>
-      console.error('[Webhook Meta] Motor fluxo erro:', err.message)
-    );
+    await processarConversa(conversa, mensagem);
   }
 }
 

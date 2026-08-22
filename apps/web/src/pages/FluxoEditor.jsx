@@ -112,7 +112,7 @@ function NodePreview({ tipo, cfg = {} }) {
     case 'enviar_audio':    return <span style={{fontSize:10,color:'#3ecfff'}}>🎵 {cfg.url?.slice(0,40)||'áudio...'}</span>;
     case 'enviar_arquivo':  return <span style={{fontSize:10,color:'#3ecfff'}}>📄 {cfg.filename||'arquivo...'}</span>;
     case 'enviar_localizacao': return <span style={{fontSize:10,color:'#3ecfff'}}>📍 {cfg.nome||'localização...'}</span>;
-    case 'aguardar_tempo':  return <span style={{fontSize:10,color:'#f5c518'}}>⏱ {cfg.segundos||60}s</span>;
+    case 'aguardar_tempo':  return <span style={{fontSize:10,color:'#f5c518'}}>⏱ {cfg.segundos||60}s (espera real)</span>;
     case 'condicao':        return <span style={{fontSize:10,color:'rgba(255,255,255,.7)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'block'}}><span style={{color:'#f5c518'}}>{cfg.variavel||'var'}</span> {cfg.operador||'=='} <span style={{color:'#f5c518'}}>{cfg.valor||'valor'}</span></span>;
     case 'aguardar_resposta': return <span style={{fontSize:10}}>→ <span style={{color:'#f5c518',fontFamily:'monospace'}}>{`{{${cfg.variavel||'resposta'}}}`}</span></span>;
     case 'definir_variavel': return <span style={{fontSize:10,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'block'}}><span style={{color:'#f5c518',fontFamily:'monospace'}}>{`{{${cfg.variavel||'var'}}}`}</span> = {cfg.valor?.slice(0,20)||'...'}</span>;
@@ -177,7 +177,11 @@ function getPortas(tipo, cfg = {}) {
   if (tipo === 'enviar_lista') { const itens=Array.isArray(cfg.itens)?cfg.itens:[]; if(!itens.length)return [{id:'saida',color:'#3ecfff',label:'saída'}]; return itens.map(it=>({id:it.id||(it.titulo||'').toLowerCase().replace(/\s+/g,'_')||'item',color:'#3ecfff',label:it.titulo||it.id||'item'})); }
   if (tipo === 'ia_roteador') { const rotas=Array.isArray(cfg.rotas)?cfg.rotas:[]; return [...rotas.map(r=>({id:r.id||'rota',color:'#e879f9',label:r.label||r.id})),{id:'nao_entendeu',color:'#888',label:'não entendeu'},{id:'encerrar',color:'#ff4757',label:'encerrar'}]; }
   if (tipo === 'condicao_multipla') { const ramos=Array.isArray(cfg.ramos)?cfg.ramos:[]; return [...ramos.map(r=>({id:r.porta||r.id||'ramo',color:'#f5c518',label:r.porta||r.id||'ramo'})),{id:'default',color:'#888',label:'default'}]; }
-  return def.portas.map(p=>({id:p,color:PORTA_META[p]?.color||def.color,label:PORTA_META[p]?.label||p}));
+  // FASE 4: portas de relógio só existem quando o timeout está configurado —
+  // desenhá-las sempre faria todo fluxo existente acusar porta não conectada.
+  const extras = (Number(cfg.timeout) > 0 ? (def.portasSeTimeout || []) : [])
+    .filter(p => p !== 'max_tentativas' || Number(cfg.max_tentativas) > 0);
+  return [...def.portas, ...extras].map(p=>({id:p,color:PORTA_META[p]?.color||def.color,label:PORTA_META[p]?.label||p}));
 }
 
 // ── FLOW NODE — visual idêntico ao sistema de inspiração ─────────
@@ -335,7 +339,7 @@ function PropsPanel({ node, onChange, onDelete }) {
 
         {node.data.tipo==='enviar_localizacao'&&<><Fld label="Nome"><input value={cfg.nome||''} onChange={e=>set('nome',e.target.value)} placeholder="Escritório" style={IS}/></Fld><Fld label="Endereço"><input value={cfg.address||''} onChange={e=>set('address',e.target.value)} placeholder="Rua X, 123" style={IS}/></Fld><div style={{display:'flex',gap:8}}><Fld label="Latitude"><input value={cfg.lat||''} onChange={e=>set('lat',e.target.value)} placeholder="-5.79" style={IS}/></Fld><Fld label="Longitude"><input value={cfg.lng||''} onChange={e=>set('lng',e.target.value)} placeholder="-35.21" style={IS}/></Fld></div></>}
 
-        {node.data.tipo==='aguardar_resposta'&&<><Fld label="Mensagem (opcional)"><textarea value={cfg.mensagem||''} onChange={e=>set('mensagem',e.target.value)} rows={2} placeholder="Qual é o seu CPF?" style={TA}/></Fld><Fld label="Salvar resposta em" hint={`Disponível como {{${cfg.variavel||'resposta'}}}`}><input value={cfg.variavel||''} onChange={e=>set('variavel',e.target.value)} placeholder="resposta" style={IS}/></Fld><Fld label="Máx. tentativas"><input type="number" min={1} max={10} value={cfg.max_tentativas||3} onChange={e=>set('max_tentativas',parseInt(e.target.value)||3)} style={{...IS,width:80}}/></Fld></>}
+        {node.data.tipo==='aguardar_resposta'&&<><Fld label="Mensagem (opcional)"><textarea value={cfg.mensagem||''} onChange={e=>set('mensagem',e.target.value)} rows={2} placeholder="Qual é o seu CPF?" style={TA}/></Fld><Fld label="Salvar resposta em" hint={`Disponível como {{${cfg.variavel||'resposta'}}}`}><input value={cfg.variavel||''} onChange={e=>set('variavel',e.target.value)} placeholder="resposta" style={IS}/></Fld><Fld label="Timeout (segundos)" hint="0 = espera para sempre. Com timeout, aparecem as saídas timeout / max tentativas."><input type="number" min={0} max={86400} value={cfg.timeout||0} onChange={e=>set('timeout',parseInt(e.target.value)||0)} style={{...IS,width:100}}/></Fld><Fld label="Máx. tentativas" hint="0 = sem teto: sempre sai por timeout"><input type="number" min={0} max={10} value={cfg.max_tentativas??0} onChange={e=>set('max_tentativas',parseInt(e.target.value)||0)} style={{...IS,width:80}}/></Fld></>}
 
         {node.data.tipo==='condicao'&&<><Fld label="Variável"><input value={cfg.variavel||''} onChange={e=>set('variavel',e.target.value)} placeholder="cliente.status" style={IS}/></Fld><Fld label="Operador"><select value={cfg.operador||'=='} onChange={e=>set('operador',e.target.value)} style={{...IS,cursor:'pointer'}}>{['==','!=','>','<','contem','nao_contem','vazio','nao_vazio'].map(op=><option key={op} value={op}>{op}</option>)}</select></Fld><Fld label="Valor"><input value={cfg.valor||''} onChange={e=>set('valor',e.target.value)} placeholder="ativo" style={IS}/></Fld></>}
 

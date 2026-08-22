@@ -52,7 +52,17 @@ export const NOS = {
   solicitar_localizacao: { estaticas: ['localizacao_recebida'], aguarda: true },
 
   // ── Lógica ──
-  aguardar_resposta: { estaticas: ['saida'], aguarda: true },
+  aguardar_resposta: {
+    estaticas: ['saida'],
+    // FASE 4: `timeout` e `max_tentativas` só existem quando `cfg.timeout` está
+    // configurado — sem isso o nó espera para sempre, como sempre esperou.
+    // São DINÂMICAS de propósito: como estáticas, todo fluxo já existente
+    // passaria a acusar `porta_nao_conectada` sem nada ter mudado nele.
+    dinamicas: (cfg) => (Number(cfg.timeout) > 0
+      ? ['timeout', ...(Number(cfg.max_tentativas) > 0 ? ['max_tentativas'] : [])]
+      : []),
+    aguarda: true,
+  },
   condicao:          { estaticas: ['sim', 'nao'] },
   condicao_multipla: {
     estaticas: [],
@@ -61,7 +71,9 @@ export const NOS = {
   },
   definir_variavel: { estaticas: ['saida'] },
   divisao_ab:       { estaticas: ['a', 'b'] },
-  aguardar_tempo:   { estaticas: ['saida'] }, // simulado: avança na hora (não pausa de fato)
+  // FASE 4: pausa DE VERDADE (job `flow_resume` retoma). `aguarda: true` porque
+  // um ciclo que passa por ele não é mais um loop instantâneo que trava o motor.
+  aguardar_tempo:   { estaticas: ['saida'], aguarda: true },
 
   // ── SGP / ERP ──
   consultar_cliente:   { estaticas: ['encontrado', 'multiplos_contratos', 'max_tentativas'], aguarda: true },

@@ -30,6 +30,7 @@ import { financeiroRouter }  from './routes/financeiro.js';
 import { sysconfigRouter }   from './routes/sysconfig.js';
 import { planosRouter }      from './routes/planos.js';
 import { chatTesteRouter }   from './routes/chatTeste.js';
+import { filasRouter }       from './routes/filas.js';
 import { errorHandler }      from './middlewares/errorHandler.js';
 
 const app  = express();
@@ -94,6 +95,7 @@ app.use('/api/ordens',      ordensRouter);
 app.use('/api/financeiro',  financeiroRouter);
 app.use('/api/sysconfig',   sysconfigRouter);
 app.use('/api/planos',      planosRouter);
+app.use('/api/filas',       filasRouter);   // inbox/outbox/jobs: inspeção e DLQ (§132)
 
 // Frontend estático
 if (existsSync(frontendDist)) {
@@ -136,9 +138,13 @@ if (process.env.DATABASE_URL) {
 
   import('./migrations/run.js')
     .then(({ runMigrations }) => runMigrations())
-    .then(() => {
+    .then(async () => {
       console.log('✅ Migrations OK');
       prontidao = { pronto: true, motivo: null };
+      // O worker de filas sobe SÓ aqui, e não no `finally` como os monitores:
+      // com migration falha ele martelaria tabela inexistente a cada 5 s.
+      const { iniciarWorker } = await import('./services/workerFilas.js');
+      iniciarWorker();
     })
     .catch(err => {
       console.error('❌ Migration FALHOU:', err.message);
@@ -189,6 +195,16 @@ async function encerrar(sinal) {
       ? '   ✓ Nenhum turno de fluxo em voo'
       : `   ⚠️  ${restantes} turno(s) ainda em voo ao estourar o limite de ${LIMITE_DRENO_MS} ms`);
   } catch {}
+
+  try {
+    // Para de reivindicar e devolve o lote em voo. Sem isto, todo deploy deixa
+    // linhas `processando` que só o reclaim de 2 min resolve — e nesses 2 min a
+    // mensagem do cliente fica parada na fila.
+    const { pararWorker } = await import('./services/workerFilas.js');
+    await pararWorker();
+  } catch (err) {
+    console.error('   ⚠️  dreno do worker de filas:', err.message);
+  }
 
   try {
     const { getDb } = await import('./config/db.js');

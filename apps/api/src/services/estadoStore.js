@@ -22,7 +22,8 @@
  * exige lock distribuído por conversa (Redis), não uma coluna `revisao` — que
  * detectaria tarde demais, com o chamado já aberto no SGP.
  */
-import { getDb } from '../config/db.js';
+import { getDb }  from '../config/db.js';
+import { expirou } from './politicaRetry.js';
 
 // Os ids de sandbox são `sandbox:<uuid>` e `share:<uuid>`; a coluna é `uuid`.
 // Essas rotas injetam o próprio Map e nunca chegam aqui — se um dia chegarem,
@@ -30,7 +31,8 @@ import { getDb } from '../config/db.js';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Depois disto a execução é considerada abandonada e a conversa recomeça.
+ * A regra de expiração mora em `politicaRetry.expirou` — função pura, testada
+ * sem Postgres.
  *
  * Não é enfeite: enquanto o estado vivia em memória, **o restart era a
  * expiração** — e deploy é frequente. Sem TTL, o cliente que abre o menu, não
@@ -39,8 +41,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * pela porta `saida` e, se ela não estiver ligada, o `encontrarProximo` cai no
  * 3º fallback (primeira aresta qualquer) e o despeja num ramo arbitrário.
  * Abandono é o comportamento normal do cliente, não caso de borda.
+ *
+ * FASE 4: espera de timer (`aguardar_tempo`) é a categoria OPOSTA do abandono —
+ * a conversa está parada de propósito e o TTL de 2h a mataria antes do job
+ * `flow_resume` rodar. `estado._parkedAte` segura a linha até a hora marcada,
+ * com teto duro de 72h.
  */
-const TTL_HORAS = 2;
+
+/** A coluna é `uuid`; ids de sandbox (`sandbox:`/`share:`) não são. */
+export const ehUuid = (v) => UUID.test(String(v));
 
 export const estadoStore = {
   async get(conversaId) {
@@ -48,15 +57,18 @@ export const estadoStore = {
     const linha = await getDb()('flow_executions').where({ conversa_id: conversaId }).first();
     if (!linha?.estado) return null;
 
-    const idadeMs = Date.now() - new Date(linha.atualizado_em).getTime();
-    if (idadeMs > TTL_HORAS * 3600_000) {
-      console.log(`[Estado] Execução de ${conversaId} expirada (${Math.round(idadeMs / 3600_000)}h) — conversa recomeça`);
+    // Parseia ANTES de decidir: `expirou` lê `_parkedAte` de DENTRO do blob.
+    // jsonb já volta objeto no pg; a guarda cobre driver/coluna text.
+    const estado = typeof linha.estado === 'string' ? JSON.parse(linha.estado) : linha.estado;
+
+    if (expirou(linha.atualizado_em, estado)) {
+      const horas = Math.round((Date.now() - new Date(linha.atualizado_em).getTime()) / 3600_000);
+      console.log(`[Estado] Execução de ${conversaId} expirada (${horas}h) — conversa recomeça`);
       await estadoStore.delete(conversaId);
       return null;
     }
 
-    // jsonb já volta objeto no pg; a guarda cobre driver/coluna text.
-    return typeof linha.estado === 'string' ? JSON.parse(linha.estado) : linha.estado;
+    return estado;
   },
 
   async set(conversaId, estado) {

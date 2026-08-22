@@ -6,7 +6,7 @@ import { mensagemRepo } from '../../repositories/mensagemRepository.js';
 import { broadcast }    from '../sseManager.js';
 import { lerValorKV }   from '../kvSeguro.js';
 
-export async function handleTelegram(body) {
+export async function handleTelegram(body, opts = {}) {   // opts.reprocessando: ver evolution.js
   // Callback de botão inline — transforma em mensagem de texto
   if (body?.callback_query) {
     const cb     = body.callback_query;
@@ -26,7 +26,7 @@ export async function handleTelegram(body) {
     } catch {}
 
     // Processa como se fosse uma mensagem de texto normal
-    await processarMensagemTelegram(chatId, nome, texto, `cb-${cb.id}`);
+    await processarMensagemTelegram(chatId, nome, texto, `cb-${cb.id}`, 'texto', opts);
     return;
   }
 
@@ -37,7 +37,7 @@ export async function handleTelegram(body) {
   const nome   = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ') || null;
   const external = String(msg.message_id);
   const { texto, tipo } = extrairConteudoTelegram(msg);
-  await processarMensagemTelegram(chatId, nome, texto, `tg-${external}`, tipo);
+  await processarMensagemTelegram(chatId, nome, texto, `tg-${external}`, tipo, opts);
 }
 
 async function _getBotToken() {
@@ -51,35 +51,40 @@ async function _getBotToken() {
   throw new Error('Token Telegram não configurado');
 }
 
-async function processarMensagemTelegram(chatId, nome, texto, externalId, tipo = 'texto') {
-  const existe = await mensagemRepo.porExternalId(externalId);
-  if (existe) return;
+async function processarMensagemTelegram(chatId, nome, texto, externalId, tipo = 'texto', { reprocessando = false } = {}) {
+  const jaExistia = await mensagemRepo.porExternalId(externalId);
+  if (jaExistia && !reprocessando) return;
 
   // Atômico, ver `obterOuCriar` e a migration 014.
   const { conversa, nova } = await conversaRepo.obterOuCriar(chatId, 'telegram', { nome, status: 'ia' });
   if (nova) broadcast('nova_conversa', conversa);
 
-  const mensagem = await mensagemRepo.criar({
-    conversa_id: conversa.id,
-    origem:      'cliente',
-    tipo,
-    texto,
-    external_id: externalId,
-  });
+  let mensagem = jaExistia;
+  if (!mensagem) {
+    mensagem = await mensagemRepo.criar({
+      conversa_id: conversa.id,
+      origem:      'cliente',
+      tipo,
+      texto,
+      external_id: externalId,
+    });
 
-  // Reentrega concorrente: a unique de external_id barrou o insert duplicado.
-  // Sem isto o motor rodaria 2x e a IA responderia (e cobraria) em dobro.
-  if (!mensagem) return;
-
-  await conversaRepo.incrementarNaoLidas(conversa.id);
-  broadcast('mensagem', { ...mensagem, conversa_id: conversa.id });
-  broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));
+    if (mensagem) {
+      await conversaRepo.incrementarNaoLidas(conversa.id);
+      broadcast('mensagem', { ...mensagem, conversa_id: conversa.id });
+      broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));
+    } else {
+      // Reentrega concorrente: a unique de external_id barrou o insert.
+      if (!reprocessando) return;
+      mensagem = await mensagemRepo.porExternalId(externalId);
+      if (!mensagem) return;
+    }
+  }
 
   if (conversa.status === 'ia') {
+    // `await`: ver a nota em evolution.js — é o que dá durabilidade ao turno.
     const { processarConversa } = await import('../motorFluxo.js');
-    processarConversa(conversa, mensagem).catch(err =>
-      console.error('[Webhook Telegram] Motor fluxo erro:', err.message)
-    );
+    await processarConversa(conversa, mensagem);
   }
 
   if (conversa.status === 'ativa' && conversa.agente_id && texto) {
