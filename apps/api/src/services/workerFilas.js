@@ -14,9 +14,10 @@
  * processamento na hora, senão toda mensagem de cliente esperaria até 5 s para
  * ser respondida. Aqui é rede de segurança.
  *
- * ponytail: um `setInterval` global, não um worker por fila. Com um container
- * (o deploy de hoje) o tick é barato e sequencial evita N conexões simultâneas
- * no pool. Se um dia a fila de saída atrasar por causa da de entrada, separe.
+ * ponytail: um `setInterval` global, não um worker por fila. As três filas
+ * rodam em sequência dentro do tick (mas o LOTE de cada uma vai em paralelo —
+ * conversas distintas não se esperam). Com um container, é barato. Se um dia a
+ * fila de saída atrasar por causa da de entrada, aí sim separe os timers.
  */
 import { getDb }         from '../config/db.js';
 import { reclamarLeases, liberar } from './filaDb.js';
@@ -27,6 +28,9 @@ import * as jobs         from './jobs.js';
 const INTERVALO_MS = 5_000;
 const PURGA_MS     = 3600_000;      // de hora em hora
 const RETENCAO_DIAS = 7;
+// A DLQ fica muito mais tempo (é ela que um humano vai investigar), mas não
+// para sempre: `inbox.payload` é o webhook CRU, com telefone e texto do cliente.
+const RETENCAO_DLQ_DIAS = 30;
 
 let timer      = null;
 let rodando    = false;             // impede ticks sobrepostos
@@ -68,15 +72,25 @@ export async function tick({ db = getDb() } = {}) {
 /**
  * Retenção (§153). Sem isto, `inbox` guarda TODO payload de webhook para sempre
  * — é a tabela que mais cresce no sistema, e ninguém olha entrada de duas
- * semanas atrás. Linha em `falha` NUNCA é apagada: é a DLQ.
+ * semanas atrás. A DLQ (`falha`) sobrevive muito mais, mas não para sempre:
+ * o payload cru carrega telefone e texto do cliente (§124).
  */
 async function purgar(db) {
-  const corte = new Date(Date.now() - RETENCAO_DIAS * 86400_000);
+  const corte    = new Date(Date.now() - RETENCAO_DIAS * 86400_000);
+  const corteDlq = new Date(Date.now() - RETENCAO_DLQ_DIAS * 86400_000);
+
   const n1 = await db('inbox').where({ status: 'ok' }).where('recebido_em', '<', corte).del();
-  const n2 = await db('jobs').whereIn('status', ['ok']).where('criado_em', '<', corte).del();
+  const n2 = await db('jobs').where({ status: 'ok' }).where('criado_em', '<', corte).del();
   const n3 = await db('outbox').whereIn('status', ['enviada', 'nao_suportada'])
     .where('criado_em', '<', corte).del();
-  if (n1 + n2 + n3 > 0) console.log(`[Worker] purga: ${n1} inbox, ${n2} jobs, ${n3} outbox`);
+
+  const n4 = await db('inbox').where({ status: 'falha' }).where('recebido_em', '<', corteDlq).del();
+  const n5 = await db('outbox').whereIn('status', ['falha', 'expirada'])
+    .where('criado_em', '<', corteDlq).del();
+  const n6 = await db('jobs').where({ status: 'falha' }).where('criado_em', '<', corteDlq).del();
+
+  if (n1 + n2 + n3) console.log(`[Worker] purga: ${n1} inbox, ${n2} jobs, ${n3} outbox`);
+  if (n4 + n5 + n6) console.warn(`[Worker] purga da DLQ (>${RETENCAO_DLQ_DIAS}d): ${n4} inbox, ${n5} outbox, ${n6} jobs`);
 }
 
 export function iniciarWorker({ intervaloMs = INTERVALO_MS } = {}) {
@@ -89,10 +103,15 @@ export function iniciarWorker({ intervaloMs = INTERVALO_MS } = {}) {
 }
 
 /**
- * Dreno do SIGTERM: para de reivindicar e devolve o lote em voo.
+ * Dreno do SIGTERM: para de reivindicar e resolve o lote em voo.
  *
  * Sem isto, todo deploy deixa linhas `processando` que só o reclaim de 2 min
  * resolve — e nesses 2 min a mensagem do cliente fica parada.
+ *
+ * O destino de cada linha é o mesmo do reclaim (`destinoLease`), não `pendente`
+ * para tudo: o `server.js` já esperou 8 s pela `filaConversa` antes de chegar
+ * aqui, então o que ainda está reivindicado é turno interrompido de verdade —
+ * e turno de motor não se re-executa sozinho (§23).
  */
 export async function pararWorker({ db = getDb(), limiteMs = 3000 } = {}) {
   parando = true;
@@ -107,6 +126,6 @@ export async function pararWorker({ db = getDb(), limiteMs = 3000 } = {}) {
     devolvidas += await liberar(db, tabela, [...ids]).catch(() => 0);
     ids.clear();
   }
-  if (devolvidas) console.log(`   ✓ ${devolvidas} linha(s) de fila devolvida(s) a pendente`);
+  if (devolvidas) console.log(`   ✓ ${devolvidas} linha(s) de fila resolvida(s) no dreno`);
   return devolvidas;
 }

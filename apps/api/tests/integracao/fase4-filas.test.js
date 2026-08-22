@@ -166,13 +166,19 @@ describe('FASE 4 — inbox, outbox e jobs', { skip: motivoSkip() }, () => {
   describe('outbox', () => {
     const destino = { numero: '5584911110000', instancia: 'inst' };
 
-    test('morte entre persistir e enviar deixa linha pendente que o worker entrega', async () => {
+    test('morte entre persistir e enviar deixa linha que o worker recupera e entrega', async () => {
       const c = await criarConversa(db, { telefone: destino.numero, status: 'ia' });
 
-      // O processo "morre" aqui: registrou a intenção e não chegou a entregar.
+      // O processo "morre" aqui: registrou a intenção (e reivindicou) e não
+      // chegou a despachar. Quem devolve à fila é o reclaim de lease.
       const { linha, esperar } = await outbox.registrar(c, { tipo: 'texto', texto: 'menu' }, destino);
       assert.equal(esperar, false);
-      assert.equal(linha.status, 'pendente');
+      assert.equal(linha.status, 'processando');
+
+      await db('outbox').where({ id: linha.id })
+        .update({ reivindicado_em: new Date(Date.now() - 10 * 60_000) });
+      const devolvidas = await filaDb.reclamarLeases(db, 'outbox');
+      assert.equal(devolvidas[0].status, 'pendente');
 
       // O worker do próximo boot encontra a linha e entrega.
       const enviados = [];
@@ -199,22 +205,52 @@ describe('FASE 4 — inbox, outbox e jobs', { skip: motivoSkip() }, () => {
       assert.equal(a.esperar, false, 'a primeira sai inline');
       assert.equal(b.esperar, true,  'a segunda espera a vez');
 
-      // O worker também respeita a ordem: só a mais antiga é reivindicada.
+      // A primeira ficou `processando` (o inline reivindica); devolve à fila para
+      // simular o processo que morreu antes de despachar.
+      await db('outbox').where({ id: a.linha.id }).update({ status: 'pendente', reivindicado_em: null });
+
       const enviados = [];
       const enviar = async (_canal, _d, resp) => { enviados.push(resp.texto); return { despachado: true }; };
-      const rodada = async () => {
-        const { rows } = await db.raw(
-          `SELECT DISTINCT ON (conversa_id) id FROM outbox
-            WHERE status IN ('pendente','processando') ORDER BY conversa_id, criado_em, id`);
-        for (const r of rows) {
-          const [l] = await db('outbox').where({ id: r.id }).where({ status: 'pendente' })
-            .update({ status: 'processando', tentativas: db.raw('tentativas + 1') }).returning('*');
-          if (l) await outbox.entregar(l, { db, enviar });
-        }
-      };
-      await rodada();
-      await rodada();
+
+      await outbox.processarPendentes({ db, enviar });
+      assert.deepEqual(enviados, ['saudação'], 'a segunda não pode furar a fila');
+      await outbox.processarPendentes({ db, enviar });
       assert.deepEqual(enviados, ['saudação', 'menu']);
+    });
+
+    test('o worker atende UMA saída por conversa e não deixa conversa de fora', async () => {
+      const c1 = await criarConversa(db, { telefone: '5584911110001', status: 'ia' });
+      const c2 = await criarConversa(db, { telefone: '5584911110002', status: 'ia' });
+      for (const [c, textos] of [[c1, ['a1', 'a2']], [c2, ['b1', 'b2']]]) {
+        for (const t of textos) {
+          const { linha } = await outbox.registrar(c, { tipo: 'texto', texto: t }, destino);
+          await db('outbox').where({ id: linha.id }).update({ status: 'pendente', reivindicado_em: null });
+        }
+      }
+
+      const enviados = [];
+      const enviar = async (_canal, _d, resp) => { enviados.push(resp.texto); return { despachado: true }; };
+
+      await outbox.processarPendentes({ db, enviar });
+      assert.deepEqual(enviados.sort(), ['a1', 'b1'], 'uma por conversa, as duas conversas');
+      await outbox.processarPendentes({ db, enviar });
+      assert.deepEqual(enviados.sort(), ['a1', 'a2', 'b1', 'b2']);
+    });
+
+    test('o envio inline REIVINDICA a linha — o tick concorrente não entrega de novo', async () => {
+      const c = await criarConversa(db, { telefone: destino.numero, status: 'ia' });
+      const { linha, esperar } = await outbox.registrar(c, { tipo: 'texto', texto: 'única' }, destino);
+
+      assert.equal(esperar, false);
+      assert.equal(linha.status, 'processando', 'sem isso, o worker pega a mesma linha durante o POST');
+
+      // O tick cai no meio do envio inline: não pode achar nada para entregar.
+      const enviados = [];
+      await outbox.processarPendentes({ db, enviar: async (_c, _d, r) => { enviados.push(r.texto); return { despachado: true }; } });
+      assert.deepEqual(enviados, [], 'entrega em dobro');
+
+      await outbox.entregar(linha, { db, enviar: async () => ({ despachado: true }) });
+      assert.equal((await db('outbox').where({ id: linha.id }).first()).status, 'enviada');
     });
 
     test('tipo que o canal não suporta termina em `nao_suportada`, não em silêncio', async () => {
@@ -230,6 +266,21 @@ describe('FASE 4 — inbox, outbox e jobs', { skip: motivoSkip() }, () => {
       const final = await db('outbox').where({ id: linha.id }).first();
       assert.equal(final.status, 'nao_suportada');
       assert.match(final.ultimo_erro, /localizacao/);
+    });
+
+    test('não-entrega marca a MENSAGEM, não só a linha do outbox', async () => {
+      const c = await criarConversa(db, { telefone: destino.numero, status: 'ia', canal: 'whatsapp' });
+      const [msg] = await db('mensagens')
+        .insert({ conversa_id: c.id, origem: 'ia', tipo: 'localizacao', texto: '' }).returning('*');
+
+      const { linha } = await outbox.registrar(c, { tipo: 'localizacao', lat: 1 }, destino, { mensagemId: msg.id });
+      const { criarDispatcher } = await import('../../src/services/canais/index.js');
+      const { criarAdapterEvolution } = await import('../../src/services/canais/evolution.js');
+      await outbox.entregar(linha, { db, enviar: criarDispatcher({ whatsapp: criarAdapterEvolution({}) }) });
+
+      // Sem isto a tela do agente segue dizendo "enviada" para o que nunca saiu.
+      const depois = await db('mensagens').where({ id: msg.id }).first();
+      assert.equal(depois.meta?.entrega, 'nao_suportada');
     });
 
     test('falha de transporte agenda nova tentativa (não é a mesma coisa que não suportar)', async () => {
@@ -345,6 +396,43 @@ describe('FASE 4 — inbox, outbox e jobs', { skip: motivoSkip() }, () => {
       assert.equal(Number((await db('jobs').count('id as n').first()).n), 0, 'o job foi cancelado');
     });
 
+    test('estourar `max_tentativas` sai pela porta própria, não pela `timeout`', async () => {
+      const FLUXO = JSON.parse(JSON.stringify(FLUXO_TIMEOUT));
+      FLUXO.dados.nodes[1].config.max_tentativas = 2;
+      FLUXO.dados.edges.push({ from: 'pergunta', to: 'fim', port: 'max_tentativas' });
+      // A porta `timeout` volta ao próprio nó: é o padrão "reperguntar".
+      FLUXO.dados.edges = FLUXO.dados.edges.map(e =>
+        (e.from === 'pergunta' && e.port === 'timeout') ? { ...e, to: 'pergunta' } : e);
+
+      const c = await criarConversa(db, { telefone: '5584922220009', status: 'ia' });
+      await turno(c, 'oi', FLUXO);
+      const retomar = () => motor.retomarTimer(c.id, 'pergunta', {
+        fluxo: FLUXO, enviar: (_c, resp) => { enviados.push(resp.texto); },
+      });
+
+      await retomar();   // 1ª: sai por `timeout` → repergunta
+      assert.deepEqual(enviados, ['Qual seu nome?', 'Qual seu nome?']);
+      await retomar();   // 2ª: estourou → `max_tentativas` → encerra
+      assert.deepEqual(enviados, ['Qual seu nome?', 'Qual seu nome?']);
+      assert.equal(await estadoStore.get(c.id), null, 'saiu pela porta que encerra');
+    });
+
+    test('o contador de tentativas é por NÓ, não um só para o fluxo inteiro', async () => {
+      // `timeout` volta ao próprio nó: a execução segue viva e o contador fica
+      // gravado — é onde daria para ver dois nós dividindo o mesmo balde.
+      const FLUXO = JSON.parse(JSON.stringify(FLUXO_TIMEOUT));
+      FLUXO.dados.edges = FLUXO.dados.edges.map(e =>
+        (e.from === 'pergunta' && e.port === 'timeout') ? { ...e, to: 'pergunta' } : e);
+
+      const c = await criarConversa(db, { telefone: '5584922220010', status: 'ia' });
+      await turno(c, 'oi', FLUXO);
+      await motor.retomarTimer(c.id, 'pergunta', { fluxo: FLUXO, enviar: () => {} });
+
+      const estado = await db('flow_executions').where({ conversa_id: c.id }).first();
+      const chaves = Object.keys(estado?.estado?.contexto || {}).filter(k => k.startsWith('_espera_'));
+      assert.deepEqual(chaves, ['_espera_pergunta'], 'o contador tem de ser por nó');
+    });
+
     test('_parkedAte futuro segura a execução além do TTL de 2h; sem ele, ela morre', async () => {
       const c = await criarConversa(db, { telefone: '5584922220008', status: 'ia' });
       await turno(c, 'oi', FLUXO_ESPERA);
@@ -413,15 +501,46 @@ describe('FASE 4 — inbox, outbox e jobs', { skip: motivoSkip() }, () => {
       assert.equal(ids.length, 4);
     });
 
-    test('SIGTERM devolve a `pendente` o lote reivindicado', async () => {
-      await db('inbox').insert({ canal: 'evolution', dedup_hash: 'd1', payload: '{}', status: 'pendente' });
-      const [linha] = await filaDb.reivindicar(db, 'inbox', { ordem: 'recebido_em', limite: 1 });
-      assert.equal(linha.status, 'processando');
+    test('o dreno resolve por política: outbox volta à fila, inbox vira DLQ', async () => {
+      const c = await criarConversa(db, { telefone: '5584933330002', status: 'ia' });
+      await db('inbox').insert({ canal: 'evolution', dedup_hash: 'dr1', payload: '{}', status: 'pendente' });
+      await db('outbox').insert({ conversa_id: c.id, canal: 'whatsapp', payload: '{}', status: 'pendente', expira_em: new Date(Date.now() + 3600_000) });
 
-      await filaDb.liberar(db, 'inbox', [linha.id]);
-      const depois = await db('inbox').where({ id: linha.id }).first();
-      assert.equal(depois.status, 'pendente');
-      assert.equal(depois.reivindicado_em, null);
+      const emVoo = { inbox: [], outbox: [] };
+      await inbox.processarPendentes({ db, aoReivindicar: ids => emVoo.inbox.push(...ids) });
+      // reivindica a saída sem entregar — é o worker morrendo no meio
+      const [saida] = await filaDb.reivindicar(db, 'outbox', { ordem: 'criado_em', limite: 1 });
+      emVoo.outbox.push(saida.id);
+      await db('inbox').whereIn('id', emVoo.inbox).update({ status: 'processando' });
+
+      await filaDb.liberar(db, 'inbox', emVoo.inbox);
+      await filaDb.liberar(db, 'outbox', emVoo.outbox);
+
+      assert.equal((await db('outbox').first()).status, 'pendente', 'reenviar é seguro');
+      assert.equal((await db('inbox').first()).status, 'falha', 'turno de motor não se re-executa sozinho (§23)');
+    });
+
+    test('replay pedido por humano RE-EXECUTA o turno (o normal seria no-op)', async () => {
+      await db('fluxos').insert(FLUXO_MUDO);
+      const msg = { id: 'wamid.replay', from: '5584944440001', type: 'text', text: { body: 'oi' }, timestamp: '1' };
+      const body = { entry: [{ changes: [{ field: 'messages', value: { messages: [msg] } }] }] };
+
+      await inbox.receber('meta', JSON.stringify(body), body, { cutucar: false });
+      await inbox.processarPendentes({ db });
+      assert.equal(Number((await db('mensagens').count('id as n').first()).n), 1);
+
+      // É o que a rota `/api/filas/:tabela/:id/reprocessar` faz no inbox:
+      // devolve a `pendente` SEM zerar `tentativas` — é o contador que avisa o
+      // handler de que isto é replay. Sem isso, a segunda passada é no-op.
+      await db('inbox').update({ status: 'pendente', reivindicado_em: null });
+      const [{ reprocessando }] = [{ reprocessando: true }];
+      assert.ok(reprocessando);
+      await inbox.processarPendentes({ db });
+
+      assert.equal(Number((await db('mensagens').count('id as n').first()).n), 1,
+        'a mensagem não é duplicada — a unique de external_id segura');
+      assert.equal((await db('inbox').first()).status, 'ok', 'e o turno rodou de novo, sem abortar na dedup');
+      assert.equal((await db('inbox').first()).tentativas, 2);
     });
 
     test('o tick do worker roda inteiro sem nada na fila', async () => {

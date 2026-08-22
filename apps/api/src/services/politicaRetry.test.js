@@ -2,8 +2,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   expirou, backoffMs, proximaTentativaEm, expiraEm, destinoLease,
-  decidirFalhaEnvio, leaseVencido,
-  TTL_MS, TETO_PARK_MS, MAX_TENTATIVAS, LEASE_MS,
+  decidirFalhaEnvio,
+  TTL_MS, TETO_PARK_MS, MAX_TENTATIVAS,
 } from './politicaRetry.js';
 
 const H = 3600_000;
@@ -106,19 +106,5 @@ describe('decidirFalhaEnvio', () => {
   test('prazo tem precedência sobre backoff que cairia depois dele', () => {
     const d = decidirFalhaEnvio({ ...base, tentativas: 6, expiraEm: adiante(1000) });
     assert.equal(d.status, 'expirada');
-  });
-});
-
-describe('leaseVencido', () => {
-  test('lease fresco não é reivindicável', () => {
-    assert.equal(leaseVencido(atras(LEASE_MS - 1000), AGORA), false);
-  });
-
-  test('worker morto (lease velho) libera a linha', () => {
-    assert.equal(leaseVencido(atras(LEASE_MS + 1000), AGORA), true);
-  });
-
-  test('sem lease não há o que reclamar', () => {
-    assert.equal(leaseVencido(null, AGORA), false);
   });
 });

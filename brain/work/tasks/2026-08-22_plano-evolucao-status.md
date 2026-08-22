@@ -38,7 +38,7 @@ detalhe; aqui fica só o quadro.
 | 12 | Conversation Events + Analytics | ⬜ | — |
 | 13 | Observabilidade e hardening | ⬜ | — |
 
-Suítes ao fechar a FASE 4: **252 testes puros · 76 de integração**.
+Suítes ao fechar a FASE 4: **249 testes puros · 82 de integração**.
 Migrations: **16** (014 `flow_executions`, 015 `audit_log`, 016 `inbox`/`outbox`/`jobs`).
 
 ## ⚠️ O placar mede o `main`, não a produção
@@ -75,7 +75,7 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 ## FASE 4 — entregue (2026-08-22)
 
 Detalhe em [[FASE 4 — Inbox, Outbox e Jobs]]. Os 14 critérios de aceite viraram
-teste (`tests/integracao/fase4-filas.test.js`, 24 casos).
+teste (`tests/integracao/fase4-filas.test.js`, 30 casos).
 
 O que fechou: **gatilho perdido** (`inbox` guarda o payload cru e o worker roda
 o `handle*` esperando o turno), **envio não durável** (`outbox` write-ahead, com
@@ -84,11 +84,14 @@ ordem por conversa) e **`aguardar_tempo` simulado** (job `flow_resume`, campo
 ganhou `timeout`/`max_tentativas` e o descarte silencioso do dispatcher virou
 `nao_suportada` visível.
 
-Duas revisões adversariais entraram no resultado: a do PLANO, antes de
-codificar (derrubou o Inbox que não fechava o próprio sintoma, o
-`jobs.chave` sem `merge` que dispararia o timer uma vez só, e as portas novas
-como estáticas, que acusariam erro em todo fluxo existente), e a do CÓDIGO,
-depois.
+Duas revisões adversariais entraram no resultado. A do PLANO, antes de
+codificar, derrubou o Inbox que não fechava o próprio sintoma, o `jobs.chave`
+sem `merge` (o timer dispararia uma vez só) e as portas novas como estáticas
+(acusariam erro em todo fluxo existente). A do CÓDIGO, depois de pronto, pegou
+dois críticos: o **envio inline não reivindicava a linha** — o tick que caísse
+durante o POST entregava a mensagem duas vezes, e o critério de aceite passava
+por acidente — e o **dreno do SIGTERM devolvia tudo a `pendente`**, violando a
+própria regra de que turno de motor não se re-executa sozinho.
 
 Tetos que ficam: reclaim de escrita vai para DLQ em vez de retentar (falta
 idempotência de tool, §23); reprocessar entrada da Meta em lote re-executa turno

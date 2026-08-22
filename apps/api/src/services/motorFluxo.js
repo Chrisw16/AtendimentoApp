@@ -280,21 +280,24 @@ async function processarNo(no, ctx) {
         // FASE 4: o job de timeout entrega `tipo:'timer'`. Sem esta guarda ele
         // cairia no ramo de baixo e gravaria `contexto[variavel] = ''` — a
         // resposta VAZIA viraria a resposta do cliente. Corrupção, não no-op.
+        // Contador POR NÓ: um só (`_espera_tentativas`) seria compartilhado por
+        // todos os `aguardar_resposta` do fluxo e o segundo já nasceria gasto.
+        const chaveTentativas = `_espera_${no.id}`;
         if (ctx.mensagem?.tipo === 'timer') {
-          const tentativas = (ctx.estado.contexto._espera_tentativas || 0) + 1;
+          const tentativas = (ctx.estado.contexto[chaveTentativas] || 0) + 1;
           const max = Number(cfg.max_tentativas) || 0;   // 0 = sem teto
           limparEspera(ctx.estado);
           if (max && tentativas >= max) {
-            ctx.estado.contexto._espera_tentativas = 0;
+            delete ctx.estado.contexto[chaveTentativas];
             return avancar('max_tentativas');
           }
-          ctx.estado.contexto._espera_tentativas = tentativas;
+          ctx.estado.contexto[chaveTentativas] = tentativas;
           return avancar('timeout');
         }
         limparEspera(ctx.estado);
-        ctx.estado.contexto._espera_tentativas = 0;
+        delete ctx.estado.contexto[chaveTentativas];
         ctx.estado.contexto[variavel] = ctx.mensagem.texto || '';
-        cancelarTimer(no, ctx);                        // o job vira desnecessário
+        await cancelarTimer(no, ctx);                  // o job vira desnecessário
         return avancar('saida');
       }
       if (cfg.mensagem) ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem, ctx) });
@@ -1078,7 +1081,9 @@ async function enviarResposta(conversa, resp, instancia) {
   if (ehUuid(conversa.id)) {
     try {
       const { registrar } = await import('./outbox.js');
-      registro = await registrar(conversa, resp, destino);
+      // `mensagemId`: é por ele que o outbox conta à TELA quando a entrega não
+      // acontece — a mensagem já foi persistida e broadcastada acima.
+      registro = await registrar(conversa, resp, destino, { mensagemId: msg?.id });
     } catch (err) {
       console.error('[Motor] outbox indisponível — envio direto:', err.message);
     }
@@ -1137,12 +1142,21 @@ async function agendarTimer(tipo, no, ctx, segundos) {
   }
 }
 
-/** O cliente respondeu antes da hora: o job vira lixo. */
-function cancelarTimer(no, ctx) {
+/**
+ * O cliente respondeu antes da hora: o job vira lixo.
+ *
+ * `await` obrigatório. Solto, o DELETE pode cair DEPOIS do upsert do próximo
+ * job — no fluxo que volta ao mesmo `aguardar_resposta` para repergunta, isso
+ * apaga o timer recém-agendado e o cliente fica parado para sempre.
+ */
+async function cancelarTimer(no, ctx) {
   if (ctx.sandbox) return;
-  import('./jobs.js')
-    .then(({ cancelar }) => cancelar(ctx.conversa.id, no.id))
-    .catch(() => {});
+  try {
+    const { cancelar } = await import('./jobs.js');
+    await cancelar(ctx.conversa.id, no.id);
+  } catch (err) {
+    console.error('[Motor] cancelar timer falhou:', err.message);
+  }
 }
 
 /**

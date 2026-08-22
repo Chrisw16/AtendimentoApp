@@ -18,8 +18,8 @@ tags: [work, task, fase-4, plano-evolucao, resiliencia, jobs]
 Fecha os três tetos que a FASE 1 assumiu por escrito: gatilho perdido, envio não
 durável e `aguardar_tempo` simulado.
 
-Suítes: **252 testes puros** e **76 de integração** (24 novos, um por critério de
-aceite mais as bordas de lease/ordem).
+Suítes: **249 testes puros** e **82 de integração** (30 novos, um por critério de
+aceite mais as bordas de lease, ordem, replay e dreno).
 
 ## O que virou fato
 
@@ -70,6 +70,29 @@ não passa pelo `catch`, e sem isso um payload venenoso roda para sempre), o
 worker sobe só com migration **OK** (no `finally` ele marteleria tabela
 inexistente a cada 5 s), e a rota de DLQ precisava de allowlist de tabela.
 
+## O que a revisão do CÓDIGO derrubou (depois de pronto)
+
+Um segundo agente revisou a implementação contra a spec e o banco. Dois
+**críticos**, os dois invisíveis em teste até serem procurados:
+
+1. **Entrega em dobro.** O envio inline não reivindicava a linha: ela nascia
+   `pendente` e o tick de 5 s que caísse durante o POST ao provedor pegava a
+   MESMA linha e mandava a mensagem de novo. As duas entregas terminam em
+   `enviada`, então o banco não denuncia. Janela = duração do POST
+   (100–500 ms) a cada 5 s. Correção: `registrar` reivindica antes de devolver
+   ao motor; se o worker chegar primeiro, quem entrega é ele. O critério de
+   aceite nº 5 passava **por acidente** — a linha nunca era reivindicada.
+2. **O dreno do SIGTERM violava a própria política.** `liberar` devolvia tudo a
+   `pendente`, inclusive `inbox`/`jobs`, cujo `destinoLease` é `falha`
+   justamente porque re-executar turno abre um segundo chamado no SGP.
+
+E mais: o lote do inbox rodava **sequencial** (o 10º cliente de uma rajada
+esperaria 9 turnos de IA — regressão que o modelo antigo não tinha);
+`cancelarTimer` era fire-and-forget e podia apagar o job **recém-agendado** numa
+repergunta; o contador de tentativas era **um só para o fluxo inteiro**;
+`nao_suportada` corrigia o banco e deixava a **tela** mentindo; e a DLQ guardaria
+PII para sempre.
+
 ## Armadilhas novas (para quem mexer nisto depois)
 
 - **`estado.aguardandoTimer` é campo separado de `estado.aguardando`, e tem de
@@ -89,8 +112,10 @@ inexistente a cada 5 s), e a rota de DLQ precisava de allowlist de tabela.
 - **Só o motor passa pelo outbox.** `chat.js` (mensagem digitada por agente
   humano) continua enviando direto — a ordem por conversa e a durabilidade valem
   para o que a automação manda, não para o que o agente digita.
-- **A purga não apaga `falha`.** `inbox`/`outbox`/`jobs` limpam o que deu certo
-  depois de 7 dias; a DLQ fica até alguém decidir.
+- **Purga: 7 dias para o que deu certo, 30 para a DLQ.** DLQ eterna é PII
+  eterna — `inbox.payload` é o webhook cru.
+- **O envio inline reivindica a linha.** Não "otimize" isso de volta: é o que
+  impede a entrega em dobro quando o tick cai no meio do POST ao provedor.
 
 ## Tetos declarados (não são bugs — são escolhas)
 
@@ -106,8 +131,16 @@ inexistente a cada 5 s), e a rota de DLQ precisava de allowlist de tabela.
   serializa as filas entre containers (SKIP LOCKED), mas `filaPorChave` continua
   sendo por processo: dois workers na mesma conversa exigem lock distribuído.
 - **`inbox.payload` guarda o webhook cru, com PII** (telefone, nome, texto do
-  cliente). Mitigação: purga de 7 dias para o que deu certo. Quem precisar de
-  retenção menor mexe em `RETENCAO_DIAS` no `workerFilas.js`.
+  cliente). Mitigação: purga de 7 dias (30 na DLQ) e listagem sem `payload`.
+  Quem precisar de retenção menor mexe em `RETENCAO_DIAS`/`RETENCAO_DLQ_DIAS`.
+- **A entrega é at-least-once.** Crash entre o envio aceito pelo provedor e o
+  `UPDATE ... 'enviada'` faz o worker reenviar. Fechar isso exige chave de
+  idempotência de envio, que nenhum adapter tem hoje.
+- **Os webhooks só exigem token se a env estiver configurada** — sem ela,
+  qualquer um POSTa e agora isso **grava** linha no `inbox` (antes o payload era
+  descartado depois de processado). Configurar `EVOLUTION_WEBHOOK_TOKEN` /
+  `TELEGRAM_WEBHOOK_SECRET` / `META_APP_SECRET` deixou de ser opcional na
+  prática.
 
 ## Próximo passo
 

@@ -34,7 +34,13 @@ export async function agendar({ tipo, conversaId, noId, executarEm, payload = {}
   return chave;
 }
 
-/** Cancela o job daquele nó — usado quando a espera é resolvida antes da hora. */
+/**
+ * Cancela o job daquele nó — a espera foi resolvida antes da hora.
+ *
+ * Quem chama precisa dar `await`: solto, o DELETE pode cair DEPOIS do upsert do
+ * job seguinte (fluxo que volta ao mesmo `aguardar_resposta` para repergunta) e
+ * apagar o timer recém-agendado — cliente parado para sempre.
+ */
 export function cancelar(conversaId, noId, { db = getDb() } = {}) {
   return db('jobs').where({ chave: `${conversaId}:${noId}`, status: 'pendente' }).del();
 }
@@ -47,9 +53,8 @@ export async function processarVencidos({ db = getDb(), limite = 10, aoReivindic
   if (!linhas.length) return [];
   aoReivindicar?.(linhas.map(l => l.id));
 
-  const out = [];
-  for (const job of linhas) out.push(await executar(job, db));
-  return out;
+  // Paralelo pelo mesmo motivo do inbox: conversas distintas não se esperam.
+  return Promise.all(linhas.map(job => executar(job, db)));
 }
 
 async function executar(job, db) {

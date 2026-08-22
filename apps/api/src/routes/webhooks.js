@@ -19,7 +19,9 @@ export const webhookRouter = Router();
 async function enfileirar(canal, req) {
   const { receber } = await import('../services/inbox.js');
   const cru = req.rawBody?.toString('utf8') ?? JSON.stringify(req.body ?? null);
-  return receber(canal, cru, req.body);
+  const r = await receber(canal, cru, req.body);
+  // Só o que o provedor precisa saber. O id da linha é interno.
+  return { duplicada: r.duplicada };
 }
 
 // Webhook Meta (WhatsApp/Instagram)
@@ -28,8 +30,7 @@ webhookRouter.post('/meta', asyncHandler(async (req, res) => {
   const r = verificarAssinaturaMeta(req.rawBody, req.headers['x-hub-signature-256'], process.env.META_APP_SECRET);
   if (!r.ok) return res.status(403).json({ error: 'Assinatura inválida' });
   if (r.motivo === 'nao_configurado') console.warn('[Webhook Meta] META_APP_SECRET ausente — POST aceito SEM validar assinatura');
-  const enfileirada = await enfileirar('meta', req);
-  res.json({ ok: true, ...enfileirada });
+  res.json({ ok: true, ...(await enfileirar('meta', req)) });
 }));
 
 webhookRouter.get('/meta', async (req, res) => {
@@ -61,8 +62,7 @@ webhookRouter.post('/evolution', asyncHandler(async (req, res) => {
       return res.status(403).json({ error: 'Token inválido' });
     }
   }
-  const r = await enfileirar('evolution', req);
-  res.json({ ok: true, ...r });
+  res.json({ ok: true, ...(await enfileirar('evolution', req)) });
 }));
 
 // Webhook Telegram — o `setWebhook` do Telegram manda o secret no header
@@ -74,8 +74,7 @@ webhookRouter.post('/telegram', asyncHandler(async (req, res) => {
       return res.status(403).json({ error: 'Secret inválido' });
     }
   }
-  const r = await enfileirar('telegram', req);
-  res.json({ ok: true, ...r });
+  res.json({ ok: true, ...(await enfileirar('telegram', req)) });
 }));
 
 // POST /api/webhooks/telegram/setup — configura o webhook do bot no Telegram

@@ -99,8 +99,3 @@ export function decidirFalhaEnvio({ tentativas, expiraEm: prazo, agora = Date.no
 
   return { status: 'pendente', proximaTentativaEm: proxima };
 }
-
-export function leaseVencido(reivindicadoEm, agora = Date.now()) {
-  const t = Date.parse(reivindicadoEm ?? '');
-  return Number.isFinite(t) && agora - t > LEASE_MS;
-}

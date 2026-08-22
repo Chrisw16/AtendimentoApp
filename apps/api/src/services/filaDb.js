@@ -76,12 +76,22 @@ export async function reclamarLeases(db, tabela) {
 }
 
 /**
- * Devolve à fila um lote reivindicado que não vai mais ser processado —
- * o dreno do SIGTERM. Sem isto, todo deploy deixa linhas presas até o reclaim.
+ * Devolve o lote reivindicado que não vai mais ser processado — o dreno do
+ * SIGTERM. Sem isto, todo deploy deixa linhas presas até o reclaim de 2 min.
+ *
+ * Usa o MESMO `destinoLease` do reclaim, e não `pendente` para tudo: a linha
+ * ainda reivindicada no fim do dreno é uma linha cujo turno estava rodando (o
+ * `server.js` já esperou 8 s pela `filaConversa` antes de chegar aqui).
+ * Devolver um `inbox`/`jobs` desses a `pendente` re-executaria no próximo boot
+ * um turno que pode ter aberto chamado no SGP (§23) — o oposto da política.
  */
 export async function liberar(db, tabela, ids) {
   checar(tabela);
   if (!ids?.length) return 0;
   return db(tabela).whereIn('id', ids).where({ status: 'processando' })
-    .update({ status: 'pendente', reivindicado_em: null });
+    .update({
+      status: destinoLease(tabela),
+      reivindicado_em: null,
+      ultimo_erro: 'processo encerrado durante o processamento',
+    });
 }

@@ -68,11 +68,11 @@ export async function processarPendentes({ db = getDb(), limite = 10, aoReivindi
   if (!linhas.length) return [];
   aoReivindicar?.(linhas.map(l => l.id));
 
-  const resultados = [];
-  for (const linha of linhas) {
-    resultados.push(await processarEntrada(linha, db));
-  }
-  return resultados;
+  // Em PARALELO: cada entrada é de uma conversa diferente e a serialização por
+  // conversa já existe rio abaixo (`filaPorChave`). Sequencial, uma rajada de
+  // 10 webhooks faria o 10º cliente esperar 9 turnos de IA — regressão de
+  // latência que o modelo antigo (N handlers soltos) não tinha.
+  return Promise.all(linhas.map(linha => processarEntrada(linha, db)));
 }
 
 async function processarEntrada(linha, db) {
