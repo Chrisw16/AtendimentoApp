@@ -108,12 +108,53 @@ com o Conversation Events da FASE 12.
 - **Governança de versão de fluxo/prompt (§121)** — o motor já congela o grafo
   por conversa (FASE 1); ciclo editorial completo é com o Knowledge Hub (FASE 7).
 
-## Critérios de saída
+## Critérios de saída — **todos fechados (2026-08-22)**
 
-- [ ] nenhum PUT aceita coluna fora da allowlist; tarefas com ownership
-- [ ] nenhum segredo sai em texto plano por GET
-- [ ] segredo re-salvo com `KV_SECRET` setada fica cifrado no banco e o sistema segue lendo
-- [ ] audit_log gravando: login, sysconfig, chat, tool de escrita da IA
-- [ ] 6ª tentativa de login errada em sequência: bloqueada e auditada
-- [ ] seed em produção não cria senha previsível
-- [ ] Meta com `META_APP_SECRET`: payload sem assinatura válida é recusado
+- [x] nenhum PUT aceita coluna fora da allowlist; tarefas com ownership
+- [x] nenhum segredo sai em texto plano por GET
+- [x] segredo re-salvo com `KV_SECRET` setada fica cifrado no banco e o sistema segue lendo
+- [x] audit_log gravando: login, sysconfig, chat, tool de escrita da IA
+- [x] 6ª tentativa de login errada em sequência: bloqueada e auditada
+- [x] seed em produção não cria senha previsível
+- [x] Meta com `META_APP_SECRET`: payload sem assinatura válida é recusado
+
+Suítes ao fechar: **227 puros · 54 integração**.
+
+## O que a implementação forçou a mudar no desenho
+
+Três coisas só apareceram ao escrever o código e o teste:
+
+1. **A coluna `sistema_kv.valor` é `jsonb`.** Um `enc:v1:...` cru **não é JSON
+   válido** e o Postgres recusaria. O ciphertext precisa ser serializado de novo
+   antes de gravar. O desenho não previa isso.
+2. **`lerValorKV` fixava `process.env.KV_SECRET`** e não aceitava a chave por
+   parâmetro — impossível de testar sem mutar o ambiente do processo. Ganhou um
+   terceiro argumento.
+3. **`getKV` era privada do módulo.** É o leitor por onde passam SGP, Evolution
+   e Anthropic — e foi justamente essa falta de teste que deixou o bug do
+   ciphertext (parse antes de decifrar) passar despercebido. Exportada.
+
+## Degradações escolhidas, e por quê
+
+- **GET com credencial ilegível** (`KV_SECRET` ausente ou trocada) devolve
+  `null` com log, em vez de erro. Derrubar a tela de Configurações inteira
+  deixaria o admin sem como consertar pela interface — exatamente quando ele
+  mais precisa dela.
+- **PUT sem `KV_SECRET`** grava em texto plano e avisa no log. Recusar a
+  gravação transformaria a ausência de uma env opcional em indisponibilidade.
+
+## O frontend não precisou mudar
+
+`Configuracoes.jsx` inicializa os campos a partir do GET (agora a máscara) e
+manda o **form inteiro** a cada save. É por isso que "o PUT ignora máscara" não
+é refinamento: sem ele, todo save destruiria toda credencial não editada.
+
+## Continua fora (registrado)
+
+Permissões granulares + Supervisor (§113–115) → FASE 5 · Mascarar CPF/telefone
+na UI (§116) → FASE 6 · Access/refresh token (§123) → sessão dedicada a auth ·
+Governança editorial (§121) → FASE 7.
+
+## See Also
+
+- [[FASE 0 — Reconciliação e linha de base]]
