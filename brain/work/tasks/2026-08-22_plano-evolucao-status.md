@@ -6,7 +6,7 @@ last_updated: 2026-08-22
 status: active
 priority: p1
 knowledge_refs: ["systems/maxxi/overview"]
-related: ["[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
+related: ["[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 aliases: ["status do plano", "onde estamos", "roadmap V1.0", "progresso das fases"]
 tags: [work, task, plano-evolucao, status, roadmap]
 ---
@@ -27,7 +27,7 @@ detalhe; aqui fica só o quadro.
 | 1 | Fundação crítica / P0 | ✅ | [[FASE 1 — Fundação crítica / P0 (motor persistente)]] |
 | 2 | Registry Foundation | ✅ | [[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]] |
 | 3 | Segurança e governança base | ✅ | [[FASE 3 — Segurança e governança base]] |
-| 4 | Inbox, Outbox e Jobs | 🔵 desenhada | — |
+| 4 | Inbox, Outbox e Jobs | 🔵 desenhada (v2, revisada) | [[FASE 4 — Inbox, Outbox e Jobs]] |
 | 5 | Equipes, Filas e Human Handoff | ⬜ | — |
 | 6 | Cliente 360 | ⬜ | — |
 | 7 | Knowledge Hub | ⬜ | — |
@@ -72,34 +72,26 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | FASE 3 | Access/refresh token — encurtar TTL hoje desloga todo mundo | sessão dedicada a auth |
 | FASE 3 | Cripto: chave mestra vive no env do **mesmo** container | protege contra dump de banco, não contra shell |
 
-## FASE 4 — desenhada, com uma decisão aberta
+## FASE 4 — desenhada e revisada, pronta para implementar
 
-Decisões já tomadas (as três recomendações foram aceitas):
+Design **v2** em [[FASE 4 — Inbox, Outbox e Jobs]] (spec: `docs/superpowers/specs/2026-08-22-fase-4-inbox-outbox-jobs-design.md`).
 
-- **Jobs em tabela no Postgres**, não BullMQ. O §7.2 do próprio plano diz que o
-  Redis não deve ser fonte única da verdade, e aqui o Redis é **opcional** —
-  job que vive só nele some em silêncio quando a env falta. Inbox e Outbox
-  precisam do Postgres de qualquer forma.
-- **Outbox só na falha.** Envio segue inline; o que estoura vira linha com
-  backoff até expirar. Latência e ordem de hoje intactas.
-- **Inbox intercepta o ingest**: valida → persiste → responde 200 → worker
-  processa. Fecha a pendência nº13 do WhatsApp Oficial (Meta penaliza webhook
-  lento) e o teto de "gatilho perdido" da FASE 1.
+Revisada por três agentes — um decisor, um contra o Plano Mestre, um contra o
+código. **A v1 mudou de forma**, e dois dos erros eram de raciocínio:
 
-Desenho: 3 tabelas (`inbox`/`outbox`/`jobs`), reivindicação por
-`FOR UPDATE SKIP LOCKED`, um worker com três handlers no mesmo idioma dos
-monitores que já existem.
+- "Outbox só na falha" **não fechava o próprio sintoma** que a spec abria —
+  morte de processo não lança exceção. Virou **write-ahead**.
+- A justificativa do Inbox estava **factualmente errada** ("webhook lento por
+  causa do turno de IA"): os handlers já são fire-and-forget. O ganho é
+  durabilidade.
 
-### A decisão que falta
+A decisão que estava aberta foi tomada: **`_parkedAte` com teto de 72 h**, para
+que execução parada em timer não morra no TTL de 2 h — que existe para pegar
+abandono, categoria oposta.
 
-`aguardar_tempo` precisa acordar uma execução parada — mas o `estadoStore`
-aplica **TTL de 2 h na leitura**. Espera de 4 h acorda sem estado.
-
-- **(a)** ensinar o store a respeitar um `_parkedAte` — recomendada, destrava
-  follow-up (que o §127 lista como job);
-- (b) limitar `aguardar_tempo` ao TTL e avisar no log;
-- (c) subir o TTL global — errado: o TTL de 2 h existe para que cliente que
-  abandona e volta não seja lido como resposta ao menu antigo.
+**14 critérios de aceite** definidos. Ordem de implementação sugerida: migration
+016 → módulo puro de retry/expiração → inbox → outbox → jobs → nós do motor →
+worker → shutdown.
 
 ## See Also
 

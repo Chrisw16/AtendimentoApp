@@ -394,3 +394,31 @@ Limpeza no CLAUDE.md de coisas que as fases derrubaram e ninguém tinha voltado 
 Também consolidada numa tabela a **dívida que cada fase assumiu de propósito** — com origem e onde fecha. São 11 itens, e três deles fecham justamente na FASE 4 (gatilho perdido, envio não durável).
 
 Corrigido `status: draft` → `active` na página da FASE 2, que estava mergeada havia horas.
+
+## [2026-08-22 · fase 4] DESIGN | FASE 4 desenhada — e a revisão adversarial derrubou a v1
+
+Spec de Inbox/Outbox/Jobs escrita, revisada por **três agentes** (um decisor, um contra o Plano Mestre, um contra o código) e reescrita. Não foi ajuste de margem: a v1 mudou de forma.
+
+### Dois erros meus, de raciocínio
+
+**1. A v1 não fechava o próprio sintoma que abria.** Ela começava dizendo "estado é durável, envio não — morte entre gravar e enviar deixa o cliente sem ver o menu" e, duas seções depois, decidia gravar no outbox **só quando o envio estourasse**. Morte de processo não estoura exceção. Escrevi as duas coisas e não as li juntas.
+
+É a **segunda vez** que isso acontece: a spec do WhatsApp Oficial também se contradizia ("refactor inobservável" + "o agente ganha envio de mídia") e também só apareceu quando alguém leu as duas afirmações lado a lado. Padrão identificado: eu reviso parágrafo, não documento. A revisão por agente separado é o que pega isso.
+
+**2. Justifiquei uma decisão com um fato falso.** Afirmei que "um turno de IA de 10 s segura a resposta do webhook". Os três handlers já fazem `processarConversa(...).catch(...)` **sem `await`** — o 200 só espera inserts. O ganho do Inbox é durabilidade, não latência. Justificativa errada vira critério de aceite errado, então isso teria contaminado a implementação inteira.
+
+### O que os agentes acharam que eu não veria
+
+- `UNIQUE (canal, external_id)` **não modela os canais**: a Meta entrega N mensagens num POST e `connection.update` da Evolution não tem id nenhum. Virou hash do corpo cru.
+- "O job vira no-op se o cliente respondeu" estava **metade certo** — no outro ramo, o job caía no consumo do `aguardar_resposta` e gravava resposta **vazia** como se fosse do cliente.
+- `SKIP LOCKED` protege contra ticks sobrepostos, **não contra SIGKILL**. Faltava lease e reclaim.
+- O sandbox agendaria job com `conversa_id = 'sandbox:<uuid>'`, que não é uuid.
+- Faltavam **critérios de aceite**, que o §153 exige. Agora são 14.
+
+### Decisão que estava aberta
+
+`_parkedAte` com teto duro de 72 h. O argumento que fechou: o TTL de 2 h existe para pegar **abandono** ("cliente abre o menu, some, volta com um bom dia"), e execução parada em timer é a categoria oposta — ninguém espera o cliente, o próximo evento é do sistema e tem hora marcada.
+
+### Documentação
+
+Criado [[FASE 4 — Inbox, Outbox e Jobs]] e publicado um painel de status do plano inteiro (13 fases, o que foi feito, a dívida assumida em cada uma, e o aviso de que nada disso está em produção).
