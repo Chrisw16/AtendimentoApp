@@ -180,6 +180,15 @@ export const playbooksApi = {
   execucao:  (conversaId)  => api.get(`/playbooks/execucao/${conversaId}`),
 };
 
+// ── ENDPOINTS — COPILOTO (FASE 10) ────────────────────────────────
+export const copilotoApi = {
+  painel:   (convId)          => api.get(`/copiloto/${convId}`),
+  sugestao: (convId, body)    => api.post(`/copiloto/${convId}/sugestao`, body || {}),
+  evento:   (convId, body)    => api.post(`/copiloto/${convId}/evento`, body),
+  feedback: (convId, body)    => api.post(`/copiloto/${convId}/feedback`, body),
+  metricas: (dias = 7)        => api.get(`/copiloto/metricas?dias=${dias}`),
+};
+
 // ── ENDPOINTS — AGENTES ───────────────────────────────────────────
 export const promptsApi = {
   list:      ()           => api.get('/prompts'),
