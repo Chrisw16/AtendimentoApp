@@ -146,16 +146,25 @@ describe('motor persistente — critérios de aceite do P0 (§14)', { skip: moti
     assert.equal(emEspera._retomarNo, 'pos');
     assert.equal(emEspera.contexto.assunto, 'internet caiu', 'o contexto se perdeu na transferência');
 
-    // O agente devolve: retoma no nó da porta `transferido`.
-    emEspera.noAtual = emEspera._retomarNo;
-    emEspera._retomarNo = null;
-    await estadoStore.set(c.id, emEspera);
-
+    // O agente devolve. Chama a MESMA função que a rota `devolver-ia` chama —
+    // reproduzir os passos à mão aqui deixaria o código da rota sem cobertura.
     enviados.length = 0;
-    await turno(motor, c, '', FLUXO_COM_RETORNO);
+    const retomou = await motor.retomarAutomacao(c, {
+      enviar: (_x, resp) => enviados.push(resp),
+    });
 
-    assert.deepEqual(enviados.map(r => r.texto), ['A automação voltou.']);
+    assert.ok(retomou, 'retomarAutomacao disse que não havia o que retomar');
+    assert.deepEqual(enviados.map(r => r.texto), ['A automação voltou.'],
+      'a automação não retomou no nó da porta `transferido`');
     assert.equal(await estadoStore.get(c.id), null, 'o fluxo devia ter encerrado após o retorno');
+  });
+
+  test('retomarAutomacao não faz nada quando não há ponto de retorno', async () => {
+    const c = await criarConversa(db, { telefone: '5584800000010', status: 'ia' });
+    assert.equal(await motor.retomarAutomacao(c), false, 'retomou uma conversa sem execução viva');
+
+    await turno(motor, c, 'oi', FLUXO_DUAS_PERGUNTAS);   // execução viva, mas sem `_retomarNo`
+    assert.equal(await motor.retomarAutomacao(c), false, 'retomou sem porta `transferido`');
   });
 
   test('sem a porta `transferido` ligada, transferir encerra como sempre encerrou', async () => {

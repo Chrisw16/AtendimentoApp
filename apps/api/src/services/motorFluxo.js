@@ -152,6 +152,33 @@ async function processarConversaInterno(conversa, mensagemCliente, opts = {}) {
   return { respostas: ctx.respostas, estado: viva ? ctx.estado : null };
 }
 
+/**
+ * Devolve a conversa do humano para a automação (§13).
+ *
+ * `transferir_agente` gravou `_retomarNo` — o destino da porta `transferido` —
+ * antes de entregar ao agente. Sem essa porta ligada no fluxo não há execução
+ * viva e isto não faz nada, que é o comportamento de sempre.
+ *
+ * Vive aqui, e não na rota, para ser testável sem subir HTTP + auth.
+ *
+ * @returns {Promise<boolean>} true se a automação foi de fato retomada.
+ */
+export async function retomarAutomacao(conversa, opts = {}) {
+  const estado = await estadoStore.get(conversa.id);
+  if (!estado?._retomarNo) return false;
+
+  estado.noAtual    = estado._retomarNo;
+  estado._retomarNo = null;
+  estado.aguardando = null;
+  await estadoStore.set(conversa.id, estado);
+
+  // Mensagem sintética: numa devolução não há fala do cliente. O `ia_responde`
+  // reconhece `tipo: 'sistema'` e pausa em vez de chamar a IA com histórico
+  // vazio — ver a guarda lá.
+  await processarConversa(conversa, { texto: '', tipo: 'sistema' }, opts);
+  return true;
+}
+
 // ── DESPACHANTE ───────────────────────────────────────────────────
 async function processarNo(no, ctx) {
   const cfg = no.config || {};
@@ -642,11 +669,16 @@ async function processarNo(no, ctx) {
 // ── IA RESPONDE — com suporte a tool calls (igual ao sistema de inspiração) ──
 async function processarIAResponde(no, ctx) {
   const cfg       = no.config || {};
-  // Retomada vinda do humano (§13) chega com mensagem sintética vazia. Sem esta
-  // guarda o histórico sai vazio, a Anthropic recusa (`at least one message is
-  // required`), o catch devolve `avancar('transferir')` e a conversa volta para
-  // o humano num laço. Espera o cliente falar em vez de chamar a API à toa.
-  if (!String(ctx.mensagem?.texto || '').trim()) return aguardar();
+  // Retomada vinda do humano (§13) chega com a mensagem sintética
+  // `{texto:'', tipo:'sistema'}`. Sem esta guarda o histórico sai vazio, a
+  // Anthropic recusa (`at least one message is required`), o catch devolve
+  // `avancar('transferir')` e a conversa volta para o humano num laço.
+  //
+  // O gate é o TIPO, não o texto vazio: áudio e imagem sem legenda chegam do
+  // cliente sem `texto` nenhum (ver `extrairConteudoEvolution`) e precisam
+  // continuar chamando a IA com o histórico que já existe — travar neles
+  // deixaria o cliente no silêncio.
+  if (ctx.mensagem?.tipo === 'sistema') return aguardar();
 
   const slug      = cfg.contexto || 'outros';
   const maxTurnos = parseInt(cfg.max_turns || cfg.max_turnos) || 6;
