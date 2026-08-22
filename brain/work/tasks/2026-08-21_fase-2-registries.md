@@ -3,7 +3,7 @@ title: FASE 2 — Registry Foundation (Node Registry + Tool Registry)
 type: task
 created: 2026-08-21
 last_updated: 2026-08-21
-status: draft
+status: active
 priority: p1
 knowledge_refs: ["systems/maxxi/components/motor-fluxo", "systems/maxxi/components/ia-tool-calling"]
 related: ["[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[Motor de Fluxo]]"]

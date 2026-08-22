@@ -98,7 +98,7 @@ Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/max
   - Inspeção: `SELECT conversa_id, estado->>'noAtual' FROM flow_executions`.
   - ⚠️ **Estado é durável, envio não.** O `finally` grava e só então envia; morte entre as duas coisas deixa o banco dizendo "aguardando o menu" com o cliente sem ter visto o menu — e agora isso **sobrevive** ao restart. A correção é o Outbox (FASE 4, §126), não um remendo no motor.
   - ⚠️ **Teto:** concorrência **entre processos** não é resolvida. `filaPorChave` serializa dentro de um processo; multi-worker exige lock distribuído por conversa.
-- **Catálogo de nós tem duas faces:** `apps/web/src/lib/nodeTypes.js` (visual, ~32 tipos) deve espelhar o `switch` de `processarNo` em `motorFluxo.js` (backend). Ao adicionar um nó, atualize os dois + `PropsPanel.jsx`. **Cuidado com o nome dos campos:** o `PropsPanel` historicamente salvou campos com nomes que o motor não lia (`botao`/`secao`/`instrucao`/`tipo`), então a config era ignorada na execução. Hoje `fluxoHelpers.js` normaliza esses casos (lê o nome do editor com fallback pro antigo) — mas **a regra é manter os nomes iguais nas duas faces**; o helper é rede de segurança, não desculpa pra divergir.
+- **Catálogo de nós tem duas faces:** `apps/web/src/lib/nodeTypes.js` (visual, ~32 tipos) deve espelhar o `switch` de `processarNo` em `motorFluxo.js` (backend). Ao adicionar um nó, atualize os dois + o painel de propriedades **dentro de `FluxoEditor.jsx`** (`components/fluxo/PropsPanel.jsx` era arquivo morto e foi removido na FASE 2). Há **teste de contrato** entre `nodeTypes.js`, o `NOS` do validador e o `switch` do motor — ele falha quando a divergência cresce. **Cuidado com o nome dos campos:** o `PropsPanel` historicamente salvou campos com nomes que o motor não lia (`botao`/`secao`/`instrucao`/`tipo`), então a config era ignorada na execução. Hoje `fluxoHelpers.js` normaliza esses casos (lê o nome do editor com fallback pro antigo) — mas **a regra é manter os nomes iguais nas duas faces**; o helper é rede de segurança, não desculpa pra divergir.
 - **Envio por canal passa pelo registry `services/canais/`**, nunca por `if (canal === ...)`. Cada provedor é um adapter com **um método por tipo de mensagem** (`texto`, `botoes`, `lista`, `cta`, `imagem`, `audio`, `arquivo`); o dispatcher resolve por `conversas.canal`. Regras não-óbvias: **a degradação mora dentro do adapter** (o Telegram degrada `lista`→**botões** com ≤8 itens, não para texto); tipo não implementado usa o método **`padrao`**, que **só o Telegram tem** — a Evolution não tem de propósito, porque hoje ela descarta tipos desconhecidos (inclusive `localizacao`) em silêncio, e um fallback genérico mudaria isso. Os adapters recebem os transportes por **injeção** para serem testáveis sem rede.
 - **`enviarResposta` faz muito mais que enviar:** guarda de `resp.texto` vazio, persistência da mensagem, broadcast SSE e guarda de `chatId` acontecem **antes** do despacho. Ao mexer ali, só o trecho de despacho pertence ao registry. O `chat.js` ainda tem o `if/else` antigo (só texto) — migra quando precisar tratar `whatsapp_oficial`.
 - **Prompts da IA são editáveis em runtime** (tabela `prompts_ia`, tela Prompts IA: abas Prompts/Catálogo/Testar Tools). Placeholders `[REGRAS]/[ESTILO]/[PLANOS]/[TIPOS_OCORRENCIA]` resolvidos por `promptService`. Cuidado: há **dois caches** (`integrations.invalidateConfigCache` e `promptService` TTL 3min) — editar prompt invalida só um.
@@ -133,7 +133,7 @@ Fluxo de referência pronto e validado: [apps/api/examples/fluxo-netgo-v2.json](
 - ~~`GET /api/sysconfig` retorna API keys em texto plano~~ → **corrigido na FASE 3 (2026-08-22)**: mascarado nas duas rotas de GET, e cifrado em repouso quando há `KV_SECRET`. Ver a regra de credenciais acima.
 - ~~Nós de SGP sem bloco no PropsPanel / "o cliente nunca é perguntado pelo CPF"~~ → **a armadilha descrevia um ARQUIVO MORTO** (descoberto na FASE 2): `components/fluxo/PropsPanel.jsx` não era importado por ninguém — o painel vivo mora **dentro** de [FluxoEditor.jsx](apps/web/src/pages/FluxoEditor.jsx) (`PropsPanel`, ~linha 320) e sempre teve campo para `consultar_cliente.pergunta`. Os dois arquivos mortos (`PropsPanel.jsx`, `FlowNode.jsx`) foram removidos em 2026-08-22. **Regra que fica: o painel de propriedades e o nó visual são os de `FluxoEditor.jsx`** — não crie/edite versões em `components/fluxo/`.
 - ~~Simulador diverge do motor no `consultar_cliente`~~ → **corrigido (FASE 2)**: o simulador agora espelha o motor (`cfg.pergunta`, sem default inventado; sem ela, silêncio — como a produção). Teste em `motorSimulador.test.js`.
-- Mass-assignment em PUT de `ocorrencias`/`ordens`/`tarefas`; `tarefas` sem ownership-check.
+- ~~Mass-assignment em PUT de `ocorrencias`/`ordens`/`tarefas`; `tarefas` sem ownership-check~~ → **corrigido na FASE 3 (2026-08-22)**: allowlist de colunas por rota e ownership em `tarefas` (dono ou admin).
 - `Tarefas.jsx` e `Financeiro.jsx` existem mas **não têm rota** em `App.jsx`. ~~`Clientes.jsx` tem `useDebounce` quebrado~~ → **corrigido (2026-08-21)**: usava `useState` no lugar de `useEffect`, então o valor debounced nunca mudava e a busca de clientes não funcionava.
 - Meta gera mídia em `/api/media/:id` mas **não há rota `/api/media`** montada.
 - Resíduos do provedor de inspiração ("CITmax") em `seed.js` e na tool `status_rede`. Fluxo padrão do seed é legado e não roda no motor atual.
@@ -157,12 +157,29 @@ que divergiu e os tetos assumidos.
 | 2 — Registry Foundation | ⏳ próxima |
 | 3–13 | abertas |
 
-## Estado do produto (2026-08-21)
+## Estado do produto (2026-08-22)
 
-**Está EM PRODUÇÃO**, em VPS via Coolify: `https://gochat.netgo.net.br`. O Coolify passou a acompanhar o **`main`** em 2026-08-21 (antes apontava para a branch `worktree-ambiente-testes-fluxo`, que foi reconciliada e mergeada). O SGP responde de verdade (`consultacliente` retornando contratos) e a IA comercial roda com tool calling — pré-cadastro, `listar_planos_ativos` e `salvar_dado` foram exercitados em conversa real.
+**Está EM PRODUÇÃO**, em VPS via Coolify: `https://gochat.netgo.net.br`. O SGP responde de verdade e a IA comercial roda com tool calling — pré-cadastro, `listar_planos_ativos` e `salvar_dado` exercitados em conversa real.
 
-Ainda assim, **volume real ~zero** (dashboard zerado em 30 dias): está de pé, mas ainda não em operação de fato. O caminho ponta-a-ponta com cliente de verdade é a próxima fronteira.
+### Plano de Evolução V1.0 — 4 de 13 fases entregues
 
-Pendências: rodar um atendimento real pelo WhatsApp; endurecer segurança (mass-assignment, mascarar `sysconfig`); fechar os mismatches editor↔motor que sobraram; parametrizar o acoplamento NetGo para revenda. Detalhe por módulo em [brain/systems/maxxi/overview.md](brain/systems/maxxi/overview.md); agenda em [brain/work/tasks/](brain/work/tasks/).
+| Fase | Estado |
+|---|---|
+| **0** — Reconciliação e linha de base | ✅ mergeada |
+| **1** — Flow Engine persistente (P0) | ✅ mergeada |
+| **2** — Registry Foundation | ✅ mergeada |
+| **3** — Segurança e governança base | ✅ mergeada |
+| **4** — Inbox, Outbox e Jobs | 🔵 desenhada, não implementada |
+| 5–13 | ⬜ não começadas |
+
+O que mudou de estrutural: **conversa sobrevive a restart e deploy** (`flow_executions`, versão do fluxo congelada por conversa), **credencial não sai mais em texto plano** e há cripto em repouso oportunista, **`/health/ready` bloqueia até as migrations terminarem**, e há **graceful shutdown**. Suítes: **227 testes puros + 54 de integração** contra Postgres e Redis reais.
+
+Detalhe por fase em [brain/work/tasks/](brain/work/tasks/); plano completo em [docs/ers/](docs/ers/).
+
+### ⚠️ O que está no `main` NÃO está em produção
+
+O Coolify não deploya desde **21/08 20:06 UTC** — houve pelo menos 4 pushes depois disso, todos com webhook devolvendo 200, e a produção não se moveu. Consequência: **as FASES 1, 2 e 3 não protegem nem beneficiam ninguém ainda**, e o XSS do handshake da Meta (corrigido em `f8ed98f`) segue vivo lá. Sonda certa: `last-modified` de `GET /` — `/health` devolve `2.0.0` fixo e não serve.
+
+Pendências de produto: rodar um atendimento real pelo WhatsApp (volume segue ~zero); destravar o deploy; parametrizar o acoplamento NetGo para revenda.
 
 > **Branch `dev`** tem 21 commits (WhatsApp via QR Code, de outro programador) que **não estão no `main`** e nunca foram deployados. Decisão de 2026-08-21: deixar de lado por ora.

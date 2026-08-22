@@ -377,3 +377,20 @@ O item 3 é o padrão que se repete neste repo: **o que não é testável é ond
 Rotulei uma saída de `git log --date=format-local` como UTC e conclui que um commit tinha 3 horas quando tinha 79 segundos — quase dei como abandonado um trabalho que estava vivo. Corrigido comparando epoch. Lição: ao comparar horários, converter antes de concluir, não rotular depois.
 
 Suítes: **227 puros · 54 integração**.
+
+## [2026-08-22 · status] DOC | Placar do Plano de Evolução + limpeza de armadilhas vencidas
+
+Consolidação do estado após 4 fases. Criado [[Plano de Evolução V1.0 — status consolidado]] como rastreador único.
+
+**4 de 13 fases entregues** (0, 1, 2, 3), todas no `main`. 227 testes puros + 54 de integração, 15 migrations.
+
+O ponto que o placar esconde e a página deixa explícito: **o placar mede o `main`, não a produção**. O Coolify não deploya desde 21/08 20:06 UTC, com pelo menos 4 pushes depois. Então conversa em produção ainda morre no restart, credencial ainda sai em texto plano e o XSS segue aberto. Trabalho feito ≠ trabalho entregue.
+
+Limpeza no CLAUDE.md de coisas que as fases derrubaram e ninguém tinha voltado para apagar:
+- mandava editar `PropsPanel.jsx`, que a FASE 2 removeu por ser arquivo morto;
+- listava mass-assignment como dívida aberta, corrigido na FASE 3;
+- "Estado do produto" ainda descrevia o mundo pré-FASE 1.
+
+Também consolidada numa tabela a **dívida que cada fase assumiu de propósito** — com origem e onde fecha. São 11 itens, e três deles fecham justamente na FASE 4 (gatilho perdido, envio não durável).
+
+Corrigido `status: draft` → `active` na página da FASE 2, que estava mergeada havia horas.
