@@ -32,6 +32,10 @@ function Section({ title, children, defaultOpen = true, badge = null }) {
 
 function InfoRow({ icon: Icon, label, value }) {
   if (value === null || value === undefined || value === '') return null;
+  // Um campo que vem do SGP como objeto derrubava o painel INTEIRO (React #31)
+  // — e com ele o chat. O painel nunca pode derrubar o atendimento: mostra o
+  // que der para ler e segue.
+  if (typeof value === 'object') value = value.contato ?? value.valor ?? JSON.stringify(value);
   return (
     <div className={styles.infoRow}>
       <Icon size={12} className={styles.infoIcon} />

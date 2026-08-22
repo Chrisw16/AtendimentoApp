@@ -190,13 +190,21 @@ export async function consultarClientes(cpfcnpj) {
     .sort((a, b) => (STATUS_ORDEM[normalizarStatus(a)] ?? 3) - (STATUS_ORDEM[normalizarStatus(b)] ?? 3))
     .slice(0, 8);
 
+  // O SGP devolve contato ora como STRING, ora como OBJETO
+  // (`{contato, tipoContato, inscricoes}`) — depende do cadastro. Sem
+  // normalizar aqui, o objeto atravessa a ficha inteira e o painel do agente
+  // MORRE em React #31 ("objects are not valid as a React child"), levando o
+  // chat junto. E some só para o admin: quem não tem `ver_dados_completos`
+  // recebe o objeto mascarado (`String(obj)` → `****`) e nunca vê o defeito.
+  const texto = v => (v && typeof v === 'object' ? (v.contato ?? v.valor ?? '') : (v ?? ''));
+
   return {
     nome:     primeiro.razaoSocial || '',
     cpfcnpj:  primeiro.cpfCnpj    || digits,
     // emails é array direto no contrato, não no cliente
-    email:    primeiro.emails?.[0] || '',
+    email:    texto(primeiro.emails?.[0]) || '',
     // telefones_cargos é o campo real do SGP; telefones é array de strings direto
-    fone:     primeiro.telefones?.[0] || primeiro.telefones_cargos?.[0]?.contato || '',
+    fone:     texto(primeiro.telefones?.[0]) || texto(primeiro.telefones_cargos?.[0]) || '',
     contratos: ordenados.map(ct => ({
       id:              ct.contratoId,
       plano:           ct.planointernet || ct.planotv || ct.servico_plano || '',

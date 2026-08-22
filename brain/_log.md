@@ -492,3 +492,24 @@ Achados com o produto na tela, não por teste — o tipo que só aparece operand
   `## IDENTIDADE / Você é a Natália…` ali, enquanto o prompt base `suporte` JÁ
   abre com a mesma frase — duas identidades, a segunda chegando rotulada como
   adendo. Campo renomeado para "Ajuste deste nó", com aviso quando detecta persona.
+
+## [2026-08-22] FIX | O painel do Cliente 360 morria em React #31 — e só para o admin
+
+Entrar na conversa de um cliente derrubava a tela inteira: `Minified React error
+#31 ... object with keys {inscricoes, tipoContato, contato}`. Objeto do SGP
+chegando ao JSX.
+
+- **Origem:** `consultarClientes` fazia `email: primeiro.emails?.[0]`. O SGP
+  devolve contato ora como string, ora como **objeto** `{contato, tipoContato,
+  inscricoes}` — depende do cadastro. O objeto atravessava a ficha até
+  `InfoRow value={id.email}`.
+- **Por que só o admin via:** `mascararPII` só devolve o valor cru quando
+  `ver_dados_completos`, e `role === 'admin'` passa em tudo. Para agente comum,
+  `mascararEmail` fazia `String(objeto)` → `****`: o painel abria "normal",
+  mostrando uma máscara de nada. Mais um que **mente em silêncio** para uns e
+  quebra para outros.
+- **Corrigido na fonte** (`integrations.js`), que é por onde `email`/`fone`
+  chegam também ao `estado.contexto.cliente` do motor — lá o objeto viraria
+  `[object Object]` no prompt da IA.
+- **Segunda guarda no render** (`InfoRow`): campo objeto não pode derrubar o
+  painel, que por regra da FASE 6 **nunca derruba o atendimento**.
