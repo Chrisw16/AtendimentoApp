@@ -129,6 +129,11 @@ export const conversaRepo = {
     const conv = await conversaRepo.atualizar(id, {
       status:    'encerrada',
       agente_id: null,
+      // FASE 12: `atualizado` é bombardeado por `incrementarNaoLidas`, e o
+      // `audit_log` só registra o encerramento HUMANO — o do nó `encerrar` do
+      // motor não passa por lá. Sem esta coluna não há tempo médio, janela de
+      // recontato nem resolução efetiva.
+      encerrada_em: getDb().fn.now(),
     });
 
     // FASE 11 (§89): auditoria pós-atendimento. Entra como JOB e não inline

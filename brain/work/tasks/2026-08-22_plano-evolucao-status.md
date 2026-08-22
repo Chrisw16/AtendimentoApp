@@ -6,7 +6,7 @@ last_updated: 2026-08-22
 status: active
 priority: p1
 knowledge_refs: ["systems/maxxi/overview"]
-related: ["[[FASE 11 — Quality AI V1]]", "[[Knowledge Hub]]", "[[Playbook Engine]]", "[[Cliente 360 e Copiloto]]", "[[FASE 10 — Copiloto V1]]", "[[FASE 9 — AI Runtime V1]]", "[[FASE 8 — Playbook Engine]]", "[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
+related: ["[[FASE 12 — Conversation Events + Analytics]]", "[[FASE 11 — Quality AI V1]]", "[[Knowledge Hub]]", "[[Playbook Engine]]", "[[Cliente 360 e Copiloto]]", "[[FASE 10 — Copiloto V1]]", "[[FASE 9 — AI Runtime V1]]", "[[FASE 8 — Playbook Engine]]", "[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 aliases: ["status do plano", "onde estamos", "roadmap V1.0", "progresso das fases"]
 tags: [work, task, plano-evolucao, status, roadmap]
 ---
@@ -19,7 +19,7 @@ detalhe; aqui fica só o quadro.
 
 ## Placar
 
-**12 de 13 fases entregues.** As 0–5 estão **em produção** (a FASE 5 confirmada
+**12 de 13 fases entregues.** Falta só a 13 (observabilidade). As 0–5 estão **em produção** (a FASE 5 confirmada
 no ar em 2026-08-22 14:04 UTC — `GET /api/atendimento/filas` em 401 nas 12 de
 12 requisições, e `/health/ready` em 200, provando as migrations até a 017).
 A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
@@ -38,7 +38,7 @@ A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
 | 9 | AI Runtime V1 | ✅ | [[FASE 9 — AI Runtime V1]] |
 | 10 | Copilot V1 | ✅ | [[FASE 10 — Copiloto V1]] |
 | 11 | Quality AI V1 | ✅ | [[FASE 11 — Quality AI V1]] |
-| 12 | Conversation Events + Analytics | ⬜ | — |
+| 12 | Conversation Events + Analytics | ✅ | [[FASE 12 — Conversation Events + Analytics]] |
 | 13 | Observabilidade e hardening | ⬜ | — |
 
 Suítes ao fechar a FASE 10: **407 testes puros · 209 de integração**.
@@ -84,6 +84,8 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | ~~FASE 3~~ | ~~Mascarar CPF/telefone na UI~~ | ✅ FASE 6 — e mais forte: mascarado **no servidor**, não na tela |
 | FASE 6 | Cliente multi-contrato: a ação age sempre no contrato principal | falta a UI de escolha (o backend já valida) |
 | FASE 6 | Sem endereço, tags e tempo de relacionamento | o `/api/ura/consultacliente/` não devolve; falta mapear endpoint |
+| FASE 12 | `analytics_config` (custos unitários) só se configura pela API — falta tela | senão repete o defeito das categorias da FASE 7 |
+| FASE 12 | Conversão comercial não existe: a venda fecha no SGP | o funil vai até o pré-cadastro, e o rótulo diz isso |
 | FASE 11 | Sem supervisão em tempo real (1º nível do §89) — só auditoria pós-atendimento | quando houver volume |
 | FASE 11 | Sem editor de critérios na tela (a régua vem semeada; editar é pela API) | quando alguém quiser calibrar de fato |
 | FASE 10 | Sugestão sem streaming e resumo sem push (recalculado ao abrir o painel) | quando o volume justificar |
@@ -218,6 +220,24 @@ o que a IA já consultou (para ele não repetir) e onde parou o procedimento.
 tela de cadastro — a API existia e o seed criava cinco, mas o seed **não roda no
 deploy**, então em produção a lista nascia vazia e sem porta de entrada. Agora
 há uma aba **Categorias** em Conhecimento.
+
+## FASE 12 — entregue (2026-08-22)
+
+Detalhe em [[FASE 12 — Conversation Events + Analytics]]. Design revisado por
+agente especialista contra o plano antes de codar, e a conclusão dele mudou a
+fase: **não existe event store**. 21 dos 24 eventos do §100 já tinham casa
+tipada; duplicá-los criaria duas verdades para o mesmo fato e nasceria vazio.
+O que faltava era leitura — duas views e uma camada de agregação.
+
+**O defeito que a fase consertou antes de medir qualquer coisa:** o KPI
+"resolução IA" do dashboard dava ~100% **por construção**. Ele contava
+`status='encerrada' AND agente_id IS NULL`, e `conversaRepo.encerrar` **zera** o
+`agente_id` — então toda conversa encerrada entrava, inclusive as atendidas por
+humano do começo ao fim.
+
+Regra que a fase impôs: **nenhum número sem contexto**. Taxa vem com a base,
+qualidade com a cobertura, custo com `precos_configurados`, e o que não se sabe
+é `null`, não zero.
 
 ## FASE 11 — entregue (2026-08-22)
 

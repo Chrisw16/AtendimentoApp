@@ -125,6 +125,7 @@ export async function sugerir(conversa, agente, { instrucao = null } = {}) {
     messages: [{ role: 'user', content: contexto }],
     temperatura: 0.4,
     maxTokens: 400,
+    conversaId: conversa.id, origem: 'copiloto',
   });
 
   await registrarEvento({

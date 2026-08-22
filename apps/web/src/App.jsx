@@ -30,7 +30,7 @@ const MonitorRede = lazy(() => import('./pages/MonitorRede'));
 const Configuracoes = lazy(() => import('./pages/Configuracoes'));
 const PromptsIA     = lazy(() => import('./pages/PromptsIA'));
 const ChatTeste     = lazy(() => import('./pages/ChatTeste'));
-const Analytics     = lazy(() => import('./pages/stubs.jsx').then(m => ({ default: m.Analytics })));
+const Analytics     = lazy(() => import('./pages/Analytics'));
 
 
 const Loading = () => (

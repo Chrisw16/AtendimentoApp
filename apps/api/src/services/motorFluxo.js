@@ -851,7 +851,7 @@ async function processarIAResponde(no, ctx) {
     .map(({ name, description, input_schema }) => ({ name, description, input_schema }));
 
   try {
-    const ai = await getAnthropicClient();
+    const ai = await getAnthropicClient({ conversaId: ctx.conversa.id, origem: 'motor', sandbox: ctx.sandbox });
     let texto = '';
     let faladoNoTurno = '';   // tudo que a IA falou neste turno (p/ histórico coerente)
     let transferiu = false;

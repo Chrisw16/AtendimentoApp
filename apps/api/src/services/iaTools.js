@@ -233,6 +233,33 @@ for (const t of IA_TOOLS) {
 }
 
 export async function executarTool(name, input, ctx) {
+  // FASE 12: mede aqui porque este é o funil — motor, Cliente 360 e Copiloto
+  // passam todos por esta função. A telemetria envolve a execução real, logo
+  // abaixo, e nunca altera o que é devolvido.
+  const _t0 = Date.now();
+  const _medir = (ok, erro = null) => {
+    if (ctx?.sandbox) return;
+    import('./telemetria.js').then(({ registrar }) => registrar({
+      tipo: 'tool', nome: name, origem: ctx?.origem || 'motor',
+      conversaId: ctx?.conversa?.id || null, ok, erro, ms: Date.now() - _t0,
+    })).catch(() => {});
+  };
+  try {
+    const _r = await executarToolInterno(name, input, ctx);
+    // O `executarTool` devolve TEXTO mesmo quando falha (é o que a IA lê). Sem
+    // olhar o conteúdo, a taxa de sucesso ficaria verde para sempre — métrica
+    // sempre verde é pior que métrica ausente.
+    const falhou = typeof _r === 'string' && /^(Não consegui|Erro ao executar|❌)/i.test(_r);
+    _medir(!falhou, falhou ? 'falha_logica' : null);
+    return _r;
+  } catch (err) {
+    const { classificarErro } = await import('./telemetria.js');
+    _medir(false, classificarErro(err));
+    throw err;
+  }
+}
+
+async function executarToolInterno(name, input, ctx) {
   // input.contrato tem prioridade — IA pode selecionar contrato específico para clientes multi-contrato
   // Fallback para o contrato do contexto se IA não especificar
   const contrato = input.contrato || ctx?.cliente?.contrato;

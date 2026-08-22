@@ -168,6 +168,7 @@ export async function auditar(conversa, { origem = 'automatica', scorecard = nul
     messages: [{ role: 'user', content: montarDossie(ev, sc) }],
     temperatura: 0,
     maxTokens: 2000,
+    conversaId: conversa.id, origem: 'quality',
   });
 
   const r = lerJSON(bruto);
