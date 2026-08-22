@@ -5,6 +5,7 @@
  */
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { getDb } from './config/db.js';
 import { runMigrations } from './migrations/run.js';
 
@@ -13,10 +14,17 @@ async function seed() {
   await runMigrations();
   const db = getDb();
 
+  // §123 do plano: NUNCA semear senha previsível em produção. Fora dela,
+  // admin123/agente123 seguem valendo (docs, testes, onboarding).
+  const producao = process.env.NODE_ENV === 'production';
+  const gerarSenha = () => randomBytes(9).toString('base64url');
+  const senhaAdmin  = producao ? gerarSenha() : 'admin123';
+  const senhaAgente = producao ? gerarSenha() : 'agente123';
+
   // ── ADMIN PADRÃO ──────────────────────────────────────────────
   const adminExiste = await db('agentes').where({ login: 'admin' }).first();
   if (!adminExiste) {
-    const senha_hash = await bcrypt.hash('admin123', 10);
+    const senha_hash = await bcrypt.hash(senhaAdmin, 10);
     await db('agentes').insert({
       nome:       'Administrador',
       login:      'admin',
@@ -25,8 +33,9 @@ async function seed() {
       avatar:     '⚡',
       permissoes: {},
     });
-    console.log('  ✓ Admin criado — login: admin / senha: admin123');
-    console.log('  ⚠️  TROQUE A SENHA EM PRODUÇÃO!');
+    console.log(`  ✓ Admin criado — login: admin / senha: ${senhaAdmin}`);
+    if (producao) console.log('  ⚠️  Senha ALEATÓRIA acima — copie AGORA, ela não aparece de novo.');
+    else console.log('  ⚠️  TROQUE A SENHA EM PRODUÇÃO!');
   } else {
     console.log('  · Admin já existe, pulando');
   }
@@ -34,7 +43,7 @@ async function seed() {
   // ── AGENTE DE TESTE ───────────────────────────────────────────
   const agenteExiste = await db('agentes').where({ login: 'agente01' }).first();
   if (!agenteExiste) {
-    const senha_hash = await bcrypt.hash('agente123', 10);
+    const senha_hash = await bcrypt.hash(senhaAgente, 10);
     await db('agentes').insert({
       nome:       'Agente Teste',
       login:      'agente01',
@@ -46,7 +55,7 @@ async function seed() {
         clientes: true, ocorrencias: true,
       },
     });
-    console.log('  ✓ Agente de teste criado — login: agente01 / senha: agente123');
+    console.log(`  ✓ Agente de teste criado — login: agente01 / senha: ${senhaAgente}`);
   }
 
   // ── CANAIS ────────────────────────────────────────────────────
@@ -122,9 +131,7 @@ async function seed() {
   }
 
   console.log('\n✅ Seed concluído!');
-  console.log('\n📋 Credenciais de acesso:');
-  console.log('   Admin:  admin / admin123');
-  console.log('   Agente: agente01 / agente123');
+  console.log('\n📋 Credenciais de acesso: ver os logs de criação acima.');
   console.log('\n🚀 Inicie o servidor com: npm run dev\n');
 
   await db.destroy();

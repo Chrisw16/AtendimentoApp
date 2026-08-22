@@ -220,6 +220,13 @@ export async function executarTool(name, input, ctx) {
     return `🧪 [sandbox] A ação "${name}" foi simulada — em produção, executaria de verdade.`;
   }
 
+  // §118/§119: tool de ESCRITA executada pela IA é ação no mundo real — vai
+  // para o audit_log com actor `ai`. Grava a tool e o contrato, nunca a ficha.
+  if (def?.is_write && !ctx?.sandbox) {
+    const { auditar } = await import('./auditoria.js');
+    auditar({ actorType: 'ai', actorId: name, action: 'tool_escrita_executada', resource: contrato ? `contrato:${contrato}` : null, conversaId: ctx?.conversa?.id || null });
+  }
+
   switch (name) {
     case 'verificar_conexao': {
       const r = await verificarConexao(contrato).catch(e => ({ erro: e.message }));

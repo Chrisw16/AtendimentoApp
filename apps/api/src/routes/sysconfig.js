@@ -4,6 +4,7 @@ import { invalidateSgpDbPool, diagnosticoOnu } from '../services/sgpDb.js';
 import { formatarDiagnosticoOnu } from '../services/sgpHelpers.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler } from '../middlewares/errorHandler.js';
+import { auditar, ipDe } from '../services/auditoria.js';
 import { getDb } from '../config/db.js';
 
 export const sysconfigRouter = Router();
@@ -38,6 +39,10 @@ sysconfigRouter.put('/', asyncHandler(async (req, res) => {
   }
   invalidateConfigCache();
   invalidateSgpDbPool();
+  // Audita os NOMES das chaves alteradas — nunca os valores (são credenciais).
+  if (updates.length) {
+    auditar({ actorType: 'human', actorId: req.agente.id, action: 'sysconfig_alterado', after: { chaves: updates.map(([k]) => k) }, ip: ipDe(req) });
+  }
   res.json({ ok: true });
 }));
 

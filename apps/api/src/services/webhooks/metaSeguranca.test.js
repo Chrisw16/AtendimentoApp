@@ -39,3 +39,43 @@ test('challenge sempre volta como string (nunca objeto/array do query)', () => {
   const r = verificarHandshake({ mode: 'subscribe', token: 's', challenge: ['a', 'b'] }, 's');
   assert.equal(typeof r.challenge, 'string');
 });
+
+// ── verificarAssinaturaMeta (§122) ───────────────────────────────────────────
+import { createHmac } from 'node:crypto';
+import { verificarAssinaturaMeta } from './metaSeguranca.js';
+
+const CORPO = Buffer.from('{"object":"whatsapp_business_account","entry":[]}');
+const SECRET = 'app-secret-de-teste';
+const assinar = (buf, secret) => 'sha256=' + createHmac('sha256', secret).update(buf).digest('hex');
+
+test('assinatura correta sobre o corpo cru passa', () => {
+  const r = verificarAssinaturaMeta(CORPO, assinar(CORPO, SECRET), SECRET);
+  assert.equal(r.ok, true);
+});
+
+test('assinatura de outro secret é recusada', () => {
+  const r = verificarAssinaturaMeta(CORPO, assinar(CORPO, 'outro'), SECRET);
+  assert.deepEqual(r, { ok: false, motivo: 'assinatura_invalida' });
+});
+
+test('corpo adulterado depois de assinado é recusado', () => {
+  const adulterado = Buffer.from(CORPO.toString().replace('[]', '[{}]'));
+  const r = verificarAssinaturaMeta(adulterado, assinar(CORPO, SECRET), SECRET);
+  assert.equal(r.ok, false);
+});
+
+test('sem header de assinatura, com secret configurado: recusa', () => {
+  const r = verificarAssinaturaMeta(CORPO, undefined, SECRET);
+  assert.deepEqual(r, { ok: false, motivo: 'sem_assinatura' });
+});
+
+test('sem META_APP_SECRET: aceita em modo compat, sinalizando', () => {
+  // Endurecer sem a env viraria outage do canal no deploy — a rota avisa no log.
+  const r = verificarAssinaturaMeta(CORPO, 'sha256=qualquer', undefined);
+  assert.deepEqual(r, { ok: true, motivo: 'nao_configurado' });
+});
+
+test('assinatura de tamanho diferente não estoura (comparaSegura)', () => {
+  const r = verificarAssinaturaMeta(CORPO, 'sha256=curta', SECRET);
+  assert.equal(r.ok, false);
+});

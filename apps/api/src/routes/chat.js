@@ -122,6 +122,7 @@ chatRouter.post('/conversas/:id/assumir', asyncHandler(async (req, res) => {
   if (!conv) throw new HttpError(404, 'Conversa não encontrada');
 
   await limparAguardando(req.params.id);
+  auditar({ actorType: 'human', actorId: req.agente.id, action: 'conversa_assumida', conversaId: conv.id, ip: ipDe(req) });
   await mensagemRepo.criar({ conversa_id: conv.id, origem: 'sistema', tipo: 'texto', texto: `✅ Conversa assumida por ${req.agente.nome}` });
 
   broadcast('conversa_atualizada', { ...conv, urgencia: { nivel: 'ok', minutos: 0 } });
@@ -131,6 +132,7 @@ chatRouter.post('/conversas/:id/assumir', asyncHandler(async (req, res) => {
 chatRouter.post('/conversas/:id/devolver-ia', asyncHandler(async (req, res) => {
   const conv = await conversaRepo.devolverIA(req.params.id);
   if (!conv) throw new HttpError(404, 'Conversa não encontrada');
+  auditar({ actorType: 'human', actorId: req.agente.id, action: 'conversa_devolvida_ia', conversaId: conv.id, ip: ipDe(req) });
   await mensagemRepo.criar({ conversa_id: conv.id, origem: 'sistema', tipo: 'texto', texto: '🤖 Devolvido para atendimento da IA' });
   broadcast('conversa_atualizada', conv);
 
@@ -147,6 +149,7 @@ chatRouter.post('/conversas/:id/encerrar', asyncHandler(async (req, res) => {
   const { motivo } = req.body;
   const conv = await conversaRepo.encerrar(req.params.id);
   if (!conv) throw new HttpError(404, 'Conversa não encontrada');
+  auditar({ actorType: 'human', actorId: req.agente.id, action: 'conversa_encerrada', conversaId: conv.id, after: motivo ? { motivo } : null, ip: ipDe(req) });
   if (motivo) await mensagemRepo.criar({ conversa_id: conv.id, origem: 'sistema', tipo: 'texto', texto: `🔴 Conversa encerrada: ${motivo}` });
   broadcast('conversa_atualizada', conv);
   res.json(conv);
