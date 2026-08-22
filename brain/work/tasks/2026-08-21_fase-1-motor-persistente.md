@@ -158,12 +158,55 @@ exportada do motor — hoje é privada.
   `await` desta fase **não** entram lá; o comentário "espelho byte-a-byte" passa a
   ser falso e é corrigido no arquivo. Religar o espelho não é escopo daqui.
 
-## Critérios de aceite (§14)
+## Critérios de aceite (§14) — resultado
 
-- [ ] restart não reinicia conversa em andamento
-- [ ] deploy não perde contexto
-- [ ] duas mensagens simultâneas não causam salto de nó
-- [ ] conversa vai para humano e volta ao fluxo
-- [ ] nova versão do fluxo não altera execução já iniciada
-- [ ] estado inspecionável no banco
-- [ ] testes de integração cobrem persistência e retomada
+Todos cobertos por teste de integração contra Postgres real
+(`tests/integracao/motor-persistente.test.js`, que roda o **motor de verdade** —
+único lugar onde ele é importável, já que `DATABASE_URL` está posta).
+
+- [x] restart não reinicia conversa em andamento
+- [x] deploy não perde contexto
+- [x] duas mensagens simultâneas não causam salto de nó
+- [x] conversa vai para humano e volta ao fluxo
+- [x] nova versão do fluxo não altera execução já iniciada
+- [x] estado inspecionável no banco (`estado->>'noAtual'`)
+- [x] testes de integração cobrem persistência e retomada
+
+**Verificado com dentes:** neutralizando `estadoStore.get`, **7 dos 9 falham**.
+Um teste que passa com a feature removida não é prova.
+
+Extra, além do §14: trocar o fluxo **ativo** não sequestra mais conversa em
+andamento, e um fluxo que aponta para nó inexistente não trava a conversa para
+sempre (em memória isso se curava no restart; em tabela travaria).
+
+## O que a implementação descobriu
+
+### Retry de protocolo não converge — o contador virou atômico
+
+O design previa "retry no 23505". **Não funciona**: com 8 `criar()` concorrentes
+todos recontam ao mesmo tempo e continuam colidindo — medido, falhou na 5ª
+tentativa com `Key (protocolo)=(20260821-0005) already exists`.
+
+Trocado por uma linha por dia em `protocolo_seq`, incrementada por **um**
+statement (`INSERT ... ON CONFLICT (dia) DO UPDATE SET n = n + 1 RETURNING n`),
+que pega lock de linha. N chamadas concorrentes recebem N números distintos, por
+construção. Sem laço, sem retry, sem corrida.
+
+### O `6379` desta máquina é um túnel SSH
+
+Ver [[FASE 0 — Reconciliação e linha de base]]. Achado ao reexecutar a suíte da
+FASE 0: 21/22 em 4,6 s pelo túnel, **22/22 em 1,4 s** com um Redis local na 6380.
+
+## Estado da suíte
+
+| Suíte | Antes | Depois |
+|---|---|---|
+| pura (`npm test`) | 185 | 185 |
+| integração (`npm run test:integracao`) | 22 | **44** |
+
+## Fica para a FASE 4 (Inbox)
+
+Morte no meio do turno perde o **gatilho**, não o estado: a mensagem já foi
+persistida e deduplicada por `external_id`, então a reentrega da Evolution é
+descartada e o motor nunca roda para ela. A varredura de boot que fecha isso é
+o Inbox (§125).
