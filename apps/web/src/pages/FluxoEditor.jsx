@@ -407,8 +407,18 @@ function PropsPanel({ node, onChange, onDelete }) {
                   )}
                 </select>
               </Fld>
-              <Fld label="Instruções extras (opcional)" hint="Somado por cima do prompt do contexto. Vazio = usa só o prompt da aba Prompts.">
+              <Fld label="Ajuste deste nó (opcional)" hint="Entra DEPOIS do prompt base, rotulado como &quot;Instrução específica&quot;. Use para a nuance deste ramo — não para identidade, tom ou regra geral, que pertencem ao prompt da aba Prompts IA. Mesmo vazio, o prompt já leva contexto do cliente, procedimento, hierarquia de confiança e guardrails.">
                 <textarea value={cfg.instrucao ?? cfg.prompt ?? ''} onChange={e=>set('instrucao',e.target.value)} rows={4} placeholder="Ex.: Neste nó, foque só em queda total de conexão." style={TA}/>
+                {/* Persona no nó é duplicação: o prompt do contexto já define quem
+                    a IA é, e o texto daqui chega DEPOIS, rotulado como adendo.
+                    Editar a identidade na aba Prompts não muda a cópia do nó. */}
+                {/IDENTIDADE|VOC[EÊ] [EÉ] (A|O|UM)|Voc[eê] [eé] a |Voc[eê] [eé] o /i.test(cfg.instrucao || '') && (
+                  <div style={{fontSize:10.5,color:'#ff6b35',marginTop:4,lineHeight:1.5}}>
+                    ⚠ Isto parece definir <b>identidade</b>. O prompt do contexto já faz isso, e o texto
+                    daqui entra depois dele como “Instrução específica” — a IA recebe duas identidades.
+                    Mova para a aba <b>Prompts IA</b> e deixe aqui só o que muda neste ramo.
+                  </div>
+                )}
               </Fld>
               <Fld label="Modelo">
                 <select value={cfg.modelo||'haiku'} onChange={e=>set('modelo',e.target.value)} style={{...IS,cursor:'pointer'}}>
