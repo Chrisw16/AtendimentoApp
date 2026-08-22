@@ -158,6 +158,43 @@ exportada do motor — hoje é privada.
   `await` desta fase **não** entram lá; o comentário "espelho byte-a-byte" passa a
   ser falso e é corrigido no arquivo. Religar o espelho não é escopo daqui.
 
+## Revisão adversarial — o que ela pegou
+
+Duas revisões por agente (uma contra o plano, uma caçando bug em produção)
+acharam **7 coisas que viraram correção** e 4 que viraram teto documentado.
+
+### Corrigidas
+
+| Achado | Por que doía |
+|---|---|
+| **execução nunca expirava** | o restart ERA a expiração; sem TTL, cliente que some volta semanas depois no meio do fluxo antigo |
+| **`/api` atendia antes das migrations** | na estreia da 014, webhook pega `42P01` → 500 → mensagem perdida |
+| **seed do protocolo por `COUNT(*)`** | contador nasce atrás do gravado → 23505 → 1ª mensagem de cada conversa nova perdida |
+| **protocolo virava o dia às 21h** | `CURRENT_DATE` em container UTC com operação em BRT |
+| **`retomarAutomacao` fora da fila** | duplo clique em "Devolver para IA" duplica a mensagem |
+| **áudio quebrava o `ia_responde`** | `messages` vazio → Anthropic recusa → "ocorreu um erro" + transferência. Nota de voz é o input mais comum em suporte de ISP |
+| **rota desconhecida pendurava** | `/api/x` e `/health/live` sem resposta até o timeout — a mesma causa do `/health/ready` pendurado em produção |
+
+O caso do áudio merece nota: a **primeira** correção que fiz (gate por texto
+vazio) era ela mesma a regressão — calava o bot em áudio e imagem sem legenda.
+O gate certo é por **tipo** (`sistema`), e a mídia precisa virar marcador.
+
+### Tetos aceitos conscientemente
+
+- **Estado é durável, envio não.** O `finally` grava o estado e só então envia.
+  Morte entre as duas coisas deixa o banco dizendo "aguardando resposta do menu"
+  com o cliente nunca tendo visto o menu — e agora isso **sobrevive** ao restart,
+  onde antes se curava sozinho. A correção certa é o **Outbox da FASE 4** (§126),
+  não um remendo aqui.
+- **Dreno de 8 s pode ser curto** para um turno de `ia_responde` (até 5
+  round-trips na Anthropic). Aumentar só adianta se o `stop_grace_period` do
+  Coolify subir junto — `docker stop` manda SIGKILL aos 10 s.
+- **`_grafo` reescreve ~9 KB por turno.** Aguenta o volume de hoje (~zero); numa
+  operação real, separar o grafo do estado.
+- **Migration quebrada agora derruba o site inteiro**, não só o schema. É o
+  comportamento que o §159 pede (readiness bloqueia), mas o raio aumentou:
+  antes o frontend subia e a API dava 500.
+
 ## Critérios de aceite (§14) — resultado
 
 Todos cobertos por teste de integração contra Postgres real
@@ -172,8 +209,18 @@ Todos cobertos por teste de integração contra Postgres real
 - [x] estado inspecionável no banco (`estado->>'noAtual'`)
 - [x] testes de integração cobrem persistência e retomada
 
-**Verificado com dentes:** neutralizando `estadoStore.get`, **7 dos 9 falham**.
-Um teste que passa com a feature removida não é prova.
+**Verificado com dentes** (duas vezes): neutralizando `estadoStore.get`, **7 dos
+9 falham**; devolvendo o seed de protocolo para `COUNT(*)`, o teste do contador
+falha. Teste que passa com a feature removida não é prova.
+
+**Verificado ao vivo**, além dos testes:
+- `SIGTERM` **1 s dentro de um turno de 6 s** (nó `chamada_http` contra um
+  endpoint lento): o dreno esperou **5,1 s**, o turno terminou, e só então o
+  processo saiu. É a evidência mais próxima de "restart testado" possível sem
+  Docker nesta máquina.
+- `/api` devolvendo **503** (não 500) com migration quebrada; `/health` seguindo 200.
+- **404** em `/api/nao-existe` e `/health/live` com o catch-all do frontend
+  montado — o caso da produção, onde antes a requisição pendurava.
 
 Extra, além do §14: trocar o fluxo **ativo** não sequestra mais conversa em
 andamento, e um fluxo que aponta para nó inexistente não trava a conversa para
