@@ -5,7 +5,7 @@ import { useStore } from '../../store';
 import {
   Phone, Mail, MapPin, Clock, User, Tag, Wifi, WifiOff, Activity, Bot,
   ChevronDown, ExternalLink, AlertCircle, AlertTriangle, X, Stethoscope, FileText,
-  LayoutPanelLeft,
+  LayoutPanelLeft, Landmark, Zap, Send, Download, History, MessageSquare, Signal,
 } from 'lucide-react';
 import Button from '../ui/Button';
 import PainelSGP from './PainelSGP';
@@ -19,12 +19,21 @@ import styles from './ConversaInfo.module.css';
  * inteiro viajar até o navegador. Aqui só se exibe o que chegou.
  */
 
-function Section({ title, children, defaultOpen = true, badge = null }) {
+function Section({ title, children, defaultOpen = true, badge = null, icon: Icon = null, tom = null, onToggle = null }) {
   const [open, setOpen] = useState(defaultOpen);
+  const alternar = () => {
+    // O aviso vai FORA do updater: React chama updater duas vezes em StrictMode,
+    // e aqui ele dispara uma busca ao SGP.
+    const novo = !open;
+    setOpen(novo);
+    onToggle?.(novo);
+  };
   return (
-    <div className={styles.section}>
-      <button className={styles.sectionHeader} onClick={() => setOpen(v => !v)}>
-        <span>{title}{badge != null && <span className={styles.badge}>{badge}</span>}</span>
+    <div className={styles.section} data-tom={tom || undefined}>
+      <button className={styles.sectionHeader} onClick={alternar}>
+        {Icon && <span className={styles.sectionIcon}><Icon size={12} /></span>}
+        <span className={styles.sectionTitle}>{title}</span>
+        {badge != null && <span className={styles.badge}>{badge}</span>}
         <ChevronDown size={12} className={[styles.chevron, open && styles.open].filter(Boolean).join(' ')} />
       </button>
       {open && <div className={styles.sectionBody}>{children}</div>}
@@ -66,7 +75,7 @@ function ContextCard({ card }) {
 const brl = (v) => `R$ ${(Number(v) || 0).toFixed(2).replace('.', ',')}`;
 
 export default function ConversaInfo({ conversa, chat }) {
-  const { encerrar, transferirFila } = chat;
+  const { encerrar, transferirFila, enviarMensagem } = chat;
   const toast = useStore(s => s.toast);
   const [showEncerrar, setShowEncerrar] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -76,6 +85,10 @@ export default function ConversaInfo({ conversa, chat }) {
   // Qual contrato o painel está olhando. `null` = o principal da ficha. Zera ao
   // trocar de conversa, senão o contrato do cliente anterior atravessa.
   const [contratoId, setContratoId] = useState(null);
+
+  // A seção Financeiro é quem dispara a busca das faturas — e só quando há o
+  // que buscar. Cliente sem título aberto não gera ida ao SGP nenhuma.
+  const [finAberto, setFinAberto] = useState(true);
 
   useEffect(() => { setContratoId(null); setPainelAberto(false); setSaida(null); }, [conversa.id]);
 
@@ -108,6 +121,22 @@ export default function ConversaInfo({ conversa, chat }) {
     retry: false,
   });
 
+  const id  = ficha?.identidade || {};
+  // O seletor não custa request: a ficha já traz os contratos inteiros (com
+  // endereço e serviço), então trocar é só re-renderizar.
+  const ctr = (contratoId && ficha?.contratos?.find(c => String(c.id) === String(contratoId)))
+           || ficha?.contrato_principal;
+  const ctrId = ctr?.id || null;
+
+  const temDebito = (ficha?.financeiro?.titulos_abertos || 0) > 0;
+  const { data: faturas, isFetching: buscandoFaturas } = useQuery({
+    // Mesma queryKey do painel completo: abrir o drawer depois não busca de novo.
+    queryKey: ['c360-faturas', conversa.id, ctrId],
+    queryFn:  () => cliente360Api.faturas(conversa.id, ctrId),
+    enabled:  finAberto && temDebito && !!ctrId && !!caps?.capacidades?.financeiro,
+    staleTime: 60_000, retry: false,
+  });
+
   const acaoMut = useMutation({
     mutationFn: (acao) => cliente360Api.acao(conversa.id, { acao, contrato: contratoId || undefined }),
     onSuccess:  (r) => { setSaida({ titulo: r.acao, texto: r.resultado }); refetch(); },
@@ -123,17 +152,33 @@ export default function ConversaInfo({ conversa, chat }) {
     onError:    (e) => toast(e.message, 'error'),
   });
 
+  /**
+   * Enviar boleto / PIX ao cliente.
+   *
+   * O PIX vai em DUAS mensagens de propósito: no WhatsApp, copiar seleciona a
+   * mensagem inteira — código junto com texto explicativo é código que não
+   * cola. A segunda mensagem é só o copia-e-cola, nua.
+   */
+  const enviarBoleto = async (b) => {
+    const link = b.link_cobranca || b.link_boleto;
+    if (!link) return toast('Este boleto não veio com link.', 'error');
+    const venc = b.vencimento_atual ? ` (vence ${b.vencimento_atual})` : '';
+    await enviarMensagem(conversa.id, `📄 Segunda via do seu boleto${venc} — ${brl(b.valor_cobrado ?? b.valor_original)}:\n${link}`);
+    toast('Boleto enviado ao cliente', 'success');
+  };
+
+  const enviarPix = async (b) => {
+    if (!b.pix_copia_cola) return toast('Este boleto não tem PIX.', 'error');
+    await enviarMensagem(conversa.id, `🔑 PIX copia e cola — ${brl(b.valor_cobrado ?? b.valor_original)}. É só copiar o código da próxima mensagem:`);
+    await enviarMensagem(conversa.id, b.pix_copia_cola);
+    toast('PIX enviado ao cliente', 'success');
+  };
+
   const confirmarEncerrar = () => {
     encerrar(conversa.id, motivo);
     setShowEncerrar(false);
     setMotivo('');
   };
-
-  const id  = ficha?.identidade || {};
-  // O seletor não custa request: a ficha já traz os contratos inteiros (com
-  // endereço e serviço), então trocar é só re-renderizar.
-  const ctr = (contratoId && ficha?.contratos?.find(c => String(c.id) === String(contratoId)))
-           || ficha?.contrato_principal;
 
   return (
     <aside className={styles.panel}>
@@ -194,61 +239,116 @@ export default function ConversaInfo({ conversa, chat }) {
           </div>
         )}
 
-        {/* ── VISÃO GERAL ── */}
-        <Section title="Visão geral">
+        {/* ── QUEM É ── */}
+        <Section title="Visão geral" icon={User}>
           <InfoRow icon={User}   label="CPF/CNPJ" value={id.cpf} />
           <InfoRow icon={Phone}  label="Telefone" value={id.telefone || conversa.telefone} />
           <InfoRow icon={Mail}   label="E-mail"   value={id.email || conversa.email} />
           <InfoRow icon={MapPin} label="Cidade"   value={ctr?.cidade || conversa.cidade} />
           <InfoRow icon={Tag}    label="Canal"    value={conversa.canal} />
           {id.mascarado && <p className={styles.nota}>Dados mascarados. Requer permissão para ver completo.</p>}
-
-          {ctr && (
-            <>
-              <InfoRow icon={FileText} label="Contrato" value={`#${ctr.id} — ${ctr.status}`} />
-              <InfoRow icon={Activity} label="Plano"    value={ctr.plano} />
-              <InfoRow icon={MapPin}   label="POP"      value={ctr.popNome} />
-            </>
-          )}
-          {ficha?.contratos?.length > 1 && (
-            <>
-              <label className={styles.filaLabel} htmlFor="contrato-sel">Contrato</label>
-              <select
-                id="contrato-sel"
-                className={styles.filaSelect}
-                value={ctr?.id ?? ''}
-                onChange={e => setContratoId(e.target.value)}
-              >
-                {ficha.contratos.map(c => (
-                  <option key={c.id} value={c.id}>#{c.id} — {c.status} — {c.plano || 'sem plano'}</option>
-                ))}
-              </select>
-            </>
-          )}
-
-          {ficha && (
-            <Button
-              variant="ghost" size="sm" icon={LayoutPanelLeft}
-              className={styles.acaoBtn}
-              onClick={() => setPainelAberto(true)}
-            >
-              Painel completo
-            </Button>
-          )}
         </Section>
+
+        {/* ── CONTRATO ── (bloco próprio: é a chave de tudo que vem depois) */}
+        {ctr && (
+          <Section title="Contrato" icon={FileText} badge={ficha?.contratos?.length > 1 ? ficha.contratos.length : null}>
+            <div className={styles.contratoCard} data-status={ctr.status}>
+              <div className={styles.contratoTop}>
+                <strong>#{ctr.id}</strong>
+                <span className={styles.statusPill} data-status={ctr.status}>{ctr.status}</span>
+              </div>
+              <p className={styles.contratoPlano}>{ctr.plano || 'Sem plano informado'}</p>
+              {ctr.motivo_status && <p className={styles.nota}>{ctr.motivo_status}</p>}
+            </div>
+            <InfoRow icon={MapPin} label="POP"        value={ctr.popNome} />
+            <InfoRow icon={Clock}  label="Vencimento" value={ctr.venc_dia} />
+            <InfoRow icon={Clock}  label="Cliente desde" value={ctr.cadastrado_em} />
+
+            {ficha?.contratos?.length > 1 && (
+              <>
+                <label className={styles.filaLabel} htmlFor="contrato-sel">Trocar contrato</label>
+                <select
+                  id="contrato-sel"
+                  className={styles.filaSelect}
+                  value={ctr?.id ?? ''}
+                  onChange={e => setContratoId(e.target.value)}
+                >
+                  {ficha.contratos.map(c => (
+                    <option key={c.id} value={c.id}>#{c.id} — {c.status} — {c.plano || 'sem plano'}</option>
+                  ))}
+                </select>
+              </>
+            )}
+          </Section>
+        )}
+
+        {ficha && (
+          <button className={styles.painelBtn} onClick={() => setPainelAberto(true)}>
+            <LayoutPanelLeft size={13} /> Abrir painel completo
+          </button>
+        )}
 
         {/* ── FINANCEIRO ── */}
         {ficha?.financeiro && (
-          <Section title="Financeiro" badge={ficha.financeiro.titulos_abertos || null}>
-            <InfoRow icon={FileText} label="Títulos em aberto" value={String(ficha.financeiro.titulos_abertos)} />
-            <InfoRow icon={Tag}      label="Total em aberto"   value={brl(ficha.financeiro.valor_aberto)} />
-            <InfoRow icon={Clock}    label="Vencimento"        value={ficha.financeiro.vencimento} />
+          <Section
+            title="Financeiro" icon={Landmark}
+            tom={temDebito ? 'danger' : 'ok'}
+            badge={ficha.financeiro.titulos_abertos || null}
+            onToggle={setFinAberto}
+          >
+            <div className={styles.finResumo} data-tom={temDebito ? 'danger' : 'ok'}>
+              <div>
+                <span className={styles.finLabel}>Total em aberto</span>
+                <strong className={styles.finValor}>{brl(ficha.financeiro.valor_aberto)}</strong>
+              </div>
+              <div>
+                <span className={styles.finLabel}>Títulos</span>
+                <strong className={styles.finValor}>{ficha.financeiro.titulos_abertos}</strong>
+              </div>
+            </div>
+            <InfoRow icon={Clock} label="Vencimento" value={ficha.financeiro.vencimento} />
+
+            {temDebito && (
+              <div className={styles.faturas}>
+                {buscandoFaturas && <div className={`skeleton ${styles.skelFatura}`} />}
+                {!buscandoFaturas && faturas?.mensagem && <p className={styles.nota}>{faturas.mensagem}</p>}
+                {faturas?.boletos?.map((b, i) => (
+                  <div key={b.fatura_id || i} className={styles.fatura} data-vencido={b.vencido ? '1' : '0'}>
+                    <div className={styles.faturaTop}>
+                      <span>{b.vencimento_atual || b.vencimento_original || 'sem vencimento'}</span>
+                      <strong>{brl(b.valor_cobrado ?? b.valor_original)}</strong>
+                    </div>
+                    {b.vencido && <span className={styles.faturaTag}>vencido</span>}
+                    <div className={styles.faturaAcoes}>
+                      {(b.link_boleto || b.link_cobranca) && (
+                        <a className={styles.faturaBtn} href={b.link_cobranca || b.link_boleto} target="_blank" rel="noreferrer" title="Abrir o boleto">
+                          <Download size={11} /> Baixar
+                        </a>
+                      )}
+                      {conversa.status !== 'encerrada' && (b.link_boleto || b.link_cobranca) && (
+                        <button className={styles.faturaBtn} onClick={() => enviarBoleto(b)} title="Enviar o link ao cliente">
+                          <Send size={11} /> Boleto
+                        </button>
+                      )}
+                      {conversa.status !== 'encerrada' && b.pix_copia_cola && (
+                        <button className={`${styles.faturaBtn} ${styles.faturaBtnPix}`} onClick={() => enviarPix(b)} title="Enviar o PIX copia e cola ao cliente">
+                          <Zap size={11} /> PIX
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {faturas?.boletos?.length > 0 && (
+                  <p className={styles.nota}>Enviar publica a mensagem na conversa do cliente.</p>
+                )}
+              </div>
+            )}
           </Section>
         )}
 
         {/* ── DIAGNÓSTICO ── */}
         {ficha?.diagnostico && (
-          <Section title="Diagnóstico" defaultOpen={false}>
+          <Section title="Diagnóstico" icon={Signal} defaultOpen={false}>
             {ficha.diagnostico.conexao ? (
               <InfoRow
                 icon={ficha.diagnostico.conexao.online ? Wifi : WifiOff}
@@ -276,7 +376,7 @@ export default function ConversaInfo({ conversa, chat }) {
 
         {/* ── AÇÕES RÁPIDAS ── */}
         {caps?.acoes?.length > 0 && conversa.status !== 'encerrada' && (
-          <Section title="Ações rápidas">
+          <Section title="Ações rápidas" icon={Zap}>
             <div className={styles.acoesGrid}>
               {caps.acoes.map(a => (
                 <button
@@ -304,7 +404,7 @@ export default function ConversaInfo({ conversa, chat }) {
         )}
 
         {/* ── HISTÓRICO 360 ── */}
-        <Section title="Histórico" defaultOpen={false} badge={ficha?.conversas_anteriores || null}>
+        <Section title="Histórico" icon={History} defaultOpen={false} badge={ficha?.conversas_anteriores || null}>
           <InfoRow icon={Clock} label="Início desta conversa" value={conversa.criado_em && new Date(conversa.criado_em).toLocaleString('pt-BR')} />
           <InfoRow icon={User}  label="Agente"    value={conversa.agente_nome} />
           <InfoRow icon={Tag}   label="Protocolo" value={conversa.protocolo} />
@@ -322,7 +422,7 @@ export default function ConversaInfo({ conversa, chat }) {
 
         {/* ── AÇÕES DA CONVERSA ── */}
         {conversa.status !== 'encerrada' && (
-          <Section title="Conversa" defaultOpen>
+          <Section title="Conversa" icon={MessageSquare} defaultOpen>
             <div className={styles.acoes}>
               <Button variant="danger" size="sm" icon={X} onClick={() => setShowEncerrar(true)} className={styles.acaoBtn}>
                 Encerrar conversa

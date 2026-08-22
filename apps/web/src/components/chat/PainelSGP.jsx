@@ -75,6 +75,13 @@ function Bloco({ icon: Icon, titulo, children, acao = null }) {
   );
 }
 
+/** Status/qualidade → cor da pílula. Fora do JSX para não virar ternário aninhado. */
+const TOM_STATUS = {
+  ativo: 'ok', novo: 'ok', 'ativo vel. reduzida': 'alerta',
+  suspenso: 'alerta', inativo: 'ruim', cancelado: 'ruim', 'inviabilidade técnica': 'ruim',
+};
+const TOM_SINAL = { bom: 'ok', atencao: 'alerta', ruim: 'ruim', critico: 'ruim' };
+
 const brl = (v) => `R$ ${(Number(v) || 0).toFixed(2).replace('.', ',')}`;
 const dataBR = (s) => {
   if (!s) return null;
@@ -125,16 +132,48 @@ export default function PainelSGP({ conversa, ficha, contrato, contratos, onTroc
     <div className={s.pgSgpOverlay} onClick={onFechar}>
       <aside className={s.pgSgpDrawer} onClick={e => e.stopPropagation()} role="dialog" aria-label="Painel do assinante">
         <header className={s.pgSgpHeader}>
+          <div className={s.pgSgpHeaderTxt}>
+            <h2>{id.nome || conversa.nome || 'Painel do assinante'}</h2>
+            <p className={s.pgSgpHeaderSub}>
+              {ctr ? `Contrato #${ctr.id} · ${ctr.plano || 'sem plano'}` : 'Cliente não identificado nesta conversa'}
+            </p>
+          </div>
           <button className={s.pgSgpClose} onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
-          <h2>Painel do assinante</h2>
         </header>
+
+        {/* Faixa de resumo: o que decide a conversa, antes de qualquer rolagem. */}
+        {ctr && (
+          <div className={s.pgSgpResumo}>
+            <span className={s.pgSgpPill} data-tom={TOM_STATUS[ctr.status] || 'info'}>
+              <Activity size={11} />{ctr.status}
+            </span>
+            {ficha?.financeiro?.titulos_abertos > 0 && (
+              <span className={s.pgSgpPill} data-tom="ruim">
+                <Landmark size={11} />{ficha.financeiro.titulos_abertos} em aberto · {brl(ficha.financeiro.valor_aberto)}
+              </span>
+            )}
+            {ficha?.financeiro && !ficha.financeiro.titulos_abertos && (
+              <span className={s.pgSgpPill} data-tom="ok"><Check size={11} />sem débito</span>
+            )}
+            {onu?.online != null && (
+              <span className={s.pgSgpPill} data-tom={onu.online ? 'ok' : 'ruim'}>
+                <Signal size={11} />{onu.online ? 'ONU online' : 'ONU offline'}
+              </span>
+            )}
+            {onu?.rx_dbm != null && (
+              <span className={s.pgSgpPill} data-tom={TOM_SINAL[onu.qualidade?.nivel] || 'info'}>
+                Rx {onu.rx_dbm} dBm
+              </span>
+            )}
+          </div>
+        )}
 
         <div className={s.pgSgpScroll}>
           {/* ── ATENDIMENTO ── */}
           <Bloco icon={User} titulo="Dados do atendimento">
             <div className={s.pgSgpIdent}>
               <div className={s.pgSgpAvatar}>{(id.nome || conversa.nome || '?').charAt(0).toUpperCase()}</div>
-              <div>
+              <div className={s.pgSgpIdentTxt}>
                 <p className={s.pgSgpNome}>{id.nome || conversa.nome || 'Sem nome'}</p>
                 <p className={s.pgSgpSub}>
                   <Copiavel texto={id.telefone || conversa.telefone}>{id.telefone || conversa.telefone}</Copiavel>

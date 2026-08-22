@@ -1,180 +1,242 @@
 /* PainelSGP — o painel completo do assinante, em drawer.
-   Segue os tokens de tokens.css; nada de cor solta. */
+   Só tokens de tokens.css; nada de cor solta. */
 
 .pgSgpOverlay {
   position: fixed; inset: 0; z-index: 70;
-  background: rgba(15, 23, 42, .45);
+  background: rgba(15, 23, 42, .5);
+  backdrop-filter: blur(2px);
   display: flex; justify-content: flex-end;
   animation: pgSgpFade var(--duration-fast) var(--ease-out);
 }
 @keyframes pgSgpFade { from { opacity: 0 } to { opacity: 1 } }
 
 .pgSgpDrawer {
-  width: min(560px, 100vw);
+  width: min(600px, 100vw);
   height: 100%;
   background: var(--bg-base);
   display: flex; flex-direction: column;
   box-shadow: var(--shadow-lg);
   animation: pgSgpSlide var(--duration-base) var(--ease);
 }
-@keyframes pgSgpSlide { from { transform: translateX(24px); opacity: .6 } to { transform: none; opacity: 1 } }
+@keyframes pgSgpSlide { from { transform: translateX(32px); opacity: .4 } to { transform: none; opacity: 1 } }
 
+/* ── cabeçalho ── */
 .pgSgpHeader {
   display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   background: var(--sidebar-bg); color: var(--text-inverse);
   flex-shrink: 0;
 }
-.pgSgpHeader h2 { font-size: var(--text-lg); font-weight: 600; margin: 0; }
-.pgSgpClose {
-  background: none; border: none; color: var(--text-inverse);
-  cursor: pointer; display: flex; padding: var(--space-1); border-radius: var(--radius-sm);
+.pgSgpHeaderTxt { flex: 1; min-width: 0; }
+.pgSgpHeaderTxt h2 {
+  font-size: var(--text-md); font-weight: 600; margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.pgSgpClose:hover { background: var(--sidebar-hover); }
+.pgSgpHeaderSub {
+  font-size: var(--text-xs); color: rgba(255,255,255,.55); margin: 2px 0 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pgSgpClose {
+  background: rgba(255,255,255,.08); border: none; color: var(--text-inverse);
+  cursor: pointer; display: flex; padding: 7px; border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.pgSgpClose:hover { background: rgba(255,255,255,.18); }
 
+/* ── faixa de resumo ── */
+.pgSgpResumo {
+  display: flex; gap: var(--space-2); flex-shrink: 0;
+  padding: var(--space-3) var(--space-5);
+  background: var(--bg-surface); border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.pgSgpPill {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  padding: 5px var(--space-3); border-radius: var(--radius-full);
+  font-size: var(--text-xs); font-weight: 600;
+  background: var(--bg-overlay); color: var(--text-secondary);
+}
+.pgSgpPill[data-tom="ok"]     { background: var(--success-bg); color: var(--success); }
+.pgSgpPill[data-tom="alerta"] { background: var(--warning-bg); color: var(--warning); }
+.pgSgpPill[data-tom="ruim"]   { background: var(--danger-bg);  color: var(--danger); }
+.pgSgpPill[data-tom="info"]   { background: var(--accent-muted); color: var(--accent); }
+
+/* ── área rolável ──
+   `flex-shrink: 0` nos blocos NÃO é decoração: em flex column todo filho encolhe
+   por padrão, e com overflow:hidden no cartão o conteúdo era DECEPADO. */
 .pgSgpScroll {
-  flex: 1; overflow-y: auto;
-  padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3);
+  flex: 1; overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-5) var(--space-8);
+  display: flex; flex-direction: column; gap: var(--space-3);
 }
 
 /* ── bloco ── */
 .pgSgpBloco {
+  flex-shrink: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--sidebar-bg);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 .pgSgpBlocoTop {
   display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
 }
 .pgSgpBlocoTop h3 {
-  font-size: var(--text-md); font-weight: 700; margin: 0; flex: 1;
-  color: var(--text-primary);
+  font-size: var(--text-sm); font-weight: 700; margin: 0; flex: 1;
+  color: var(--text-primary); text-transform: uppercase; letter-spacing: .04em;
 }
 .pgSgpBlocoIcon {
   display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: var(--radius-md);
-  background: var(--bg-overlay); color: var(--text-secondary);
+  width: 26px; height: 26px; border-radius: var(--radius-md);
+  background: var(--accent-muted); color: var(--accent); flex-shrink: 0;
 }
-.pgSgpBlocoBody { padding: 0 var(--space-4) var(--space-4); }
+.pgSgpBlocoBody { padding: var(--space-2) var(--space-4) var(--space-3); }
 
-/* ── campo ── */
+/* ── campo: grid de 2 colunas, alinhado ── */
 .pgSgpField {
-  display: flex; align-items: baseline; gap: var(--space-3);
+  display: grid; grid-template-columns: 116px minmax(0, 1fr);
+  align-items: baseline; gap: var(--space-3);
   padding: var(--space-2) 0;
-  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
-.pgSgpField:first-child { border-top: none; }
+.pgSgpField:last-child { border-bottom: none; }
 .pgSgpFieldLabel {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 5px;
   font-size: var(--text-xs); color: var(--text-tertiary);
-  min-width: 108px; flex-shrink: 0;
 }
 .pgSgpFieldValue {
   font-size: var(--text-base); color: var(--text-primary);
-  font-weight: 500; word-break: break-word;
+  font-weight: 500; overflow-wrap: anywhere;
   display: inline-flex; align-items: center; gap: var(--space-2);
 }
-.pgSgpMono { font-family: var(--font-mono); font-size: var(--text-sm); }
+.pgSgpMono { font-family: var(--font-mono); font-size: var(--text-sm); letter-spacing: -.01em; }
 
-.pgSgpCopyWrap { display: inline-flex; align-items: center; gap: 6px; }
+.pgSgpCopyWrap { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .pgSgpCopyBtn, .pgSgpEye {
-  background: none; border: none; cursor: pointer; padding: 2px;
+  background: none; border: none; cursor: pointer; padding: 3px;
   color: var(--text-tertiary); display: inline-flex; border-radius: var(--radius-sm);
+  flex-shrink: 0; transition: all var(--duration-fast) var(--ease-out);
 }
 .pgSgpCopyBtn:hover, .pgSgpEye:hover { color: var(--accent); background: var(--accent-muted); }
 
 /* ── identidade ── */
-.pgSgpIdent { display: flex; align-items: center; gap: var(--space-3); padding-bottom: var(--space-3); }
-.pgSgpAvatar {
-  width: 44px; height: 44px; border-radius: var(--radius-full);
-  background: var(--accent); color: var(--text-inverse);
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: var(--text-lg); flex-shrink: 0;
+.pgSgpIdent {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) 0 var(--space-3);
+  border-bottom: 1px solid var(--border);
 }
-.pgSgpNome { font-size: var(--text-md); font-weight: 600; margin: 0; color: var(--text-primary); }
+.pgSgpAvatar {
+  width: 42px; height: 42px; border-radius: var(--radius-full); flex-shrink: 0;
+  background: linear-gradient(135deg, var(--brand-blue), var(--brand-navy));
+  color: var(--text-inverse);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: var(--text-lg);
+}
+.pgSgpIdentTxt { min-width: 0; }
+.pgSgpNome {
+  font-size: var(--text-md); font-weight: 600; margin: 0; color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
 .pgSgpSub  { font-size: var(--text-sm); color: var(--text-secondary); margin: 2px 0 0; }
 .pgSgpNota { font-size: var(--text-xs); color: var(--text-tertiary); margin: var(--space-2) 0 0; }
 .pgSgpAviso{ font-size: var(--text-xs); color: var(--warning); margin: var(--space-2) 0 0; }
-.pgSgpObs  { font-size: var(--text-sm); color: var(--text-secondary); margin: 0 0 var(--space-2); white-space: pre-wrap; }
+.pgSgpObs  {
+  font-size: var(--text-sm); color: var(--text-secondary); margin: 0 0 var(--space-2);
+  white-space: pre-wrap; padding: var(--space-3);
+  background: var(--warning-bg); border-radius: var(--radius-md);
+}
+.pgSgpObs:last-child { margin-bottom: 0; }
 
 /* ── contrato ── */
-.pgSgpContratoSel { background: var(--bg-overlay); border-radius: var(--radius-md); padding: var(--space-3); }
-.pgSgpContratoAtual { font-size: var(--text-md); font-weight: 600; margin: 2px 0; color: var(--text-primary); }
+.pgSgpContratoSel {
+  background: var(--bg-overlay); border-radius: var(--radius-md);
+  padding: var(--space-3); margin-top: var(--space-2);
+}
+.pgSgpContratoAtual {
+  font-size: var(--text-md); font-weight: 600; margin: 3px 0; color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
 .pgSgpSelect {
   width: 100%; margin-top: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-strong); border-radius: var(--radius-md);
-  font-family: var(--font-body); font-size: var(--text-sm); background: var(--bg-surface);
+  font-family: var(--font-body); font-size: var(--text-sm);
+  background: var(--bg-surface); color: var(--text-primary);
 }
 .pgSgpTags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .pgSgpTag {
-  font-size: var(--text-xs); padding: 2px var(--space-2);
+  font-size: var(--text-xs); padding: 3px var(--space-2);
   border-radius: var(--radius-full); background: var(--accent-muted); color: var(--accent);
+  font-weight: 600;
 }
 
 /* ── sinal da fibra ── */
 .pgSgpSinal {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2);
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3);
   padding: var(--space-3); border-radius: var(--radius-md);
-  background: var(--bg-overlay); margin-bottom: var(--space-2);
+  background: var(--bg-overlay); margin: var(--space-2) 0 var(--space-1);
+  border: 1px solid transparent;
 }
-.pgSgpSinal > div { display: flex; flex-direction: column; gap: 2px; }
-.pgSgpSinal strong { font-size: var(--text-md); color: var(--text-primary); }
+.pgSgpSinal > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pgSgpSinal strong { font-size: var(--text-md); color: var(--text-primary); line-height: 1.2; }
 .pgSgpSinalLabel { font-size: var(--text-xs); color: var(--text-tertiary); }
-.pgSgpSinal[data-nivel="bom"]     { background: var(--success-bg); }
+.pgSgpSinal[data-nivel="bom"]     { background: var(--success-bg); border-color: rgba(22,163,74,.2); }
 .pgSgpSinal[data-nivel="bom"]     strong { color: var(--success); }
-.pgSgpSinal[data-nivel="atencao"] { background: var(--warning-bg); }
+.pgSgpSinal[data-nivel="atencao"] { background: var(--warning-bg); border-color: rgba(217,119,6,.2); }
 .pgSgpSinal[data-nivel="atencao"] strong { color: var(--warning); }
 .pgSgpSinal[data-nivel="ruim"],
-.pgSgpSinal[data-nivel="critico"] { background: var(--danger-bg); }
+.pgSgpSinal[data-nivel="critico"] { background: var(--danger-bg); border-color: rgba(220,38,38,.2); }
 .pgSgpSinal[data-nivel="ruim"]    strong,
 .pgSgpSinal[data-nivel="critico"] strong { color: var(--danger); }
 
 /* ── boleto ── */
 .pgSgpBoleto {
   border: 1px solid var(--border); border-radius: var(--radius-md);
-  padding: var(--space-3); margin-bottom: var(--space-2);
+  padding: var(--space-3); margin-top: var(--space-2);
+  background: var(--bg-surface);
 }
-.pgSgpBoleto[data-vencido="1"] { border-color: var(--danger); background: var(--danger-bg); }
+.pgSgpBoleto[data-vencido="1"] { border-color: rgba(220,38,38,.35); background: var(--danger-bg); }
 .pgSgpBoletoTop { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
 .pgSgpBoletoTop span   { font-size: var(--text-sm); color: var(--text-secondary); }
-.pgSgpBoletoTop strong { font-size: var(--text-md); color: var(--text-primary); }
+.pgSgpBoletoTop strong { font-size: var(--text-lg); color: var(--text-primary); font-weight: 700; }
 .pgSgpBoletoTag {
   display: inline-block; margin-top: 4px; font-size: var(--text-xs);
-  color: var(--danger); font-weight: 600;
+  color: var(--danger); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
 }
 .pgSgpBoletoAcoes { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .pgSgpBoletoBtn {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: var(--space-2) var(--space-3);
+  padding: 7px var(--space-3);
   border: 1px solid var(--border-strong); border-radius: var(--radius-md);
   background: var(--bg-surface); color: var(--text-primary);
-  font-family: var(--font-body); font-size: var(--text-sm); font-weight: 500;
+  font-family: var(--font-body); font-size: var(--text-sm); font-weight: 600;
   cursor: pointer; text-decoration: none;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 .pgSgpBoletoBtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
 
 /* ── links e ações ── */
 .pgSgpLink {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: var(--text-sm); color: var(--accent); text-decoration: none; font-weight: 500;
+  font-size: var(--text-sm); color: var(--accent); text-decoration: none; font-weight: 600;
 }
 .pgSgpLink:hover { text-decoration: underline; }
-.pgSgpAcoes { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.pgSgpAcoes { display: flex; flex-wrap: wrap; gap: var(--space-2); padding-top: var(--space-1); }
 .pgSgpAcaoChip {
-  padding: var(--space-2) var(--space-3);
+  padding: 7px var(--space-3);
   border: 1px solid var(--border-strong); border-radius: var(--radius-full);
   background: var(--bg-surface); color: var(--text-primary);
-  font-family: var(--font-body); font-size: var(--text-sm); cursor: pointer;
+  font-family: var(--font-body); font-size: var(--text-sm); font-weight: 500; cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 .pgSgpAcaoChip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
 
-.pgSgpSkel { height: 64px; border-radius: var(--radius-md); }
+.pgSgpSkel { height: 60px; border-radius: var(--radius-md); margin: var(--space-2) 0; }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .pgSgpDrawer { width: 100vw; }
-  .pgSgpFieldLabel { min-width: 84px; }
+  .pgSgpScroll { padding: var(--space-3) var(--space-3) var(--space-8); }
+  .pgSgpField { grid-template-columns: 1fr; gap: 2px; padding: var(--space-2) 0; }
 }

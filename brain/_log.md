@@ -539,3 +539,24 @@ endpoint não devolve endereço") estava **baseada em premissa errada**.
   backend já validava (`contratosPermitidos`); faltava a UI.
 
 Decisão do operador: senha de PPPoE e da Central visíveis para **todo agente**.
+
+## [2026-08-22] FIX+FEAT | O painel nasceu decepado; a lateral virou painel também
+
+O painel completo abriu com os cartões espremidos em frestas. Causa: **em flex
+column todo filho encolhe por padrão** (`flex-shrink: 1`), e com `overflow:hidden`
+no cartão o conteúdo não rola — é **cortado**. Vale para os dois painéis; virou
+`.scroll > * { flex-shrink: 0 }`, uma regra em vez de cinco esquecíveis.
+
+Junto, o pedido do operador: a lateral estava "sem graça, difícil de entender o que
+é o que".
+
+- **Cada assunto virou CARTÃO** com ícone colorido no cabeçalho. Antes eram faixas
+  separadas por uma linha de 1px e o olho não achava a fronteira.
+- **Contrato saiu de dentro de "Visão geral"** e virou bloco próprio, com pílula de
+  status colorida (ativo verde, suspenso âmbar, cancelado vermelho) — é a chave de
+  tudo que vem depois no painel.
+- **Financeiro lista as faturas em aberto**, cada uma com **Baixar / Enviar boleto /
+  Enviar PIX**. O PIX vai em duas mensagens porque copiar no WhatsApp pega a
+  mensagem inteira.
+- Largura da lateral 280 → `--panel-width` (320px), que existia no tokens e não era
+  usado; valor longo (plano, e-mail) deixou de ser cortado com reticências.
