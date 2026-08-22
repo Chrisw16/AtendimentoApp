@@ -345,3 +345,35 @@ Ficaram duas leituras que exigem acesso humano (corpo das entregas #2/#3 e o log
 Registrada também a sonda certa: `/health` devolve `2.0.0` **fixo** e é inútil para saber o que está no ar. O carimbo é o **`last-modified` de `GET /`**.
 
 Detalhe em [[FASE 0 — Reconciliação e linha de base]].
+
+## [2026-08-22 · fase 3] WORK | FASE 3 concluída — o segredo parou de sair em texto plano
+
+Retomada de uma FASE 3 que estava pela metade. A parte 1 (mass-assignment, audit log, rate limit de login, assinatura de webhook) já estava commitada por outra sessão; faltavam os 3 itens de credencial.
+
+### Coordenação entre sessões
+
+Ao chegar, achei 8 sessões do Claude rodando na máquina e trabalho **não commitado** na árvore. Não editei nada até resolver: mandei mensagem para as vizinhas, duas responderam "outro repositório, pode seguir", e as 5 sessões `atendimentoapp-*` encerraram durante a checagem — deixando ~86 linhas órfãs.
+
+Commitei o órfão **como estava**, antes de construir em cima. Perder trabalho de outra sessão porque ele estava sem commit seria o pior desfecho, e commitar junto com o meu apagaria a autoria do que veio de onde.
+
+### O que faltava e foi feito
+
+Os helpers existiam mas estavam **inertes** — nada os chamava. A ligação:
+
+- `CHAVES_SECRETAS` (6 chaves), máscara `••••••••1234` nos **dois** GETs — só no agregado bastaria pedir pelo nome para contornar.
+- **PUT ignora máscara.** Não é refinamento: a tela manda o form inteiro a cada save, então sem isso todo save trocaria toda credencial não editada por `••••1234` — e a tela seguiria mostrando máscara, então o estrago só apareceria num 403 do SGP.
+- Cripto oportunista ligada nas duas pontas, incluindo os 4 leitores.
+
+### Três coisas que só o código revelou
+
+1. `sistema_kv.valor` é **jsonb** — `enc:v1:` cru não é JSON válido e o Postgres recusaria. O ciphertext precisa ser serializado de novo. O desenho não previa.
+2. `lerValorKV` fixava `process.env.KV_SECRET`: intestável sem mutar o ambiente.
+3. `getKV` era privada — e é o leitor por onde passam SGP, Evolution e Anthropic. Foi essa falta de teste que deixou o bug do ciphertext (parse antes de decifrar) existir.
+
+O item 3 é o padrão que se repete neste repo: **o que não é testável é onde o bug mora**.
+
+### Erro meu, registrado
+
+Rotulei uma saída de `git log --date=format-local` como UTC e conclui que um commit tinha 3 horas quando tinha 79 segundos — quase dei como abandonado um trabalho que estava vivo. Corrigido comparando epoch. Lição: ao comparar horários, converter antes de concluir, não rotular depois.
+
+Suítes: **227 puros · 54 integração**.

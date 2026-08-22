@@ -1,22 +1,48 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import { rateLimit } from 'express-rate-limit';
 import { getDb } from '../config/db.js';
 import { signToken, authMiddleware } from '../middlewares/auth.js';
 import { asyncHandler, HttpError } from '../middlewares/errorHandler.js';
+import { auditar, ipDe } from '../services/auditoria.js';
 
 export const authRouter = Router();
 
+// §123: política específica de tentativa de login — o limiter global (200/min)
+// nunca frearia um brute-force de senha. 20 tentativas / 15 min por IP;
+// login que AUTENTICOU não consome cota (skipSuccessfulRequests).
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false },   // trust proxy 1 já resolve o IP real
+  handler: (req, res) => {
+    auditar({ actorType: 'system', action: 'login_bloqueado_rate_limit', resource: req.body?.login || null, ip: ipDe(req) });
+    res.status(429).json({ error: 'Muitas tentativas de login. Aguarde 15 minutos.' });
+  },
+});
+
 // POST /api/auth/login
-authRouter.post('/login', asyncHandler(async (req, res) => {
+authRouter.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const { login, senha } = req.body;
   if (!login || !senha) throw new HttpError(400, 'Login e senha são obrigatórios');
 
   const db     = getDb();
   const agente = await db('agentes').where({ login, ativo: true }).first();
-  if (!agente) throw new HttpError(401, 'Credenciais inválidas');
+  if (!agente) {
+    auditar({ actorType: 'system', action: 'login_falha', resource: String(login).slice(0, 60), ip: ipDe(req) });
+    throw new HttpError(401, 'Credenciais inválidas');
+  }
 
   const ok = await bcrypt.compare(senha, agente.senha_hash);
-  if (!ok) throw new HttpError(401, 'Credenciais inválidas');
+  if (!ok) {
+    auditar({ actorType: 'system', action: 'login_falha', actorId: agente.id, resource: agente.login, ip: ipDe(req) });
+    throw new HttpError(401, 'Credenciais inválidas');
+  }
+
+  auditar({ actorType: 'human', actorId: agente.id, action: 'login_ok', ip: ipDe(req) });
 
   const token = signToken({
     id:    agente.id,

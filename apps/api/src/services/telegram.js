@@ -3,6 +3,7 @@
  * Lê o token do banco (sistema_kv → telegram_bot_token)
  */
 import { getDb } from '../config/db.js';
+import { lerValorKV } from './kvSeguro.js';
 
 async function getBotToken() {
   const db = getDb();
@@ -18,9 +19,7 @@ async function getBotToken() {
 
   // Tenta 2: sistema_kv (salvo pela página Configurações → Integrações)
   const kv = await db('sistema_kv').where({ chave: 'telegram_bot_token' }).first();
-  if (kv?.valor) {
-    try { return JSON.parse(kv.valor); } catch { return kv.valor; }
-  }
+  if (kv?.valor) return lerValorKV(kv.valor, 'telegram_bot_token');
 
   throw new Error('Token do bot Telegram não configurado. Acesse Canais → Telegram → Bot Token.');
 }
@@ -69,7 +68,13 @@ export async function tgEnviarImagem(chatId, url, legenda) {
 }
 
 export async function tgSetWebhook(url) {
-  return tgPost('setWebhook', { url });
+  // Com a env setada, o Telegram passa a mandar o secret no header
+  // `X-Telegram-Bot-Api-Secret-Token` e a rota do webhook o valida (§122).
+  // Sem registrar o secret AQUI, setar a env derrubaria o canal: o header
+  // nunca chegaria e todo update seria recusado.
+  const params = { url };
+  if (process.env.TELEGRAM_WEBHOOK_SECRET) params.secret_token = process.env.TELEGRAM_WEBHOOK_SECRET;
+  return tgPost('setWebhook', params);
 }
 
 export async function tgGetMe() {

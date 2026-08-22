@@ -5,6 +5,10 @@ export const webhookRouter = Router();
 
 // Webhook Meta (WhatsApp/Instagram)
 webhookRouter.post('/meta', asyncHandler(async (req, res) => {
+  const { verificarAssinaturaMeta } = await import('../services/webhooks/metaSeguranca.js');
+  const r = verificarAssinaturaMeta(req.rawBody, req.headers['x-hub-signature-256'], process.env.META_APP_SECRET);
+  if (!r.ok) return res.status(403).json({ error: 'Assinatura inválida' });
+  if (r.motivo === 'nao_configurado') console.warn('[Webhook Meta] META_APP_SECRET ausente — POST aceito SEM validar assinatura');
   const { handleMeta } = await import('../services/webhooks/meta.js');
   await handleMeta(req.body);
   res.json({ ok: true });
@@ -29,15 +33,30 @@ webhookRouter.get('/meta', async (req, res) => {
   res.type('text/plain').send(r.challenge);
 });
 
-// Webhook Evolution API
+// Webhook Evolution API — a Evolution não assina; o segredo vai na URL
+// (`.../evolution?token=X`, configurável no painel dela). Sem a env, aceita
+// como sempre aceitou.
 webhookRouter.post('/evolution', asyncHandler(async (req, res) => {
+  if (process.env.EVOLUTION_WEBHOOK_TOKEN) {
+    const { comparaSegura } = await import('../services/webhooks/metaSeguranca.js');
+    if (!comparaSegura(req.query.token, process.env.EVOLUTION_WEBHOOK_TOKEN)) {
+      return res.status(403).json({ error: 'Token inválido' });
+    }
+  }
   const { handleEvolution } = await import('../services/webhooks/evolution.js');
   await handleEvolution(req.body);
   res.json({ ok: true });
 }));
 
-// Webhook Telegram
+// Webhook Telegram — o `setWebhook` do Telegram manda o secret no header
+// `X-Telegram-Bot-Api-Secret-Token` quando configurado com `secret_token`.
 webhookRouter.post('/telegram', asyncHandler(async (req, res) => {
+  if (process.env.TELEGRAM_WEBHOOK_SECRET) {
+    const { comparaSegura } = await import('../services/webhooks/metaSeguranca.js');
+    if (!comparaSegura(req.headers['x-telegram-bot-api-secret-token'], process.env.TELEGRAM_WEBHOOK_SECRET)) {
+      return res.status(403).json({ error: 'Secret inválido' });
+    }
+  }
   const { handleTelegram } = await import('../services/webhooks/telegram.js');
   await handleTelegram(req.body);
   res.json({ ok: true });

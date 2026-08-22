@@ -62,9 +62,14 @@ ordensRouter.post('/', asyncHandler(async (req, res) => {
   res.status(201).json(os);
 }));
 
+// Allowlist: `{ ...req.body }` era mass-assignment — `numero`, `criado_em` e
+// afins ficavam graváveis por qualquer agente logado.
+const CAMPOS_ORDEM = ['titulo', 'descricao', 'tipo', 'status', 'prioridade', 'agente_id', 'conversa_id', 'contrato_id', 'endereco', 'agendado_para', 'iniciado_em', 'concluido_em'];
+
 ordensRouter.put('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
-  const patch = { ...req.body, atualizado: db.fn.now() };
+  const permitido = Object.fromEntries(Object.entries(req.body).filter(([k]) => CAMPOS_ORDEM.includes(k)));
+  const patch = { ...permitido, atualizado: db.fn.now() };
 
   // Timestamps automáticos por status
   if (req.body.status === 'em_campo'  && !req.body.iniciado_em)

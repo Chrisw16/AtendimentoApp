@@ -45,11 +45,15 @@ ocorrenciasRouter.post('/', asyncHandler(async (req, res) => {
   res.status(201).json(oc);
 }));
 
+// Allowlist: `{ ...req.body }` era mass-assignment — qualquer coluna gravável.
+const CAMPOS_OCORRENCIA = ['titulo', 'descricao', 'tipo', 'status', 'prioridade', 'agente_id', 'conversa_id', 'contrato_id'];
+
 ocorrenciasRouter.put('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
+  const patch = Object.fromEntries(Object.entries(req.body).filter(([k]) => CAMPOS_OCORRENCIA.includes(k)));
   const [oc] = await db('ocorrencias')
     .where({ id: req.params.id })
-    .update({ ...req.body, atualizado: db.fn.now() })
+    .update({ ...patch, atualizado: db.fn.now() })
     .returning('*');
   if (!oc) throw new HttpError(404, 'Ocorrência não encontrada');
   res.json(oc);

@@ -37,17 +37,34 @@ tarefasRouter.post('/', asyncHandler(async (req, res) => {
   res.status(201).json(t);
 }));
 
+// Só o dono da tarefa (agente_id) ou admin pode alterá-la/apagá-la.
+async function tarefaDoAgente(db, id, agente) {
+  const t = await db('tarefas').where({ id }).first();
+  if (!t) throw new HttpError(404, 'Tarefa não encontrada');
+  if (agente.role !== 'admin' && t.agente_id && t.agente_id !== agente.id) {
+    throw new HttpError(403, 'Tarefa de outro agente');
+  }
+  return t;
+}
+
+// Allowlist: `{ ...req.body }` deixava o cliente gravar QUALQUER coluna,
+// inclusive `agente_id` de outra pessoa e `criado_em`.
+const CAMPOS_TAREFA = ['titulo', 'descricao', 'status', 'prioridade', 'prazo', 'conversa_id'];
+
 tarefasRouter.put('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
+  await tarefaDoAgente(db, req.params.id, req.agente);
+  const patch = Object.fromEntries(Object.entries(req.body).filter(([k]) => CAMPOS_TAREFA.includes(k)));
   const [t] = await db('tarefas')
     .where({ id: req.params.id })
-    .update({ ...req.body, atualizado: db.fn.now() })
+    .update({ ...patch, atualizado: db.fn.now() })
     .returning('*');
-  if (!t) throw new HttpError(404, 'Tarefa não encontrada');
   res.json(t);
 }));
 
 tarefasRouter.delete('/:id', asyncHandler(async (req, res) => {
-  await getDb()('tarefas').where({ id: req.params.id }).delete();
+  const db = getDb();
+  await tarefaDoAgente(db, req.params.id, req.agente);
+  await db('tarefas').where({ id: req.params.id }).delete();
   res.json({ ok: true });
 }));

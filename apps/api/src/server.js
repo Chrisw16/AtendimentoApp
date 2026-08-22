@@ -39,7 +39,10 @@ app.set('trust proxy', 1); // 1 = trust first proxy (Coolify/Traefik)
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(cors({ origin: process.env.CORS_ORIGIN || true, credentials: true }));
 app.use(rateLimit({ windowMs: 60000, max: 200, standardHeaders: true, legacyHeaders: false, validate: { trustProxy: false } }));
-app.use(express.json({ limit: '10mb' }));
+// `verify` guarda o corpo CRU: a assinatura X-Hub-Signature-256 da Meta é o
+// HMAC dos bytes originais — recalcular sobre o objeto re-serializado falha
+// (ordem de chave, unicode). Só webhook usa; o custo é uma referência a buffer.
+app.use(express.json({ limit: '10mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 
 // Health check — SEMPRE responde, independente do banco (liveness)

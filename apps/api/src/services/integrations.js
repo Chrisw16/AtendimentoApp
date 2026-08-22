@@ -3,6 +3,7 @@
  * Todos os endpoints, formatos e campos idênticos ao erp.js de referência
  */
 import { getDb } from '../config/db.js';
+import { lerValorKV } from './kvSeguro.js';
 import { normalizarData } from './fluxoHelpers.js';
 import { manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado } from './sgpHelpers.js';
 
@@ -10,7 +11,9 @@ import { manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChama
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 
-async function getKV(chave) {
+// Exportada para teste: é por aqui que passam SGP, Evolution e Anthropic — o
+// ponto onde um ciphertext mal lido vira credencial inválida num 403 opaco.
+export async function getKV(chave) {
   const now = Date.now();
   if (cache.has(chave) && now - cache.get(chave).ts < CACHE_TTL) {
     return cache.get(chave).val;
@@ -19,7 +22,9 @@ async function getKV(chave) {
   const row = await db('sistema_kv').where({ chave }).first();
   let val = null;
   if (row?.valor) {
-    try { val = JSON.parse(row.valor); } catch { val = row.valor; }
+    // lerValorKV decifra ANTES de parsear. Um `enc:v1:` cru cairia no catch do
+    // JSON.parse antigo e o CIPHERTEXT viraria a credencial, indo para o SGP.
+    val = lerValorKV(row.valor, chave);
   }
   cache.set(chave, { val, ts: now });
   return val;
