@@ -40,6 +40,10 @@ apps/api/src/
     supervisoraIA.js     sentimento + SLA do agente + sugestões
     filaService.js       ★ fila de atendimento HUMANO: SLA por fila, assunção, capacidade
     filasHelpers.js      ★ puro: horário, faixas de SLA, capacidade, visibilidade + testes
+    cliente360.js        ★ compõe a ficha do assinante (FASE 6) — orquestra, não fala HTTP
+    mascarar.js          ★ puro: PII mascarada NO SERVIDOR + testes
+    permissoes.js        ★ puro: o que cada agente pode ver/fazer + testes
+    contextCards.js      ★ puro: os cartões do Cliente 360 + testes
     inbox.js outbox.js jobs.js  ★ filas da FASE 4 (entrada durável, envio write-ahead, relógio)
     filaDb.js            reivindicação com SKIP LOCKED + lease (as 3 filas usam)
     politicaRetry.js     ★ puro: TTL/_parkedAte, backoff, expiração, destino de lease + testes
@@ -65,15 +69,16 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 
 **Dev (sem Docker):** precisa Postgres 16 + Redis 7 + Node 20. Em `apps/api`: `cp .env.example .env`, `npm install`, `npm run seed`, `npm run dev`. Em `apps/web`: `npm install`, `npm run dev`.
 
-**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps) — **273 testes puros**, rodam em qualquer máquina sem serviço nenhum. `motorFluxo.js` **não é importável em teste** (puxa `config/db.js` → Knex no topo e as deps não ficam instaladas localmente); por isso toda lógica testável vive em **módulos puros** ao lado dele — escreva o teste primeiro (TDD):
+**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps) — **322 testes puros**, rodam em qualquer máquina sem serviço nenhum. `motorFluxo.js` **não é importável em teste** (puxa `config/db.js` → Knex no topo e as deps não ficam instaladas localmente); por isso toda lógica testável vive em **módulos puros** ao lado dele — escreva o teste primeiro (TDD):
 - `fluxoHelpers.js` — resolução de campos editor↔motor + escala NPS.
+- `mascarar.js` / `permissoes.js` / `contextCards.js` — **as decisões da FASE 6**: o que é mascarado, quem pode ver e quais cartões o painel mostra.
 - `filasHelpers.js` — **as decisões das filas da FASE 5** (§FASE 5): `dentroDoHorario` (fila ou global), `nivelUrgencia` (SLA por fila), `podeAssumir` (capacidade) e `conversaVisivel` (quem enxerga o quê).
 - `politicaRetry.js` — **as decisões de tempo da FASE 4** num lugar só (§130): `expirou()` (TTL de 2 h, `_parkedAte`, teto de 72 h), backoff, `expiraEm` por canal, e `destinoLease` — a regra "leitura retenta, escrita não" (§23) mora aqui.
 - `fluxoValidador.js` (+`.cli.js`) — **validador estático** do grafo do fluxo: pega beco sem saída (cliente perdido), porta não conectada, nó inalcançável, aresta órfã, loop sem espera (trava). `node src/services/fluxoValidador.cli.js examples/fluxo-exemplo.json`.
 - `motorLoop.js` — o loop do motor extraído como função pura (`executarLoop`). ⚠️ **Divergiu na FASE 1**: o laço real virou assíncrono na persistência (`await estados.set/delete` num `finally`, grafo congelado, `fim({manter})`). Este arquivo — e o `motorSimulador.js` que roda sobre ele — espelham o laço **pré-FASE-1**. "Espelho byte-a-byte" hoje vale só para a travessia (qual nó vem depois), não para o ciclo de vida da execução.
 - `motorSimulador.js` (+`.cli.js`) — **simulador** de conversa multi-turno sobre o `executarLoop` (passo a passo, detecta concluido/travado/perdido/aguardando). `node src/services/motorSimulador.cli.js <fluxo.json> [cenario.json]`.
 
-**Testes de integração** (`apps/api/tests/integracao/`, `npm run test:integracao`) — **109 testes**, provam o que só o banco/Redis provam: dedup por `external_id`, SSE cruzando instâncias, migrations replay-safe, os **critérios de aceite do motor persistente** (§14), os **14 critérios da FASE 4** (`fase4-filas.test.js`) e os **critérios da FASE 5** (`fase5-filas-atendimento.test.js`: claim atômico de duas assunções simultâneas, supervisor tomando conversa, Flow Execution sobrevivendo à troca de fila). É o único lugar onde o `motorFluxo.js` roda de verdade num teste (`DATABASE_URL` está posta, então ele importa). **Não há Docker nesta máquina**; o Postgres é nativo (`brew install postgresql@16`). Eles se **pulam** sem as envs, então `npm test` segue verde em qualquer lugar:
+**Testes de integração** (`apps/api/tests/integracao/`, `npm run test:integracao`) — **131 testes**, provam o que só o banco/Redis provam: dedup por `external_id`, SSE cruzando instâncias, migrations replay-safe, os **critérios de aceite do motor persistente** (§14), os **14 critérios da FASE 4** (`fase4-filas.test.js`) os **critérios da FASE 5** (`fase5-filas-atendimento.test.js`: claim atômico de duas assunções simultâneas, supervisor tomando conversa, Flow Execution sobrevivendo à troca de fila) e os da **FASE 6** (`fase6-cliente360.test.js`: PII mascarada no payload, SGP fora do ar não derruba o painel, histórico não vaza entre clientes sem telefone). É o único lugar onde o `motorFluxo.js` roda de verdade num teste (`DATABASE_URL` está posta, então ele importa). **Não há Docker nesta máquina**; o Postgres é nativo (`brew install postgresql@16`). Eles se **pulam** sem as envs, então `npm test` segue verde em qualquer lugar:
 ```bash
 DATABASE_URL_TEST='postgres://maxxi:maxxi_dev_pass@127.0.0.1:5432/maxxi_v2_test' \
 REDIS_URL_TEST='redis://127.0.0.1:6380' npm run test:integracao
@@ -131,6 +136,14 @@ Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/max
   - **`assumirProxima` usa `FOR UPDATE SKIP LOCKED`** (mesmo padrão do `filaDb.js`): dois cliques simultâneos entregam conversas **diferentes**.
   - **O nó `transferir_agente` grava o SLUG em `cfg.fila`** — por isso o slug não é editável depois de criado. Slug inexistente não engole a transferência: enfileira sem fila e loga. A porta `sem_agente` seguiu FORA de propósito (o horário por fila cobre o caso real, e porta estática nova acusaria erro em todo fluxo existente).
   - Inspeção: `SELECT f.nome, count(*) FROM conversas c JOIN filas f ON f.id=c.fila_id WHERE c.status='aguardando' GROUP BY 1`, ou `GET /api/atendimento/filas`.
+- **O painel do assinante (Cliente 360) NÃO tem integração própria** (FASE 6). Regras não-óbvias:
+  - **Mascarar é NÃO ENVIAR.** `mascarar.js` roda no servidor, na borda da API. Esconder no CSS ou num `slice()` do React deixa o CPF inteiro chegar ao navegador, ao DevTools e a qualquer print — a tela mente, o payload não. `mascararPII` **não desce em aninhado** de propósito: recursivo esconderia campos que ninguém revisou e daria falsa cobertura.
+  - **`agentes.permissoes` finalmente decide algo** (`services/permissoes.js`). Ele existe desde a 001 e **nada nunca leu** — o admin marcava caixas e todo mundo seguia podendo tudo. Permissões antigas valem **por omissão** (negar tudo trancaria todo agente já cadastrado no primeiro deploy); só `ver_dados_completos` é **negada por omissão**, porque é capacidade nova. Capacidade **desconhecida NEGA** — typo fecha a porta. Há **teste de contrato** entre `PERMISSOES_LABELS` (tela de Agentes) e `CAPACIDADES` (backend).
+  - **Toda ação passa por `executarTool`**, nunca por chamada direta ao SGP — é a regra do plano ("não criar integrações paralelas"). Cada ação declara uma **allowlist `campos`**: repassar `req.body` inteiro deixava o cliente mandar `contrato`/`cpfcnpj`, que a tool prefere ao contexto, e puxar dado de **outro assinante** pela conversa deste. O contrato pedido é validado por `contratosPermitidos(conversa)`.
+  - **O painel nunca derruba o atendimento**: cada bloco é isolado, falha vira `null` + aviso VISÍVEL na tela. Sem o aviso o agente lê "sem débito" quando a verdade é "não sei".
+  - **Diagnóstico é opt-in** (`?diagnostico=1`): são 2 chamadas ao SGP e o painel precisa abrir rápido.
+  - **Cartão sem ação sugerida é ruído** e empurra para baixo o que importava; há teste exigindo `titulo`+`severidade`+`acao`. Risco de churn exige **combinação** de sinais, e `suspenso` **não** é "sem contrato ativo".
+  - Sonda/inspeção: `GET /api/cliente360/capacidades` (o que ESTE agente pode).
 - **Helper chamado é helper importado** (`tests/imports-de-rota.test.js`). Em ESM, `auditar(...)` sem o `import` **não** quebra no boot nem no `node --check` — estoura `ReferenceError` no primeiro clique. Foi assim que `assumir`/`devolver-ia`/`encerrar` responderam 500 em produção desde a FASE 3 até a FASE 5 achar. A mesma guarda barra `import * as` sobre um repositório (o namespace não tem os métodos do objeto exportado).
 - **Catálogo de nós tem duas faces:** `apps/web/src/lib/nodeTypes.js` (visual, ~32 tipos) deve espelhar o `switch` de `processarNo` em `motorFluxo.js` (backend). Ao adicionar um nó, atualize os dois + o painel de propriedades **dentro de `FluxoEditor.jsx`** (`components/fluxo/PropsPanel.jsx` era arquivo morto e foi removido na FASE 2). Há **teste de contrato** entre `nodeTypes.js`, o `NOS` do validador e o `switch` do motor — ele falha quando a divergência cresce. **Cuidado com o nome dos campos:** o `PropsPanel` historicamente salvou campos com nomes que o motor não lia (`botao`/`secao`/`instrucao`/`tipo`), então a config era ignorada na execução. Hoje `fluxoHelpers.js` normaliza esses casos (lê o nome do editor com fallback pro antigo) — mas **a regra é manter os nomes iguais nas duas faces**; o helper é rede de segurança, não desculpa pra divergir.
 - **Envio por canal passa pelo registry `services/canais/`**, nunca por `if (canal === ...)`. Cada provedor é um adapter com **um método por tipo de mensagem** (`texto`, `botoes`, `lista`, `cta`, `imagem`, `audio`, `arquivo`); o dispatcher resolve por `conversas.canal`. Regras não-óbvias: **a degradação mora dentro do adapter** (o Telegram degrada `lista`→**botões** com ≤8 itens, não para texto); tipo não implementado usa o método **`padrao`**, que **só o Telegram tem** — a Evolution não tem de propósito, porque hoje ela descarta tipos desconhecidos (inclusive `localizacao`) em silêncio, e um fallback genérico mudaria isso. Os adapters recebem os transportes por **injeção** para serem testáveis sem rede.
@@ -200,13 +213,14 @@ que divergiu e os tetos assumidos.
 | **3** — Segurança e governança base | ✅ 2026-08-22 |
 | **4** — Inbox, Outbox e Jobs | ✅ 2026-08-22 |
 | **5** — Equipes, Filas e Human Handoff | ✅ 2026-08-22 |
-| 6–13 | abertas |
+| **6** — Cliente 360 | ✅ 2026-08-22 |
+| 7–13 | abertas |
 
 ## Estado do produto (2026-08-22)
 
 **Está EM PRODUÇÃO**, em VPS via Coolify: `https://gochat.netgo.net.br`. O SGP responde de verdade e a IA comercial roda com tool calling — pré-cadastro, `listar_planos_ativos` e `salvar_dado` exercitados em conversa real.
 
-### Plano de Evolução V1.0 — 6 de 13 fases entregues
+### Plano de Evolução V1.0 — 7 de 13 fases entregues
 
 | Fase | Estado |
 |---|---|
@@ -215,10 +229,11 @@ que divergiu e os tetos assumidos.
 | **2** — Registry Foundation | ✅ mergeada |
 | **3** — Segurança e governança base | ✅ mergeada |
 | **4** — Inbox, Outbox e Jobs | ✅ mergeada |
-| **5** — Equipes, Filas e Human Handoff | ✅ implementada (2026-08-22) |
-| 6–13 | ⬜ não começadas |
+| **5** — Equipes, Filas e Human Handoff | ✅ mergeada |
+| **6** — Cliente 360 | ✅ implementada (2026-08-22) |
+| 7–13 | ⬜ não começadas |
 
-O que mudou de estrutural: **conversa sobrevive a restart e deploy** (`flow_executions`, versão do fluxo congelada por conversa), **credencial não sai mais em texto plano** e há cripto em repouso oportunista, **`/health/ready` bloqueia até as migrations terminarem**, há **graceful shutdown**, **mensagem que entra é durável, envio é write-ahead e `aguardar_tempo` espera de verdade** (`inbox`/`outbox`/`jobs`), e agora **o atendimento humano tem filas de verdade** — SLA e horário por fila, capacidade por agente, "assumir próximo" atômico e transferência entre filas sem perder a Flow Execution. Suítes: **273 testes puros + 109 de integração** contra Postgres e Redis reais.
+O que mudou de estrutural: **conversa sobrevive a restart e deploy** (`flow_executions`, versão do fluxo congelada por conversa), **credencial não sai mais em texto plano** e há cripto em repouso oportunista, **`/health/ready` bloqueia até as migrations terminarem**, há **graceful shutdown**, **mensagem que entra é durável, envio é write-ahead e `aguardar_tempo` espera de verdade** (`inbox`/`outbox`/`jobs`), **o atendimento humano tem filas de verdade** — SLA e horário por fila, capacidade por agente, "assumir próximo" atômico e transferência entre filas sem perder a Flow Execution — e agora **a lateral do chat virou o Cliente 360**: ficha do assinante, Context Cards, diagnóstico por tool, com **PII mascarada no servidor** e permissões que finalmente decidem alguma coisa. Suítes: **322 testes puros + 131 de integração** contra Postgres e Redis reais.
 
 Detalhe por fase em [brain/work/tasks/](brain/work/tasks/); plano completo em [docs/ers/](docs/ers/).
 

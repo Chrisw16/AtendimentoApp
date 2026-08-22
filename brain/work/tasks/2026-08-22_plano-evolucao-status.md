@@ -6,7 +6,7 @@ last_updated: 2026-08-22
 status: active
 priority: p1
 knowledge_refs: ["systems/maxxi/overview"]
-related: ["[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
+related: ["[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 aliases: ["status do plano", "onde estamos", "roadmap V1.0", "progresso das fases"]
 tags: [work, task, plano-evolucao, status, roadmap]
 ---
@@ -19,9 +19,10 @@ detalhe; aqui fica só o quadro.
 
 ## Placar
 
-**6 de 13 fases entregues e EM PRODUÇÃO.** A FASE 5 foi confirmada no ar em
-2026-08-22 14:04 UTC — `GET /api/atendimento/filas` devolvendo 401 em 12 de 12
-requisições, e `/health/ready` em 200 (migrations até a 017 aplicadas).
+**7 de 13 fases entregues.** As 0–5 estão **em produção** (a FASE 5 confirmada
+no ar em 2026-08-22 14:04 UTC — `GET /api/atendimento/filas` em 401 nas 12 de
+12 requisições, e `/health/ready` em 200, provando as migrations até a 017).
+A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
 
 | Fase | Título | Estado | Página |
 |:---:|---|---|---|
@@ -31,7 +32,7 @@ requisições, e `/health/ready` em 200 (migrations até a 017 aplicadas).
 | 3 | Segurança e governança base | ✅ | [[FASE 3 — Segurança e governança base]] |
 | 4 | Inbox, Outbox e Jobs | ✅ | [[FASE 4 — Inbox, Outbox e Jobs]] |
 | 5 | Equipes, Filas e Human Handoff | ✅ | [[FASE 5 — Equipes, Filas e Human Handoff]] |
-| 6 | Cliente 360 | ⬜ | — |
+| 6 | Cliente 360 | ✅ | [[FASE 6 — Cliente 360]] |
 | 7 | Knowledge Hub | ⬜ | — |
 | 8 | Playbook Engine | ⬜ | — |
 | 9 | AI Runtime V1 | ⬜ | — |
@@ -40,7 +41,7 @@ requisições, e `/health/ready` em 200 (migrations até a 017 aplicadas).
 | 12 | Conversation Events + Analytics | ⬜ | — |
 | 13 | Observabilidade e hardening | ⬜ | — |
 
-Suítes ao fechar a FASE 5: **273 testes puros · 109 de integração**.
+Suítes ao fechar a FASE 6: **322 testes puros · 131 de integração**.
 Migrations: **16 arquivos, até a 017** (014 `flow_executions`, 015 `audit_log`,
 016 `inbox`/`outbox`/`jobs`, 017 `filas`/`agentes_filas`).
 
@@ -80,7 +81,10 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | FASE 5 | Capacidade checada **fora** de transação: dois cliques do mesmo agente estouram o teto em 1 | `SELECT ... FOR UPDATE` no agente, se doer |
 | FASE 5 | SSE não é filtrado por fila — o evento vai para todos | filtro por assinatura de fila no `sseManager` |
 | FASE 5 | Sem distribuição automática (round-robin/push): o agente **puxa** | roteamento ativo, se o volume exigir |
-| FASE 3 | Mascarar CPF/telefone na UI | **FASE 6** (Cliente 360 redesenha as telas) |
+| ~~FASE 3~~ | ~~Mascarar CPF/telefone na UI~~ | ✅ FASE 6 — e mais forte: mascarado **no servidor**, não na tela |
+| FASE 6 | Cliente multi-contrato: a ação age sempre no contrato principal | falta a UI de escolha (o backend já valida) |
+| FASE 6 | Sem endereço, tags e tempo de relacionamento | o `/api/ura/consultacliente/` não devolve; falta mapear endpoint |
+| FASE 6 | Timeline unificada é só local (sem pagamentos/troca de plano do ERP) | endpoint de histórico financeiro não mapeado |
 | FASE 3 | Access/refresh token — encurtar TTL hoje desloga todo mundo | sessão dedicada a auth |
 | FASE 3 | Cripto: chave mestra vive no env do **mesmo** container | protege contra dump de banco, não contra shell |
 
@@ -127,6 +131,26 @@ importar desde a FASE 3, então `assumir`, `devolver-ia` e `encerrar` devolviam
 500 — o handoff humano inteiro. Em ESM isso não aparece no boot nem no
 `node --check`. Ficou a guarda `tests/imports-de-rota.test.js`, verificada
 reintroduzindo o defeito.
+
+## FASE 6 — entregue (2026-08-22)
+
+Detalhe em [[FASE 6 — Cliente 360]]. **Nenhum endpoint novo do SGP foi
+escrito** — a regra do plano ("não criar integrações paralelas quando a
+operação já puder ser executada por Tool") foi seguida literalmente: o painel
+lê por `integrations.js` e toda ação passa por `executarTool`, com
+`actorType: human`.
+
+Fechou três dívidas: **CPF/telefone mascarados** (e no servidor, não na tela),
+**`agentes.permissoes` finalmente com leitor** — o campo existia desde a
+migration 001 e nada nunca leu, então o admin marcava caixas e todo mundo
+seguia podendo tudo — e **`agentes.capacidade` ganhou tela** (a FASE 5 criou o
+limite sem porta de entrada).
+
+A revisão adversarial pegou dois: um **IDOR nas ações** (o corpo da requisição
+ia inteiro para `executarTool`, que prefere `input.contrato` ao contexto — dava
+para puxar o boleto de outro assinante pela conversa deste) e um **vazamento de
+histórico** entre conversas sem telefone (`where({telefone: null})` casa com
+todas). Os dois viraram teste.
 
 ## See Also
 

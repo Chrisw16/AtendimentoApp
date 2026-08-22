@@ -31,6 +31,7 @@ import { sysconfigRouter }   from './routes/sysconfig.js';
 import { planosRouter }      from './routes/planos.js';
 import { chatTesteRouter }   from './routes/chatTeste.js';
 import { filasAtendimentoRouter } from './routes/filasAtendimento.js';
+import { cliente360Router } from './routes/cliente360.js';
 import { filasRouter }       from './routes/filas.js';
 import { errorHandler }      from './middlewares/errorHandler.js';
 
@@ -98,6 +99,7 @@ app.use('/api/sysconfig',   sysconfigRouter);
 app.use('/api/planos',      planosRouter);
 app.use('/api/filas',       filasRouter);   // FASE 4: inbox/outbox/jobs — inspeção e DLQ (§132)
 app.use('/api/atendimento', filasAtendimentoRouter); // FASE 5: filas de GENTE (não confundir com a de cima)
+app.use('/api/cliente360',  cliente360Router);  // FASE 6: painel do assinante
 
 // Frontend estático
 if (existsSync(frontendDist)) {
