@@ -422,3 +422,40 @@ Spec de Inbox/Outbox/Jobs escrita, revisada por **três agentes** (um decisor, u
 ### Documentação
 
 Criado [[FASE 4 — Inbox, Outbox e Jobs]] e publicado um painel de status do plano inteiro (13 fases, o que foi feito, a dívida assumida em cada uma, e o aviso de que nada disso está em produção).
+
+## [2026-08-22] SESSÃO | FASES 5 a 10 entregues, brain atualizado
+
+Sessão longa e autônoma: seis fases do Plano de Evolução V1.0 implementadas, testadas,
+mergeadas no `main` e deployadas (0–9 confirmadas em produção por sonda de rota).
+
+- **FASE 5** — filas de atendimento humano. "Equipe" e "fila" viraram a MESMA tabela.
+  Achou de brinde um **P0 em produção**: `routes/chat.js` chamava `auditar`/`ipDe` sem
+  importar desde a FASE 3, então assumir/devolver/encerrar respondiam 500 — o handoff
+  humano inteiro. Ficou a guarda `tests/imports-de-rota.test.js`.
+- **FASE 6** — Cliente 360. Fechou 3 dívidas: PII mascarada **no servidor**,
+  `agentes.permissoes` ganhou leitor (existia desde a 001 e nada nunca leu) e
+  `agentes.capacidade` ganhou tela. A revisão adversarial pegou um **IDOR** nas ações.
+- **FASE 7** — Knowledge Hub. **pgvector descartado** com a licença do próprio plano
+  (§54): a extensão não existe no Postgres do projeto e não há de onde tirar embedding.
+- **FASE 8** — Playbook Engine. A etapa é provada pela **tool executada**, não pelo relato
+  da IA — porque a Quality AI não pode auditar acreditando no que o modelo disse.
+- **FASE 9** — AI Runtime. Hierarquia de confiança, lista nominal do que não se inventa,
+  guardrails de campo, motivo de transferência como enum e handoff estruturado.
+- **FASE 10** — Copiloto. Decide responder/consultar/avançar **sem chamar o modelo**.
+
+Fora do plano, dois achados que mudaram o processo:
+
+- **O `seed` NUNCA rodou em produção** — o boot só aplica migrations. Filas, categorias,
+  playbooks e perfis foram entregues e não existiam no ar; as telas abriam vazias e nada
+  acusava. Corrigido pela migration 022 (`dadosIniciais.js`), que roda no deploy.
+- **Carga inicial de conhecimento** (migration 024): 15 categorias e 55 artigos fornecidos
+  pelo operador — 44 publicados, 11 esqueletos em rascunho. A carga expôs um defeito real
+  da busca (E entre todos os termos derrubava a pergunta inteira do cliente), corrigido
+  com fallback OU.
+
+**Brain atualizado nesta data:** `overview` reescrito (estava congelado em 30/06),
+`modelo-de-dados` (44 tabelas + o que cada fase acrescentou), `fila-e-sla` reescrito,
+`ia-tool-calling` estendido, blocos de atualização em `motor-fluxo`, `auth-e-seguranca`,
+`telas-e-navegacao`, `api-backend` e `catalogo-de-nos`. **Três páginas novas**:
+`knowledge-hub`, `playbook-engine`, `cliente-360-e-copiloto`. `_index` reconstruído com a
+seção do Plano de Evolução.

@@ -1,6 +1,8 @@
 # CLAUDE.md — Maxxi v2 / GoCHAT
 
-Guia operacional para trabalhar neste repositório. Documentação detalhada (memória institucional) fica no **brain** em [brain/](brain/) — comece por [brain/systems/maxxi/overview.md](brain/systems/maxxi/overview.md).
+Guia operacional para trabalhar neste repositório. Documentação detalhada (memória institucional) fica no **brain** em [brain/](brain/) — comece por [brain/systems/maxxi/overview.md](brain/systems/maxxi/overview.md) (atualizado 2026-08-22) e, para o estado do roadmap, por [brain/work/tasks/2026-08-22_plano-evolucao-status.md](brain/work/tasks/2026-08-22_plano-evolucao-status.md).
+
+Páginas de componente dos subsistemas novos: [knowledge-hub](brain/systems/maxxi/components/knowledge-hub.md), [playbook-engine](brain/systems/maxxi/components/playbook-engine.md), [cliente-360-e-copiloto](brain/systems/maxxi/components/cliente-360-e-copiloto.md), [fila-e-sla](brain/systems/maxxi/components/fila-e-sla.md).
 
 ## O que é
 

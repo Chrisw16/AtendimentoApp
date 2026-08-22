@@ -1,6 +1,6 @@
 # Brain Index — Maxxi v2
 
-Last rebuilt: 2026-08-21
+Last rebuilt: 2026-08-22
 
 > Índice do conhecimento sobre o Maxxi v2 / GoCHAT. Rode `/brain rebuild-index` após mudanças manuais.
 
@@ -16,11 +16,14 @@ Last rebuilt: 2026-08-21
 - **Integração SGP** (integrations.js, Evolution, precadastro) — camada de ERP de ISP + WhatsApp não-oficial — `systems/maxxi/components/integracoes-sgp.md`
 - **Canais e Webhooks** (Evolution/Meta/Telegram) — ingestão de mensagens — `systems/maxxi/components/canais-e-webhooks.md`
 - **Supervisora IA** (sentimento, SLA do agente, sugestões) — IA que assiste o agente humano — `systems/maxxi/components/supervisora-ia.md`
-- **Fila e SLA** (filaService, urgência, agente fantasma) — fila de espera e alertas — `systems/maxxi/components/fila-e-sla.md`
+- **Fila e SLA** (filaService, filas de atendimento, capacidade, assumir próximo) — filas de GENTE com SLA e horário próprios — `systems/maxxi/components/fila-e-sla.md`
+- **Knowledge Hub** (base de conhecimento, busca, lacunas, workflow editorial) — o que a IA consulta antes de responder; e por que não é embedding — `systems/maxxi/components/knowledge-hub.md`
+- **Playbook Engine** (procedimento oficial, etapas, aderência) — a etapa é provada pela TOOL, não pelo relato da IA — `systems/maxxi/components/playbook-engine.md`
+- **Cliente 360 e Copiloto** (painel do assinante, Context Cards, sugestão, handoff) — a lateral do chat e a próxima ação — `systems/maxxi/components/cliente-360-e-copiloto.md`
 - **Realtime SSE** (sseManager, broadcast) — entrega em tempo real (+ bug do Redis) — `systems/maxxi/components/realtime-sse.md`
 - **Auth e Segurança** (JWT, permissões, dívida) — autenticação e postura de segurança — `systems/maxxi/components/auth-e-seguranca.md`
-- **Modelo de Dados** (schema, migrations, 21 tabelas) — Postgres/Knex, single-tenant — `systems/maxxi/components/modelo-de-dados.md`
-- **Frontend Maxxi** (apps/web, React, Zustand, useChat) — painel e suas 21 páginas — `systems/maxxi/components/frontend.md`
+- **Modelo de Dados** (schema, migrations, 44 tabelas) — Postgres/Knex, single-tenant; o que cada fase acrescentou — `systems/maxxi/components/modelo-de-dados.md`
+- **Frontend Maxxi** (apps/web, React, Zustand, useChat) — painel e suas páginas — `systems/maxxi/components/frontend.md`
 - **Design System Maxxi** (tokens, tema light) — paleta navy+laranja, fontes — `systems/maxxi/components/design-system.md`
 - **API Backend Maxxi** (Express, rotas) — superfície REST (~62 endpoints) — `systems/maxxi/components/api-backend.md`
 - **Testes de Fluxo** (validador estático, simulador de conversa, motorLoop) — pega trava/limbo/cliente perdido sem subir nada — `systems/maxxi/components/testes-de-fluxo.md`
@@ -62,6 +65,22 @@ Last rebuilt: 2026-08-21
 - **Prompt Comercial (Netzinha)** (prompt comercial, vendas, slug comercial) — prompt-coração da IA vendedora (apresentação→coleta→pré-cadastro) — `systems/maxxi/prompts/comercial.md`
 
 ## Work
+
+### Plano de Evolução V1.0 (13 fases)
+- **Plano de Evolução V1.0 — status consolidado** (onde estamos, roadmap, dívida por fase) — **comece por aqui** — `work/tasks/2026-08-22_plano-evolucao-status.md`
+- **FASE 0 — Reconciliação e linha de base** — `work/tasks/2026-08-21_fase-0-baseline.md`
+- **FASE 1 — Fundação crítica / P0 (motor persistente)** — `work/tasks/2026-08-21_fase-1-motor-persistente.md`
+- **FASE 2 — Registry Foundation** — `work/tasks/2026-08-21_fase-2-registries.md`
+- **FASE 3 — Segurança e governança base** — `work/tasks/2026-08-22_fase-3-seguranca.md`
+- **FASE 4 — Inbox, Outbox e Jobs** — `work/tasks/2026-08-22_fase-4-inbox-outbox-jobs.md`
+- **FASE 5 — Equipes, Filas e Human Handoff** — `work/tasks/2026-08-22_fase-5-filas-equipes.md`
+- **FASE 6 — Cliente 360** — `work/tasks/2026-08-22_fase-6-cliente-360.md`
+- **FASE 7 — Knowledge Hub** — `work/tasks/2026-08-22_fase-7-knowledge-hub.md`
+- **FASE 8 — Playbook Engine** — `work/tasks/2026-08-22_fase-8-playbook-engine.md`
+- **FASE 9 — AI Runtime V1** — `work/tasks/2026-08-22_fase-9-ai-runtime.md`
+- **FASE 10 — Copiloto V1** — `work/tasks/2026-08-22_fase-10-copiloto.md`
+
+### Outros
 - **Achados de código (2026-06-30)** (bugs, dívida técnica, segurança) — levantamento do estudo estático — `work/bugs/2026-06-30_achados-codigo.md`
 - **Auditoria profunda (2026-06-30)** (auditoria pesada, mismatches editor↔motor) — 4 agentes + verificação; CONFIRMADO vs PLAUSÍVEL — `work/bugs/2026-06-30_auditoria-profunda.md`
 - **Auditoria SGP ↔ tools da IA (2026-07-02)** (chamadas de API dos nós, auditoria SGP) — 2ª via boleto corrigida; demais mismatches integração↔tool abertos — `work/bugs/2026-07-02_auditoria-sgp-tools.md`

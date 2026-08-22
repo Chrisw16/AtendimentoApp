@@ -2,7 +2,7 @@
 title: Catálogo de Nós
 type: component
 created: 2026-06-30
-last_updated: 2026-06-30
+last_updated: 2026-08-22
 status: active
 related: ["[[Motor de Fluxo]]", "[[IA com Tool Calling]]", "[[Integração SGP]]", "[[Frontend Maxxi]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 sources: ["2026-06-30_motor-fluxo-catalogo", "2026-06-30_estudo-codigo-maxxi"]
@@ -11,6 +11,19 @@ tags: [backend, fluxo, nós, referencia, chatbot]
 ---
 
 # Catálogo de Nós
+
+> ### ⚠️ Atualizado em 2026-08-22
+>
+> - `transferir_agente`: `cfg.fila` **deixou de ser inerte** — guarda o **slug** da fila
+>   (FASE 5) e define SLA e horário do atendimento. `cfg.motivo` segue documental.
+> - `ia_responde`: ganhou `cfg.playbook` (procedimento, FASE 8) e `cfg.perfil` (FASE 9).
+>   A config do nó **vence** a do perfil.
+> - `aguardar_resposta`: `timeout`/`max_tentativas` são portas **dinâmicas** — só existem
+>   quando configuradas, senão todo fluxo existente passaria a acusar porta não conectada.
+> - `aguardar_tempo` **para de verdade** desde a FASE 4.
+> - Há **teste de contrato** entre `nodeTypes.js`, o `NOS` do validador e o `switch` do
+>   motor: divergência quebra a suíte.
+
 
 Referência nó-a-nó do [[Motor de Fluxo]]. Cada nó é uma **etapa do fluxo de atendimento** (um "quadradinho" no editor). São ~30 tipos em 7 grupos. Para cada nó: o que faz, **portas** de saída (de onde saem as conexões), campos de **`config`** (editáveis no painel de propriedades) e o que lê/grava no **contexto** da conversa. O catálogo visual vive em `apps/web/src/lib/nodeTypes.js`; o comportamento, no `switch` de `processarNo` (`motorFluxo.js`). Os dois lados devem permanecer espelhados — ao adicionar/alterar um nó, mexer em ambos + `PropsPanel.jsx`.
 

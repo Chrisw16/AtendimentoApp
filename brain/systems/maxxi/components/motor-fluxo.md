@@ -2,7 +2,7 @@
 title: Motor de Fluxo
 type: component
 created: 2026-06-30
-last_updated: 2026-06-30
+last_updated: 2026-08-22
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Catálogo de Nós]]", "[[IA com Tool Calling]]", "[[Integração SGP]]", "[[Canais e Webhooks]]", "[[Frontend Maxxi]]", "[[Modelo de Dados]]"]
 sources: ["2026-06-30_motor-fluxo-catalogo", "2026-06-30_estudo-codigo-maxxi"]
@@ -11,6 +11,25 @@ tags: [backend, fluxo, motor, chatbot]
 ---
 
 # Motor de Fluxo
+
+> ### ⚠️ Atualizado em 2026-08-22 — o que esta página descreve mudou
+>
+> - **O estado NÃO está mais em memória.** Vive em `flow_executions` (migration 014), com
+>   o **grafo congelado dentro do blob** (fixa a versão e impede que ativar outro fluxo
+>   sequestre conversa em andamento) e **TTL de 2 h aplicado na leitura**. A gravação é
+>   **uma só, num `finally` no fim do turno** — ver [[FASE 1 — Fundação crítica / P0 (motor persistente)]].
+> - **O webhook não chama mais o motor.** Ele grava no `inbox` e responde; o worker roda o
+>   turno ([[FASE 4 — Inbox, Outbox e Jobs]]). O 200 do webhook **nunca** esperou o turno de IA.
+> - **`aguardar_tempo` para de verdade** (job `flow_resume`) e `aguardar_resposta` ganhou
+>   `timeout`/`max_tentativas`.
+> - **`transferir_agente` não apaga o estado**: grava `_retomarNo` e o "devolver para IA"
+>   retoma dali. Agora também grava `conversas.fila_id` a partir de `cfg.fila`
+>   ([[FASE 5 — Equipes, Filas e Human Handoff]]).
+> - **O `ia_responde` recebe muito mais no prompt**: procedimento oficial
+>   ([[Playbook Engine]]), base de conhecimento e os três blocos de runtime
+>   (hierarquia/anti-alucinação/guardrails) — ver [[IA com Tool Calling]].
+> - **Todo efeito colateral novo precisa do gate `if (!ctx.sandbox)`.**
+
 
 `apps/api/src/services/motorFluxo.js` (~1032 LOC) é o coração do produto: um **interpretador de grafo** que executa o fluxo (chatbot) desenhado no [[Frontend Maxxi|editor visual]]. O editor salva o fluxo como JSON na coluna `fluxos.dados`; o motor lê o fluxo ativo e executa nó a nó. É invocado pelos [[Canais e Webhooks|webhooks]] sempre que chega mensagem de cliente em conversa com `status = 'ia'`. A referência nó-a-nó está em [[Catálogo de Nós]].
 

@@ -2,7 +2,7 @@
 title: API Backend Maxxi
 type: component
 created: 2026-06-30
-last_updated: 2026-06-30
+last_updated: 2026-08-22
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Auth e Segurança]]", "[[Modelo de Dados]]", "[[Canais e Webhooks]]", "[[Fila e SLA]]", "[[Achados de código (2026-06-30)]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
@@ -11,6 +11,17 @@ tags: [backend, api, express, rotas]
 ---
 
 # API Backend Maxxi
+
+> ### ⚠️ Atualizado em 2026-08-22 — rotas novas
+>
+> `/api/filas` (inbox/outbox/jobs — **mensageria**, FASE 4) · `/api/atendimento`
+> (filas de **gente**, FASE 5) · `/api/cliente360` (FASE 6) · `/api/knowledge` (FASE 7) ·
+> `/api/playbooks` (FASE 8) · `/api/ia` (perfis, motivos, handoff — FASE 9) ·
+> `/api/copiloto` (FASE 10) · `/health/ready` (readiness, FASE 3).
+>
+> ⚠️ **`/api/filas` e `/api/atendimento/filas` são coisas diferentes** — a primeira é fila
+> de mensagem, a segunda é fila de pessoa.
+
 
 Express (ESM) com `server.js` como entrypoint. Sobe o servidor primeiro (o `/health` responde sempre), e roda migrations + monitores ([[Fila e SLA|SLA]], [[Supervisora IA|supervisora]]) em background no boot. Middlewares globais: `helmet`, `cors` (`CORS_ORIGIN`), `rate-limit` (200/min), `express.json` (10mb). `errorHandler` global (`asyncHandler`, `HttpError`). Sem zod — validação manual.
 

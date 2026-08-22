@@ -2,9 +2,9 @@
 title: Maxxi v2 / GoCHAT — Visão geral
 type: system
 created: 2026-06-30
-last_updated: 2026-06-30
+last_updated: 2026-08-22
 status: active
-related: ["[[Adotar o Maxxi v2 como base]]", "[[Motor de Fluxo]]", "[[IA com Tool Calling]]", "[[Integração SGP]]", "[[Canais e Webhooks]]", "[[Modelo de Dados]]", "[[Frontend Maxxi]]", "[[Design System Maxxi]]", "[[Supervisora IA]]", "[[Fila e SLA]]", "[[Realtime SSE]]", "[[Auth e Segurança]]"]
+related: ["[[Adotar o Maxxi v2 como base]]", "[[Plano de Evolução V1.0 — status consolidado]]", "[[Motor de Fluxo]]", "[[IA com Tool Calling]]", "[[Knowledge Hub]]", "[[Playbook Engine]]", "[[Cliente 360 e Copiloto]]", "[[Integração SGP]]", "[[Canais e Webhooks]]", "[[Modelo de Dados]]", "[[Frontend Maxxi]]", "[[Design System Maxxi]]", "[[Supervisora IA]]", "[[Fila e SLA]]", "[[Realtime SSE]]", "[[Auth e Segurança]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi", "2026-06-30_decisao-base-maxxi"]
 aliases: ["Maxxi v2 / GoCHAT — Visão geral", "Maxxi", "GoCHAT", "GoChat", "Maxxi v2", "AtendimentoApp"]
 tags: [produto, isp, atendimento, omnichannel]
@@ -14,7 +14,9 @@ tags: [produto, isp, atendimento, omnichannel]
 
 Sistema de atendimento omnichannel com IA para provedores de internet (ISP), reconstruído do zero com arquitetura limpa. Marca de produto: **GoCHAT**. Repositório: `github.com/Chrisw16/AtendimentoApp` (clonado em `netgo-chat-v2`, último commit `db6c997`). É a [[Adotar o Maxxi v2 como base|base escolhida do produto]] de atendimento para ISP, substituindo o Atendechat como base de evolução.
 
-O ciclo central: uma mensagem entra por um canal (WhatsApp via Evolution/Meta, Telegram), vira uma `conversa`, o [[Motor de Fluxo]] executa um fluxo visual de atendimento, a [[IA com Tool Calling|IA Claude]] resolve consultas no [[Integração SGP|SGP]] (boleto, conexão, chamado, planos, pré-cadastro) e, quando necessário, transfere para um agente humano com chat em tempo real ([[Realtime SSE|SSE]]).
+O ciclo central: uma mensagem entra por um canal (WhatsApp via Evolution/Meta, Telegram), é **persistida no `inbox`** antes de qualquer processamento, vira uma `conversa`, o [[Motor de Fluxo]] executa um fluxo visual de atendimento, a [[IA com Tool Calling|IA Claude]] resolve consultas no [[Integração SGP|SGP]] (boleto, conexão, chamado, planos, pré-cadastro) apoiada pelo [[Knowledge Hub]] e por um [[Playbook Engine|procedimento oficial]] e, quando necessário, transfere para um agente humano — com **handoff estruturado**, fila com SLA e o painel [[Cliente 360 e Copiloto]] ao lado do chat.
+
+> ⚠️ **Esta página descreve o sistema DEPOIS das FASES 0–10 do Plano de Evolução V1.0** (agosto/2026). O estado por fase, com as decisões e os tetos assumidos, está em [[Plano de Evolução V1.0 — status consolidado]].
 
 ## Arquitetura
 
@@ -24,40 +26,68 @@ Princípio arquitetural central: **as credenciais de integração (SGP, Evolutio
 
 ## Subsistemas
 
-- [[Motor de Fluxo]] — interpretador de grafo (`motorFluxo.js`, ~30 nós). O coração.
-- [[IA com Tool Calling]] — loop agêntico Claude + 15 tools SGP + composição de prompts.
-- [[Integração SGP]] — camada de ERP de ISP (URA + precadastro) + Evolution API.
-- [[Canais e Webhooks]] — ingestão de mensagens (Evolution, Meta, Telegram).
-- [[Supervisora IA]] — análise de sentimento, SLA do agente, sugestões de resposta.
-- [[Fila e SLA]] — priorização e alertas de fila.
+**Núcleo do atendimento**
+- [[Motor de Fluxo]] — interpretador de grafo (`motorFluxo.js`, ~32 nós). O coração. Estado **persistente** em `flow_executions` desde a FASE 1.
+- [[Canais e Webhooks]] — ingestão de mensagens (Evolution, Meta, Telegram). O webhook **só persiste**; quem processa é o worker.
+- [[Integração SGP]] — camada de ERP de ISP (URA + precadastro) + Evolution API. **Camada única**: nada mais fala HTTP com o SGP.
 - [[Realtime SSE]] — entrega em tempo real ao painel.
-- [[Auth e Segurança]] — JWT + bcrypt + permissões; e a dívida de segurança.
-- [[Modelo de Dados]] — 21 tabelas, single-tenant.
+
+**Inteligência**
+- [[IA com Tool Calling]] — loop agêntico Claude + tools SGP + composição de prompts + **perfis, hierarquia de confiança e guardrails** (FASE 9).
+- [[Knowledge Hub]] — base de conhecimento com workflow editorial, versionamento e busca full-text nativa (FASE 7).
+- [[Playbook Engine]] — procedimentos oficiais injetados no prompt, com a etapa **provada pela tool executada** (FASE 8).
+- [[Cliente 360 e Copiloto]] — o painel do atendente: ficha do assinante, Context Cards e sugestão de resposta (FASES 6 e 10).
+- [[Supervisora IA]] — sentimento e SLA do agente (pré-existente; a auditoria formal é a FASE 11).
+
+**Operação**
+- [[Fila e SLA]] — filas de atendimento humano com SLA e horário **por fila**, capacidade por agente e assunção atômica (FASE 5).
+- [[Auth e Segurança]] — JWT + bcrypt + **permissões que decidem** + PII mascarada no servidor + audit log.
+- [[Modelo de Dados]] — **44 tabelas** (+`_migrations`), single-tenant, 23 migrations.
 - [[Frontend Maxxi]] e [[Design System Maxxi]] — painel React e o tema visual.
 - [[API Backend Maxxi]] — superfície de rotas REST.
 
-## Estado do produto (auditoria estática 2026-06-30, não validado rodando)
+### Filas internas (FASE 4) — não confundir com a fila de gente
+`inbox` (entrada durável), `outbox` (envio write-ahead) e `jobs` (relógio). Mensagem que
+entra é durável, envio é write-ahead e `aguardar_tempo` espera de verdade. A fila de
+**pessoas** é outra coisa e mora em [[Fila e SLA]].
+
+## Estado do produto (2026-08-22)
+
+**Em produção** em VPS via Coolify: `https://gochat.netgo.net.br`. O SGP responde de
+verdade e a IA comercial roda com tool calling.
 
 | Área | Estado |
 |---|---|
-| Atendimento ponta-a-ponta | ~95% (Evolution/Telegram > Meta) |
-| Núcleo (auth, fila, transferência, CRUD) | sólido, single-tenant |
-| Frontend de atendimento | usável (Chat, Dashboard, Agentes, Fluxos+editor, Histórico) |
-| SGP + IA | prontos; faltam credenciais |
-| Periféricos (Financeiro, Cobertura, Ocorrências, OS) | parciais/UI-sem-rota |
-| Canais/Config | UI pronta, backend parcial |
-| Multi-tenant | inexistente (zero `company_id`) |
-| Segurança | dívida relevante — ver [[Auth e Segurança]] |
-| Testes | nenhum |
+| Atendimento ponta-a-ponta | funcional (Evolution/Telegram > Meta) |
+| Durabilidade | conversa sobrevive a restart e deploy; entrada e envio duráveis |
+| Fila humana | filas com SLA/horário próprios, capacidade, "assumir próximo" atômico |
+| Painel do atendente | Cliente 360 + Copiloto + handoff estruturado |
+| Conhecimento | base com workflow editorial; **55 artigos** carregados pelo operador |
+| Procedimentos | 2 playbooks (suporte e comercial), em rascunho |
+| Segurança | PII mascarada **no servidor**, permissões efetivas, cripto em repouso, audit log |
+| Multi-tenant | inexistente por decisão — **uma instância por provedor** |
+| Testes | **436 puros + 221 de integração** contra Postgres e Redis reais |
 
-## Caminho até vendável
+**10 de 13 fases** do Plano de Evolução V1.0 entregues. Detalhe e dívida assumida por
+fase em [[Plano de Evolução V1.0 — status consolidado]].
 
-Fases independentes (cada uma vira spec própria): (1) **validar** rodando ponta a ponta; (2) **endurecer segurança** (criptografar `sistema_kv`, `JWT_SECRET` por env, rate-limit de login); (3) **fechar canais & config** (endpoints stub, conectar Evolution); (4) **deploy-por-cliente** automatizado no Coolify; (5) completar periféricos. Achados que viram trabalho em [[Achados de código (2026-06-30)]].
+## O que ainda não existe
 
-## Open Questions
+- **FASES 11 a 13**: Quality AI (auditoria de atendimento), Conversation Events +
+  Analytics, e observabilidade/hardening.
+- **Parametrizar o acoplamento NetGo** (POP, `nas_id=53`, textos nos prompts) — é o que
+  falta para revender a instância.
+- **Volume real**: o sistema está no ar, mas o atendimento em produção segue perto de
+  zero — quase tudo foi validado por teste automatizado e sandbox, não por uso.
 
-- A análise profunda de sentimento ao encerrar (`analisarConversaEncerrada`) está conectada à rota de encerramento? Parece não ser chamada por `chat.js`. Validar rodando.
-- Repositório será tornado privado para versionar o brain junto. Confirmar e ajustar deploy do Coolify (deploy key/PAT).
+## Armadilhas que valem para qualquer sessão
+
+- **O `seed` NÃO roda no deploy** — só as migrations. Catálogo novo se semeia por
+  migration (ver 022/024), senão a tela abre vazia em produção e nada acusa.
+- **Pushar não é deployar**: o Coolify é intermitente. Sonde uma **rota que só existe no
+  código novo**, 6+ vezes, e exija unanimidade — durante o rollout convivem duas versões.
+- **`seed.js` completo num ambiente que já atende é perigoso**: insere fluxo legado com
+  `ativo: true` e o motor escolhe com `where({ativo:true}).first()` sem `ORDER BY`.
 
 ## See Also
 

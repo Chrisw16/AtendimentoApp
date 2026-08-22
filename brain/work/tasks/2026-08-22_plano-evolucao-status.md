@@ -6,7 +6,7 @@ last_updated: 2026-08-22
 status: active
 priority: p1
 knowledge_refs: ["systems/maxxi/overview"]
-related: ["[[FASE 10 — Copiloto V1]]", "[[FASE 9 — AI Runtime V1]]", "[[FASE 8 — Playbook Engine]]", "[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
+related: ["[[Knowledge Hub]]", "[[Playbook Engine]]", "[[Cliente 360 e Copiloto]]", "[[FASE 10 — Copiloto V1]]", "[[FASE 9 — AI Runtime V1]]", "[[FASE 8 — Playbook Engine]]", "[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 aliases: ["status do plano", "onde estamos", "roadmap V1.0", "progresso das fases"]
 tags: [work, task, plano-evolucao, status, roadmap]
 ---
@@ -216,6 +216,25 @@ o que a IA já consultou (para ele não repetir) e onde parou o procedimento.
 tela de cadastro — a API existia e o seed criava cinco, mas o seed **não roda no
 deploy**, então em produção a lista nascia vazia e sem porta de entrada. Agora
 há uma aba **Categorias** em Conhecimento.
+
+## Carga inicial da base de conhecimento (2026-08-22)
+
+Migration **024**: 15 categorias e **55 artigos** fornecidos pelo operador do provedor —
+44 publicados, **11 esqueletos em rascunho** ("preencher com as regras oficiais":
+fidelidade, cancelamento, instalação, visita técnica, manuais). Publicar um esqueleto
+faria a IA responder ao cliente com *"Existe fidelidade? Qual o período?"* como se fosse
+a política; há teste garantindo que a busca **nunca** devolve um.
+
+É a **única migration que insere texto editorial**, e só existe porque a autoria é do
+operador — conhecimento escrito por quem faz o código viraria "política da casa" que
+ninguém redigiu.
+
+**A carga expôs um defeito real da busca da FASE 7:** `websearch_to_tsquery` faz **E**
+entre todos os termos, e a IA passa a fala do cliente inteira. *"o cliente disse que achou
+caro"* virava `client & diss & car`, e "disse" — ausente de todo artigo — derrubava a
+busca com o artigo de objeção de preço bem ali. Só apareceu com conteúdo de verdade: os
+artigos sintéticos dos testes geravam consultas curtas que casavam. A busca passou a fazer
+**E primeiro e OU só quando o E volta vazio**.
 
 ## ⚠️ O `seed` nunca rodou em produção (achado em 2026-08-22)
 

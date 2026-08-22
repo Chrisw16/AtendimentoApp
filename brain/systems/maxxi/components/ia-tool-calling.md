@@ -63,6 +63,48 @@ Os prompts são **editáveis em runtime** (tabela `prompts_ia`, tela Prompts IA)
 
 Atenção: há **dois mecanismos de cache** — `promptService` (TTL 3 min) e `integrations.invalidateConfigCache`. Editar um prompt invalida só o de `integrations`, então o motor pode servir prompt desatualizado por até 3 min.
 
+## O que as FASES 7 a 9 acrescentaram
+
+O laço agêntico **não foi reescrito** — a regra da FASE 9 é "evoluir, não reescrever". O
+que entrou por cima:
+
+**Tools novas**
+- `buscar_conhecimento` (FASE 7) — consulta o [[Knowledge Hub]]. Está no `TOOLS_PADRAO`
+  porque o custo de NÃO consultar é a IA inventar procedimento. Quando não acha, a
+  resposta da tool instrui a IA a dizer que vai confirmar.
+- `concluir_etapa_playbook` (FASE 8) — marca etapa **conversacional** do
+  [[Playbook Engine|procedimento]]. **Some da lista quando não há playbook ativo**: tool
+  inútil compete com a tool certa.
+
+**Três blocos de prompt que nenhum nó desliga** (`iaRuntime.js`, FASE 9), injetados em
+TODA execução e posicionados **por último** — a posição de maior aderência num system
+prompt longo:
+
+1. **Hierarquia de confiança (§67)** — dado vivo de tool **vence** documento. Sem ela o
+   modelo responde "seu plano é 300 mega" a partir de um artigo antigo quando o ERP
+   acabou de dizer 500.
+2. **O que não se inventa (§68)** — lista **nominal**: preço, protocolo, PIX, cobertura,
+   prazo, sinal, manutenção, agendamento. "Não invente nada" é fácil de contornar;
+   "não invente prazo" não é.
+3. **Guardrails de campo (§75)** — não orientar o cliente a abrir ONU, mexer em fibra,
+   olhar a ponta de um conector, subir em poste ou tocar rede elétrica, **mesmo que ele
+   peça**. Não é conformidade de papel: quem olha uma fibra energizada perde visão.
+
+**Perfis de IA** (`ia_perfis`) juntam prompt + procedimento + tools + limites. A config do
+**nó vence a do perfil** — o nó é mais específico, e quem o configurou estava olhando
+aquele ramo.
+
+**Desfecho estruturado** (`ia_execucoes`): estourar turnos **não é "resolvido"**, é
+desistência — e o relatório precisa saber a diferença. O motivo de transferência é
+**enum** (`normalizarMotivo`), senão "cliente nervoso"/"está bravo"/"furioso" viram três
+motivos e nada soma.
+
+**LLM Gateway** (`llmGateway.js`) — ponto único de chamada ao modelo, com erro
+normalizado. **Não tem `embed`**, de propósito: a Anthropic não oferece e a busca é
+full-text. ⚠️ Ainda **não é o único caminho**: `motorFluxo` e `supervisoraIA` seguem em
+`getAnthropicClient` (migrar o laço seria reescrever). **Chamada NOVA nasce no gateway** —
+foi assim com o Copiloto.
+
 ## See Also
 
 - [[Motor de Fluxo]] · [[Integração SGP]] · [[SGP]]

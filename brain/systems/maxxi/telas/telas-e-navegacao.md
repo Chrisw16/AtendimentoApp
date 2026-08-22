@@ -2,7 +2,7 @@
 title: Telas e Navegação
 type: component
 created: 2026-06-30
-last_updated: 2026-06-30
+last_updated: 2026-08-22
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Frontend Maxxi]]", "[[Abas de Atendimento]]", "[[Abas de Configuração]]", "[[Abas de Operações e Infraestrutura]]", "[[Auth e Segurança]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
@@ -11,6 +11,20 @@ tags: [frontend, navegacao, telas, ux]
 ---
 
 # Telas e Navegação
+
+> ### ⚠️ Atualizado em 2026-08-22 — telas novas que esta página não lista
+>
+> | Tela | Rota | Quem vê | Fase |
+> |---|---|---|---|
+> | **Filas** | `/filas` | admin | 5 |
+> | **Conhecimento** (Artigos · Lacunas · Categorias) | `/knowledge` | todos | 7 |
+> | **Procedimentos** (playbooks) | `/playbooks` | admin | 8 |
+> | **Perfis de IA** | aba dentro de `/prompts-ia` | admin | 9 |
+>
+> E dentro do **Chat**: a lateral virou [[Cliente 360 e Copiloto|Cliente 360]] (Context
+> Cards, financeiro, diagnóstico, ações rápidas, handoff da IA) e o **Copiloto** aparece
+> acima do campo de mensagem quando a conversa está com um humano.
+
 
 Mapa das **abas** (telas/itens de menu) do painel do Maxxi e de como se conectam. O menu lateral ([[Frontend Maxxi|Sidebar]]) organiza as abas em 4 grupos; o roteamento é React Router 6 com guards. Detalhe de cada aba em [[Abas de Atendimento]], [[Abas de Configuração]] e [[Abas de Operações e Infraestrutura]].
 
