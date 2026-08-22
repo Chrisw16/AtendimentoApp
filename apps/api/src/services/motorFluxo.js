@@ -164,19 +164,24 @@ async function processarConversaInterno(conversa, mensagemCliente, opts = {}) {
  * @returns {Promise<boolean>} true se a automação foi de fato retomada.
  */
 export async function retomarAutomacao(conversa, opts = {}) {
-  const estado = await estadoStore.get(conversa.id);
-  if (!estado?._retomarNo) return false;
+  // Tudo dentro da fila: ler-mutar-gravar cru aqui deixaria dois cliques em
+  // "Devolver para IA" (ou dois agentes na mesma conversa) apontarem `noAtual`
+  // para o nó de retomada duas vezes e o cliente receberia a mensagem em dobro.
+  return filaConversa(conversa.id, async () => {
+    const estado = await estadoStore.get(conversa.id);
+    if (!estado?._retomarNo) return false;
 
-  estado.noAtual    = estado._retomarNo;
-  estado._retomarNo = null;
-  estado.aguardando = null;
-  await estadoStore.set(conversa.id, estado);
+    estado.noAtual    = estado._retomarNo;
+    estado._retomarNo = null;
+    estado.aguardando = null;
+    await estadoStore.set(conversa.id, estado);
 
-  // Mensagem sintética: numa devolução não há fala do cliente. O `ia_responde`
-  // reconhece `tipo: 'sistema'` e pausa em vez de chamar a IA com histórico
-  // vazio — ver a guarda lá.
-  await processarConversa(conversa, { texto: '', tipo: 'sistema' }, opts);
-  return true;
+    // Mensagem sintética: numa devolução não há fala do cliente. O `ia_responde`
+    // reconhece `tipo: 'sistema'` e pausa em vez de chamar a IA com histórico
+    // vazio — ver a guarda lá.
+    await processarConversaInterno(conversa, { texto: '', tipo: 'sistema' }, opts);
+    return true;
+  });
 }
 
 // ── DESPACHANTE ───────────────────────────────────────────────────
@@ -726,10 +731,24 @@ async function processarIAResponde(no, ctx) {
   });
 
   // Histórico
+  //
+  // Áudio e imagem sem legenda chegam SEM `texto` (ver `extrairConteudoEvolution`)
+  // — e nota de voz é o input mais comum em suporte de ISP. Filtrar por conteúdo
+  // vazio deixaria `messages: []` na primeira entrada do nó, a Anthropic recusa
+  // (`at least one message is required`) e o cliente recebe "ocorreu um erro" +
+  // transferência. Um marcador descreve o que chegou e deixa a IA responder.
+  const MARCADOR_MIDIA = {
+    audio: '[o cliente enviou um áudio]',
+    imagem: '[o cliente enviou uma imagem]',
+    video: '[o cliente enviou um vídeo]',
+    doc: '[o cliente enviou um documento]',
+  };
+  const falaCliente = ctx.mensagem.texto || MARCADOR_MIDIA[ctx.mensagem.tipo] || '';
+
   const histSessao = ctx.estado.contexto[histKey] || [];
   const messages   = [
     ...histSessao,
-    { role: 'user', content: ctx.mensagem.texto || '' },
+    { role: 'user', content: falaCliente },
   ].filter(m => m.content);
 
   // Carrega tools disponíveis

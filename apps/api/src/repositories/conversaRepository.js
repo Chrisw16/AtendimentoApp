@@ -49,10 +49,21 @@ export const conversaRepo = {
   // ── CRIAR ─────────────────────────────────────────────────────
   async criar(dados) {
     const db = getDb();
-    const [conv] = await db('conversas')
-      .insert({ ...dados, protocolo: await _gerarProtocolo(db) })
-      .returning('*');
-    return conv;
+    // O contador é atômico, então em operação normal não há colisão. O retry é
+    // rede de segurança para o contador nascer ATRÁS do que já está gravado
+    // (restore de backup, seed torto): cada tentativa AVANÇA o contador, então
+    // converge — diferente do `COUNT(*)+1` antigo, onde todos recontavam o mesmo.
+    for (let tentativa = 1; ; tentativa++) {
+      try {
+        const [conv] = await db('conversas')
+          .insert({ ...dados, protocolo: await _gerarProtocolo(db) })
+          .returning('*');
+        return conv;
+      } catch (err) {
+        const colisaoProtocolo = err?.code === '23505' && /protocolo/.test(err?.constraint || '');
+        if (!colisaoProtocolo || tentativa >= 20) throw err;
+      }
+    }
   },
 
   // ── OBTER OU CRIAR ────────────────────────────────────────────
@@ -143,8 +154,14 @@ export const conversaRepo = {
  * recebem N números distintos. Migration 014.
  */
 async function _gerarProtocolo(db) {
+  // O dia é o LOCAL, não `CURRENT_DATE`. Container em UTC + operação em BRT faria
+  // o protocolo virar o dia seguinte às 21h da noite — o cliente que abre chamado
+  // às 22h de 21/08 receberia `20260822-0001`. Produto é single-tenant para um
+  // provedor de Natal/RN (ver acoplamento NetGo no CLAUDE.md); se um dia virar
+  // multi-região, isto passa a ser config, não constante.
   const { rows } = await db.raw(`
-    INSERT INTO protocolo_seq (dia, n) VALUES (CURRENT_DATE, 1)
+    INSERT INTO protocolo_seq (dia, n)
+    VALUES ((now() AT TIME ZONE 'America/Sao_Paulo')::date, 1)
     ON CONFLICT (dia) DO UPDATE SET n = protocolo_seq.n + 1
     RETURNING n, to_char(dia, 'YYYYMMDD') AS prefixo
   `);

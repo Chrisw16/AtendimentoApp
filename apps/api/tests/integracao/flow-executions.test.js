@@ -81,6 +81,32 @@ describe('flow_executions — estado do motor no banco', { skip: motivoSkip() },
     await store.delete('share:abc');
   });
 
+  test('execução abandonada expira — cliente que some não retoma semanas depois', async () => {
+    // Enquanto o estado vivia em memória, o RESTART era a expiração de fato.
+    // Sem TTL, um "bom dia" três semanas depois seria lido como resposta ao menu
+    // de três semanas atrás.
+    const c = await criarConversa(db, { telefone: '5584900000008' });
+    await store.set(c.id, { noAtual: 'menu', contexto: { cpf: '111' }, historico: [], aguardando: 'menu' });
+
+    await db('flow_executions').where({ conversa_id: c.id })
+      .update({ atualizado_em: db.raw("now() - interval '3 hours'") });
+
+    assert.equal(await store.get(c.id), null, 'a execução abandonada foi retomada');
+
+    const { rows } = await db.raw('SELECT 1 FROM flow_executions WHERE conversa_id = ?', [c.id]);
+    assert.equal(rows.length, 0, 'a linha expirada não foi limpa na leitura');
+  });
+
+  test('execução recente NÃO expira', async () => {
+    const c = await criarConversa(db, { telefone: '5584900000009' });
+    await store.set(c.id, { noAtual: 'menu', contexto: {}, historico: [], aguardando: 'menu' });
+
+    await db('flow_executions').where({ conversa_id: c.id })
+      .update({ atualizado_em: db.raw("now() - interval '30 minutes'") });
+
+    assert.equal((await store.get(c.id))?.noAtual, 'menu', 'expirou cedo demais');
+  });
+
   test('apagar a conversa apaga a execução (ON DELETE CASCADE)', async () => {
     const c = await criarConversa(db, { telefone: '5584900000006' });
     await store.set(c.id, { noAtual: 'y', contexto: {}, historico: [], aguardando: null });
@@ -148,6 +174,25 @@ describe('uma conversa viva por (telefone, canal)', { skip: motivoSkip() }, () =
     );
     const protocolos = criadas.map(c => c.protocolo);
     assert.equal(new Set(protocolos).size, 8, `protocolos repetidos: ${protocolos.join(', ')}`);
+  });
+
+  test('o contador de protocolo nasce do MAIOR sufixo do dia, não do COUNT(*)', async () => {
+    // Se o seed usasse COUNT(*), uma conversa apagada faria o contador nascer
+    // ATRÁS do que já está gravado e o próximo `criar()` bateria na unique.
+    const prefixo = (await db.raw(
+      "SELECT to_char((now() AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYYMMDD') AS p"
+    )).rows[0].p;
+
+    await db('conversas').insert({ canal: 'whatsapp', telefone: '5584955555551', protocolo: `${prefixo}-0042` });
+    // O seed só roda quando a tabela é CRIADA (a migration é idempotente), então
+    // é a tabela que precisa sumir — apagar as linhas não exercita nada.
+    await db.schema.dropTableIfExists('protocolo_seq');
+    const { up } = await import('../../src/migrations/versions/014_flow_executions.js');
+    await up(db);
+
+    const nova = await conversaRepo.criar({ canal: 'whatsapp', telefone: '5584955555552' });
+    assert.equal(nova.protocolo, `${prefixo}-0043`,
+      `o contador nasceu atrás do que já existia (veio ${nova.protocolo}, esperado ${prefixo}-0043)`);
   });
 
   test('encerrar a conversa apaga a execução do fluxo', async () => {

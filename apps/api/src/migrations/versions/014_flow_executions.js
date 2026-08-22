@@ -83,11 +83,20 @@ export async function up(db) {
       t.date('dia').primary();
       t.integer('n').notNullable().defaultTo(0);
     });
-    // Semeia o dia de hoje com o que já existe, senão o primeiro protocolo do
-    // deploy repetiria um número já gravado.
+    // Semeia o dia de hoje com o MAIOR sufixo já gravado — não com `COUNT(*)`.
+    // Uma conversa apagada, uma criada sem protocolo, ou o skew entre a data
+    // local do Node (que gerava o prefixo) e o `CURRENT_DATE` do Postgres (que
+    // fazia a contagem) já bastam para o contador nascer ATRÁS do que existe.
+    // O primeiro `criar()` pós-deploy bateria na unique de `conversas.protocolo`
+    // e a primeira mensagem do cliente se perderia num 500.
+    const dia = `to_char((now() AT TIME ZONE 'America/Sao_Paulo')::date, 'YYYYMMDD')`;
     await db.raw(`
       INSERT INTO protocolo_seq (dia, n)
-      SELECT CURRENT_DATE, COUNT(*) FROM conversas WHERE DATE(criado_em) = CURRENT_DATE
+      SELECT (now() AT TIME ZONE 'America/Sao_Paulo')::date,
+             COALESCE(MAX(NULLIF(split_part(protocolo, '-', 2), '')::int), 0)
+      FROM conversas
+      WHERE protocolo LIKE ${dia} || '-%'
+        AND split_part(protocolo, '-', 2) ~ '^[0-9]+$'
       ON CONFLICT (dia) DO NOTHING
     `);
     console.log('  ✓ Tabela protocolo_seq criada e semeada com o dia corrente');
@@ -105,6 +114,8 @@ export async function down(db) {
   // ⚠️ Igual à 008: `conversaRepo.obterOuCriar` usa `onConflict` sobre esta
   // unique. Sem ela, o Postgres recusa o insert INTEIRO, não só o duplicado —
   // derrubar este índice em produção para a criação de conversas.
+  // ⚠️ `protocolo_seq` é igualmente fatal: sem ela `_gerarProtocolo` estoura
+  // 42P01 em TODA conversa nova. As duas linhas abaixo param a ingestão.
   await db.raw('DROP INDEX IF EXISTS conversas_viva_telefone_canal_unique');
   await db.schema.dropTableIfExists('protocolo_seq');
   await db.schema.dropTableIfExists('flow_executions');

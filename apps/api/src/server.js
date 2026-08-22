@@ -59,6 +59,16 @@ app.get('/health/ready', (_req, res) => {
   res.status(503).json({ status: 'not_ready', motivo: prontidao.motivo });
 });
 
+// O readiness gate o healthcheck do container, mas o Express começa a aceitar
+// `/api/*` no segundo zero — e as migrations rodam em background. Na estreia da
+// 014, `flow_executions` e `protocolo_seq` ainda não existem: um webhook nessa
+// janela pega `42P01` e a mensagem do cliente se perde num 500. 503 é a resposta
+// certa — o provedor reentrega.
+app.use('/api', (_req, res, next) => {
+  if (prontidao.pronto) return next();
+  res.status(503).json({ error: 'Serviço iniciando', motivo: prontidao.motivo });
+});
+
 // Rotas públicas
 app.use('/api/auth',       authRouter);
 app.use('/api/webhooks',   webhookRouter);
@@ -86,7 +96,12 @@ app.use('/api/planos',      planosRouter);
 if (existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api') && !req.path.startsWith('/health')) {
+    // O `else` importa: sem ele, `/api/rota-inexistente` e `/health/qualquer`
+    // não recebiam resposta NENHUMA e a requisição pendurava até o timeout do
+    // cliente. Foi assim que `/health/ready` pendurou na produção antiga.
+    if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
+      res.status(404).json({ error: 'Rota não encontrada' });
+    } else {
       res.sendFile(join(frontendDist, 'index.html'));
     }
   });
@@ -131,8 +146,11 @@ if (process.env.DATABASE_URL) {
     // supervisora em silêncio, com o app parecendo saudável.
     .finally(iniciarMonitores);
 } else {
+  // NÃO marca pronto: sem banco toda rota que chama `getDb()` estoura. Um
+  // container "saudável" servindo 500 em tudo é exatamente o que o readiness
+  // existe para evitar.
   console.warn('⚠️  DATABASE_URL não definida');
-  prontidao = { pronto: true, motivo: null };   // sem banco não há o que migrar
+  prontidao = { pronto: false, motivo: 'DATABASE_URL não definida' };
 }
 
 // ── SHUTDOWN GRACIOSO ───────────────────────────────────────────
