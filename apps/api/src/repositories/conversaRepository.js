@@ -126,10 +126,26 @@ export const conversaRepo = {
     // painel se curava sozinho no restart. Em tabela, a linha ficaria e o
     // cliente que voltasse a escrever retomaria no meio do fluxo antigo.
     await estadoStore.delete(id).catch(() => {});
-    return conversaRepo.atualizar(id, {
+    const conv = await conversaRepo.atualizar(id, {
       status:    'encerrada',
       agente_id: null,
     });
+
+    // FASE 11 (§89): auditoria pós-atendimento. Entra como JOB e não inline
+    // porque não pode segurar o encerramento — o agente clica "encerrar" e a
+    // tela responde na hora; a nota sai depois. O atraso de 1 min deixa a
+    // conversa assentar (mensagem em voo, último envio do outbox).
+    //
+    // Fica aqui, no único ponto por onde TODO encerramento passa (painel e nó
+    // `encerrar` do motor), em vez de nos dois chamadores.
+    if (conv) {
+      const { agendar } = await import('../services/jobs.js');
+      agendar({
+        tipo: 'quality_audit', conversaId: id, noId: 'quality',
+        executarEm: new Date(Date.now() + 60_000).toISOString(),
+      }).catch(err => console.error('[Quality] não agendou auditoria:', err.message));
+    }
+    return conv;
   },
 
   // ── ZERAR NÃO LIDAS ───────────────────────────────────────────

@@ -36,6 +36,7 @@ import { knowledgeRouter } from './routes/knowledge.js';
 import { playbooksRouter } from './routes/playbooks.js';
 import { iaRuntimeRouter } from './routes/iaRuntime.js';
 import { copilotoRouter } from './routes/copiloto.js';
+import { qualityRouter } from './routes/quality.js';
 import { filasRouter }       from './routes/filas.js';
 import { errorHandler }      from './middlewares/errorHandler.js';
 
@@ -108,6 +109,7 @@ app.use('/api/knowledge',   knowledgeRouter);   // FASE 7: base de conhecimento
 app.use('/api/playbooks',   playbooksRouter);   // FASE 8: procedimentos oficiais
 app.use('/api/ia',          iaRuntimeRouter);   // FASE 9: perfis, motivos e handoff
 app.use('/api/copiloto',    copilotoRouter);   // FASE 10: assistente do atendente
+app.use('/api/quality',     qualityRouter);    // FASE 11: auditoria de atendimento
 
 // Frontend estático
 if (existsSync(frontendDist)) {

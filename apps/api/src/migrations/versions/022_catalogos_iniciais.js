@@ -21,7 +21,7 @@ import { semearCatalogos } from '../../dadosIniciais.js';
 
 export async function up(db) {
   const n = await semearCatalogos(db);
-  console.log(`  ✓ Catálogos: ${n.filas} filas, ${n.categorias} categorias, ${n.playbooks} playbooks, ${n.perfis} perfis`);
+  console.log(`  ✓ Catálogos: ${n.filas} filas, ${n.categorias} categorias, ${n.playbooks} playbooks, ${n.perfis} perfis, ${n.scorecards} scorecards`);
 }
 
 export async function down() {

@@ -96,6 +96,74 @@ export const PERFIS_IA = [
 ];
 
 /**
+ * §92 e §94 — os dois scorecards que o plano nomeia. Nascem **inativos**:
+ * auditar custa uma chamada de IA por conversa encerrada, e ligar isso sozinho
+ * num deploy seria gastar dinheiro do provedor sem ele pedir.
+ */
+export const SCORECARDS = [
+  {
+    slug: 'suporte', nome: 'Supervisora Suporte', perfil: 'suporte', ativo: false,
+    descricao: 'Auditoria de atendimento técnico.',
+    criterios: [
+      { id: 'identificacao', nome: 'Identificação do cliente', peso: 2, critico: false,
+        descricao: 'O atendimento identificou o cliente e o contrato antes de opinar?',
+        instrucao: 'Nota alta quando houve identificação por ferramenta antes de qualquer conclusão. Nota baixa quando se respondeu sobre a conta sem saber de quem era.' },
+      { id: 'manutencao', nome: 'Checagem de manutenção', peso: 2, critico: false,
+        descricao: 'Verificou se havia manutenção afetando a região?',
+        instrucao: 'Se havia manutenção e o atendimento abriu chamado individual, nota baixa. Se não havia, avalie se ao menos checou.' },
+      { id: 'diagnostico', nome: 'Diagnóstico técnico', peso: 3, critico: false,
+        descricao: 'RADIUS, ONU e sinal foram consultados quando cabiam?',
+        instrucao: 'Baseie-se nas ferramentas EXECUTADAS, não no que foi dito ao cliente.' },
+      { id: 'reteste', nome: 'Reteste com o cliente', peso: 2, critico: false,
+        descricao: 'Confirmou com o cliente se voltou a funcionar?',
+        instrucao: 'Encerrar sem confirmar é o defeito mais comum do suporte.' },
+      { id: 'chamado', nome: 'Abertura correta de chamado', peso: 2, critico: false,
+        descricao: 'Abriu chamado quando precisava — e só quando precisava?',
+        instrucao: 'Chamado aberto sem diagnóstico e problema deixado sem chamado são erros opostos e igualmente graves.' },
+      { id: 'repeticao', nome: 'Não repetiu perguntas', peso: 1, critico: false,
+        descricao: 'Pediu dado que já tinha?',
+        instrucao: 'Pedir CPF de novo depois de identificar o cliente é falha de atendimento.' },
+      { id: 'clareza', nome: 'Clareza e tom', peso: 2, critico: false,
+        descricao: 'Foi claro, cordial e sem jargão desnecessário?',
+        instrucao: 'Avalie a linguagem, não o tamanho da resposta.' },
+      { id: 'seguranca', nome: 'Segurança', peso: 3, critico: true,
+        descricao: 'Orientou algo perigoso?',
+        instrucao: 'CRÍTICO. Orientar abrir ONU, mexer em fibra, olhar conector, subir em poste ou tocar rede elétrica é violação, mesmo que o cliente peça.' },
+    ],
+  },
+  {
+    slug: 'comercial', nome: 'Supervisora Comercial', perfil: 'comercial', ativo: false,
+    descricao: 'Auditoria de atendimento comercial.',
+    criterios: [
+      { id: 'necessidade', nome: 'Investigação da necessidade', peso: 3, critico: false,
+        descricao: 'Entendeu o perfil de uso antes de ofertar?',
+        instrucao: 'Ofertar plano sem entender a necessidade é o erro comercial mais caro.' },
+      { id: 'cobertura', nome: 'Consulta de cobertura', peso: 2, critico: false,
+        descricao: 'Verificou cobertura no endereço?',
+        instrucao: 'Conduzir para fechamento sem cobertura confirmada gera frustração e retrabalho.' },
+      { id: 'oferta', nome: 'Oferta adequada', peso: 3, critico: false,
+        descricao: 'O plano recomendado combina com a necessidade levantada?',
+        instrucao: 'Avalie a coerência entre o que o cliente disse precisar e o que foi ofertado.' },
+      { id: 'objecoes', nome: 'Tratamento de objeções', peso: 2, critico: false,
+        descricao: 'Tratou objeção sem inventar desconto?',
+        instrucao: 'Se não houve objeção, não avalie este critério.' },
+      { id: 'fechamento', nome: 'Pedido de fechamento', peso: 3, critico: false,
+        descricao: 'Propôs um próximo passo concreto?',
+        instrucao: 'Encerrar conversa com intenção de compra sem propor próximo passo é oportunidade perdida.' },
+      { id: 'precadastro', nome: 'Pré-cadastro', peso: 2, critico: false,
+        descricao: 'Quando havia decisão, o cadastro foi feito?',
+        instrucao: 'Baseie-se na ferramenta executada.' },
+      { id: 'tom', nome: 'Tom e clareza', peso: 1, critico: false,
+        descricao: 'Cordial, objetivo, sem pressionar demais?',
+        instrucao: 'Pressão excessiva conta contra.' },
+      { id: 'promessa', nome: 'Informação correta', peso: 3, critico: true,
+        descricao: 'Prometeu prazo, preço ou condição que não veio de fonte oficial?',
+        instrucao: 'CRÍTICO. Preço divergente da fonte oficial ou promessa de visita/prazo inexistente é violação.' },
+    ],
+  },
+];
+
+/**
  * Semeia os quatro catálogos. Idempotente e sem transação própria — o runner de
  * migrations já roda cada arquivo dentro de uma.
  *
@@ -105,7 +173,7 @@ export const PERFIS_IA = [
  * o boot — migration que falha pula os monitores de SLA e da supervisora.
  */
 export async function semearCatalogos(db) {
-  const conta = { filas: 0, categorias: 0, playbooks: 0, perfis: 0 };
+  const conta = { filas: 0, categorias: 0, playbooks: 0, perfis: 0, scorecards: 0 };
 
   if (await db.schema.hasTable('filas')) {
     for (const f of FILAS) await db('filas').insert(f).onConflict('slug').ignore();
@@ -129,6 +197,15 @@ export async function semearCatalogos(db) {
       })));
       conta.playbooks++;
     }
+  }
+
+  if (await db.schema.hasTable('quality_scorecards')) {
+    for (const sc of SCORECARDS) {
+      await db('quality_scorecards')
+        .insert({ ...sc, criterios: JSON.stringify(sc.criterios) })
+        .onConflict('slug').ignore();
+    }
+    conta.scorecards = SCORECARDS.length;
   }
 
   if (await db.schema.hasTable('ia_perfis')) {

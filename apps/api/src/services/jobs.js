@@ -45,6 +45,21 @@ export function cancelar(conversaId, noId, { db = getDb() } = {}) {
   return db('jobs').where({ chave: `${conversaId}:${noId}`, status: 'pendente' }).del();
 }
 
+/**
+ * Audita uma conversa encerrada. Devolve `false` — e NÃO lança — quando não há
+ * o que auditar: sem scorecard ativo, cada conversa encerrada viraria uma linha
+ * de falha na DLQ, e a DLQ deixaria de significar "algo deu errado".
+ */
+async function auditarConversa(conversaId, db) {
+  const { conversaRepo } = await import('../repositories/conversaRepository.js');
+  const conversa = await conversaRepo.porId(conversaId);
+  if (!conversa) return false;
+
+  const { auditar: auditarQualidade } = await import('./quality.js');
+  const r = await auditarQualidade(conversa, { origem: 'automatica' });
+  return !r.erro;
+}
+
 /** Executa os jobs vencidos. Chamado só pelo worker. */
 export async function processarVencidos({ db = getDb(), limite = 10, aoReivindicar } = {}) {
   const linhas = await reivindicar(db, 'jobs', {
@@ -60,6 +75,17 @@ export async function processarVencidos({ db = getDb(), limite = 10, aoReivindic
 async function executar(job, db) {
   try {
     const { conversaId, noId } = job.payload || {};
+
+    // FASE 11: auditoria pós-atendimento (§89). Entra como job pelo mesmo
+    // motivo dos timers — é trabalho que não pode segurar o encerramento da
+    // conversa e que precisa de retry se a IA estiver fora do ar.
+    if (job.tipo === 'quality_audit') {
+      const feito = await auditarConversa(conversaId, db);
+      await db('jobs').where({ id: job.id })
+        .update({ status: 'ok', reivindicado_em: null, ultimo_erro: feito ? null : 'no-op: sem scorecard ativo ou conversa vazia' });
+      return { id: job.id, tipo: job.tipo, auditou: feito };
+    }
+
     const { retomarTimer } = await import('./motorFluxo.js');
     // `retomarTimer` é no-op silencioso quando a espera já foi resolvida (o
     // cliente respondeu, o estado expirou, um humano assumiu a conversa).
