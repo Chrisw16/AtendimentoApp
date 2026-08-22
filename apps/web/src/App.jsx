@@ -19,6 +19,7 @@ const Fluxos      = lazy(() => import('./pages/Fluxos'));
 const FluxoEditor = lazy(() => import('./pages/FluxoEditor'));
 const Canais      = lazy(() => import('./pages/Canais'));
 const Filas       = lazy(() => import('./pages/Filas'));
+const Knowledge   = lazy(() => import('./pages/Knowledge'));
 const Clientes    = lazy(() => import('./pages/Clientes'));
 const Ocorrencias = lazy(() => import('./pages/Ocorrencias'));
 const OrdensServico = lazy(() => import('./pages/OrdensServico'));
@@ -95,6 +96,7 @@ function AppLayout() {
               <Route path="/fluxos/:id"   element={<AdminRoute><FluxoEditor /></AdminRoute>} />
               <Route path="/canais"       element={<AdminRoute><Canais /></AdminRoute>} />
               <Route path="/filas"        element={<AdminRoute><Filas /></AdminRoute>} />
+              <Route path="/knowledge"    element={<Knowledge />} />
               <Route path="/analytics"    element={<AdminRoute><Analytics /></AdminRoute>} />
               <Route path="/clientes"     element={<Clientes />} />
               <Route path="/ocorrencias"  element={<Ocorrencias />} />

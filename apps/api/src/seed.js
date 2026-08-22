@@ -115,6 +115,20 @@ async function seed() {
   }
   console.log('  ✓ Filas de atendimento inseridas');
 
+  // ── CATEGORIAS DE CONHECIMENTO (FASE 7) ───────────────────────
+  // Só a ESTRUTURA. Conteúdo não se semeia: artigo de exemplo vira informação
+  // errada que um agente cita como se fosse política da casa.
+  for (const c of [
+    { slug: 'suporte-tecnico', nome: 'Suporte técnico', ordem: 1, descricao: 'Procedimentos de diagnóstico e configuração.' },
+    { slug: 'financeiro',      nome: 'Financeiro',      ordem: 2, descricao: 'Boletos, prazos, negociação e cobrança.' },
+    { slug: 'comercial',       nome: 'Comercial',       ordem: 3, descricao: 'Planos, promoções e argumentação de venda.' },
+    { slug: 'politicas',       nome: 'Políticas',       ordem: 4, descricao: 'Regras da empresa, SLA e contratos.' },
+    { slug: 'equipamentos',    nome: 'Equipamentos',    ordem: 5, descricao: 'Manuais de ONU, roteadores e CPEs.' },
+  ]) {
+    await db('knowledge_categorias').insert(c).onConflict('slug').ignore();
+  }
+  console.log('  ✓ Categorias de conhecimento inseridas');
+
   // ── FLUXO PADRÃO ──────────────────────────────────────────────
   const fluxoExiste = await db('fluxos').where({ nome: 'Atendimento Padrão' }).first();
   if (!fluxoExiste) {

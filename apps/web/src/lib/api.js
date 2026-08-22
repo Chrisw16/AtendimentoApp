@@ -151,6 +151,22 @@ export const cliente360Api = {
   diagnostico: (convId)          => api.post(`/cliente360/${convId}/diagnostico`),
 };
 
+// ── ENDPOINTS — KNOWLEDGE HUB (FASE 7) ────────────────────────────
+export const knowledgeApi = {
+  list:       (params = {}) => api.get('/knowledge?' + new URLSearchParams(params)),
+  buscar:     (q, params = {}) => api.get('/knowledge/buscar?' + new URLSearchParams({ q, ...params })),
+  artigo:     (id)          => api.get(`/knowledge/${id}`),
+  criar:      (body)        => api.post('/knowledge', body),
+  atualizar:  (id, body)    => api.put(`/knowledge/${id}`, body),
+  status:     (id, status)  => api.post(`/knowledge/${id}/status`, { status }),
+  feedback:   (id, body)    => api.post(`/knowledge/${id}/feedback`, body),
+  remover:    (id)          => api.delete(`/knowledge/${id}`),
+  categorias: ()            => api.get('/knowledge/categorias'),
+  criarCategoria: (body)    => api.post('/knowledge/categorias', body),
+  gaps:       (params = {}) => api.get('/knowledge/gaps?' + new URLSearchParams(params)),
+  atualizarGap: (id, body)  => api.put(`/knowledge/gaps/${id}`, body),
+};
+
 // ── ENDPOINTS — AGENTES ───────────────────────────────────────────
 export const promptsApi = {
   list:      ()           => api.get('/prompts'),

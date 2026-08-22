@@ -162,6 +162,18 @@ export const IA_TOOLS = [
     },
   },
   {
+    name: 'buscar_conhecimento',
+    description: 'Consulta a base de conhecimento interna (procedimentos, FAQ, políticas, manuais, argumentação comercial) antes de responder o que NÃO é dado do cliente. Use para "como faço X", prazos, regras e condições. Se não voltar nada, diga que vai confirmar — NUNCA invente procedimento ou prazo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        pergunta: { type: 'string', description: 'A dúvida, com as palavras do cliente' },
+      },
+      required: ['pergunta'],
+    },
+    allowed_in_sandbox: true,
+  },
+  {
     name: 'salvar_dado',
     description: 'Salva dados que o cliente informou, como variáveis persistentes da conversa. Sempre que o cliente fornecer um dado (nome, cpf, data de nascimento, email, celular, logradouro, numero, bairro, cidade, cep, plano, vencimento, etc.), salve TODOS os dados novos desta mensagem numa ÚNICA chamada. NUNCA pergunte de novo um dado já salvo. Use nomes de campo curtos e sem acento (ex.: cidade, plano, data_nasc).',
     input_schema: {
@@ -228,6 +240,20 @@ export async function executarTool(name, input, ctx) {
   }
 
   switch (name) {
+    case 'buscar_conhecimento': {
+      // Lê a base publicada, registra QUAL artigo sustentou a resposta (§55) e,
+      // quando não acha nada, registra a lacuna (§56). O "não achei" é uma
+      // resposta útil: é ele que impede a IA de inventar procedimento.
+      const { consultarParaIA } = await import('./knowledge.js');
+      const { texto } = await consultarParaIA(input.pergunta || '', {
+        conversaId: ctx?.conversa?.id || null,
+        sandbox: !!ctx?.sandbox,
+      });
+      return texto
+        ? `Base de conhecimento:\n\n${texto}\n\n(Responda com base APENAS nisto; cite a orientação, não o número da fonte.)`
+        : 'Nada encontrado na base de conhecimento sobre isso. NÃO invente: diga que vai confirmar a informação e, se fizer sentido, ofereça transferir para um atendente.';
+    }
+
     case 'verificar_conexao': {
       const r = await verificarConexao(contrato).catch(e => ({ erro: e.message }));
       if (r?.erro) return `Não consegui verificar a conexão: ${r.erro}`;

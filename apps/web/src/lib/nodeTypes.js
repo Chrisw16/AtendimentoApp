@@ -311,6 +311,9 @@ export const PORTA_META = {
 // `listar_vencimentos` por default e o motor as deixava desligadas.
 // `tests/contrato-catalogos.test.js` trava os dois juntos.
 export const IA_TOOLS_LIST = [
+  // FASE 7 — a base de conhecimento. Vem primeiro na lista porque é a primeira
+  // coisa que a IA deve consultar ao responder o que NÃO é dado do cliente.
+  { id: 'buscar_conhecimento',   label: '📚 Buscar na base de conhecimento', cat: 'Conhecimento' },
   { id: 'verificar_conexao',     label: '📡 Verificar conexão',       cat: 'Diagnóstico' },
   { id: 'consultar_manutencao',  label: '🔧 Consultar manutenção',    cat: 'Diagnóstico' },
   { id: 'status_rede',           label: '🌐 Status da rede',          cat: 'Diagnóstico' },
