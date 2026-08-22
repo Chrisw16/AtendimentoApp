@@ -393,7 +393,10 @@ describe('FASE 4 — inbox, outbox e jobs', { skip: motivoSkip() }, () => {
       await turno(c, 'Maria', FLUXO_TIMEOUT);
 
       assert.deepEqual(enviados, ['Qual seu nome?', 'Prazer!']);
-      assert.equal(Number((await db('jobs').count('id as n').first()).n), 0, 'o job foi cancelado');
+      // Filtra por TIPO: desde a FASE 11, encerrar a conversa agenda também um
+      // `quality_audit`. A intenção do teste é o timer, não o total da tabela.
+      assert.equal(Number((await db('jobs').where({ tipo: 'wait_timeout' }).count('id as n').first()).n), 0,
+        'o job de timeout foi cancelado');
     });
 
     test('estourar `max_tentativas` sai pela porta própria, não pela `timeout`', async () => {

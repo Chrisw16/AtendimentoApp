@@ -189,6 +189,20 @@ export const copilotoApi = {
   metricas: (dias = 7)        => api.get(`/copiloto/metricas?dias=${dias}`),
 };
 
+// ── ENDPOINTS — QUALITY AI (FASE 11) ──────────────────────────────
+export const qualityApi = {
+  painel:      (dias = 30)      => api.get(`/quality/painel?dias=${dias}`),
+  scorecards:  ()               => api.get('/quality/scorecards'),
+  criarScorecard:   (body)      => api.post('/quality/scorecards', body),
+  salvarScorecard:  (id, body)  => api.put(`/quality/scorecards/${id}`, body),
+  removerScorecard: (id)        => api.delete(`/quality/scorecards/${id}`),
+  auditorias:  (params = {})    => api.get('/quality/auditorias?' + new URLSearchParams(params)),
+  auditoria:   (id)             => api.get(`/quality/auditorias/${id}`),
+  auditar:     (conversaId)     => api.post(`/quality/auditar/${conversaId}`),
+  revisar:     (id, body)       => api.post(`/quality/auditorias/${id}/revisao`, body),
+  coaching:    (agenteId, dias) => api.get(`/quality/coaching/${agenteId}?dias=${dias || 30}`),
+};
+
 // ── ENDPOINTS — AGENTES ───────────────────────────────────────────
 export const promptsApi = {
   list:      ()           => api.get('/prompts'),
