@@ -19,7 +19,9 @@ detalhe; aqui fica só o quadro.
 
 ## Placar
 
-**6 de 13 fases entregues.** As 5 primeiras mergeadas no `main`; a FASE 5 fechada em 2026-08-22.
+**6 de 13 fases entregues e EM PRODUÇÃO.** A FASE 5 foi confirmada no ar em
+2026-08-22 14:04 UTC — `GET /api/atendimento/filas` devolvendo 401 em 12 de 12
+requisições, e `/health/ready` em 200 (migrations até a 017 aplicadas).
 
 | Fase | Título | Estado | Página |
 |:---:|---|---|---|
@@ -48,6 +50,12 @@ O push da FASE 4 (04:17 UTC) **deployou** em ~9 min. Confirmado por sonda de
 rota: `GET /api/filas` → **401** (rota nascida na FASE 4) e `/health/ready` →
 **200**, que também prova as migrations até a **016** aplicadas em produção.
 As FASES 1 a 4 estão no ar.
+
+**Uma requisição só não confirma nada** (aprendido na FASE 5): durante o
+rollout a mesma URL devolveu `404 401 404` em três chamadas seguidas — duas
+versões atendendo ao mesmo tempo atrás do balanceador. Sonde 6+ vezes e só
+aceite se todas concordarem; um laço que para no primeiro status diferente do
+antigo dá falso positivo.
 
 **A sonda que esta doc recomendava estava errada.** O `last-modified` de
 `GET /` NÃO se moveu com esse deploy (seguiu em 03:31) — dá falso negativo, e

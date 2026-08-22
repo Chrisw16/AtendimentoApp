@@ -123,7 +123,13 @@ FluxoEditor, nodeTypes).
 ## Sonda de deploy desta fase
 
 `GET /api/atendimento/filas` — **404 = código antigo, 401 = FASE 5 no ar**.
-Ver a armadilha do `last-modified` no CLAUDE.md.
+✅ Confirmado em **2026-08-22 14:04 UTC**, 401 em 12 de 12 requisições.
+
+⚠️ **Uma requisição não basta.** No meio do rollout a mesma URL devolveu
+`404 401 404` em três chamadas seguidas: duas versões atendendo atrás do
+balanceador. Sonde 6+ vezes e exija unanimidade — e não use um laço que para no
+primeiro status diferente do antigo, porque ele casa com o container novo
+enquanto o velho segue servindo clientes.
 
 ## See Also
 
