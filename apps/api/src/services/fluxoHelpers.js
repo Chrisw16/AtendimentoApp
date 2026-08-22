@@ -64,6 +64,9 @@ export function camposLista(cfg = {}) {
  * tool desligada na execução. Travado por `tests/contrato-catalogos.test.js`.
  */
 export const TOOLS_PADRAO = [
+  // FASE 7: entra no padrão porque o custo de NÃO consultar a base é a IA
+  // inventar procedimento — que é o pior defeito possível num atendimento.
+  'buscar_conhecimento',
   'verificar_conexao', 'consultar_manutencao', 'status_rede',
   'consultar_onu_acs', 'reiniciar_onu_acs', 'consultar_radius',
   'criar_chamado', 'segunda_via_boleto',

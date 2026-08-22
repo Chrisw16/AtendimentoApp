@@ -4,7 +4,7 @@ import {
   MessageSquare, LayoutDashboard, Users, GitBranch,
   BarChart2, Clock, Star, Bell, Settings, Bot,
   ChevronLeft, Zap, Network, Map,
-  Building, ChevronDown, Wrench, Inbox,
+  Building, ChevronDown, Wrench, Inbox, BookOpen,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import styles from './Sidebar.module.css';
@@ -16,6 +16,7 @@ const NAV = [
       { to: '/chat',       icon: MessageSquare, label: 'Chat' },
       { to: '/historico',  icon: Clock,         label: 'Histórico' },
       { to: '/satisfacao', icon: Star,          label: 'Satisfação' },
+      { to: '/knowledge',  icon: BookOpen,      label: 'Conhecimento' },
     ],
   },
   {
