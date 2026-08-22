@@ -16,7 +16,7 @@ Sistema de atendimento omnichannel com IA para provedores de internet (ISP), rec
 
 O ciclo central: uma mensagem entra por um canal (WhatsApp via Evolution/Meta, Telegram), é **persistida no `inbox`** antes de qualquer processamento, vira uma `conversa`, o [[Motor de Fluxo]] executa um fluxo visual de atendimento, a [[IA com Tool Calling|IA Claude]] resolve consultas no [[Integração SGP|SGP]] (boleto, conexão, chamado, planos, pré-cadastro) apoiada pelo [[Knowledge Hub]] e por um [[Playbook Engine|procedimento oficial]] e, quando necessário, transfere para um agente humano — com **handoff estruturado**, fila com SLA e o painel [[Cliente 360 e Copiloto]] ao lado do chat.
 
-> ⚠️ **Esta página descreve o sistema DEPOIS das FASES 0–10 do Plano de Evolução V1.0** (agosto/2026). O estado por fase, com as decisões e os tetos assumidos, está em [[Plano de Evolução V1.0 — status consolidado]].
+> ⚠️ **Esta página descreve o sistema DEPOIS do Plano de Evolução V1.0 COMPLETO — as 13 fases** (agosto/2026). O estado por fase, com as decisões e os tetos assumidos, está em [[Plano de Evolução V1.0 — status consolidado]].
 
 ## Arquitetura
 
@@ -37,7 +37,7 @@ Princípio arquitetural central: **as credenciais de integração (SGP, Evolutio
 - [[Knowledge Hub]] — base de conhecimento com workflow editorial, versionamento e busca full-text nativa (FASE 7).
 - [[Playbook Engine]] — procedimentos oficiais injetados no prompt, com a etapa **provada pela tool executada** (FASE 8).
 - [[Cliente 360 e Copiloto]] — o painel do atendente: ficha do assinante, Context Cards e sugestão de resposta (FASES 6 e 10).
-- [[Supervisora IA]] — sentimento e SLA do agente (pré-existente; a auditoria formal é a FASE 11).
+- [[Supervisora IA]] — sentimento e SLA do agente. A **auditoria formal** (scorecard, violação crítica, coaching) é a FASE 11.
 
 **Operação**
 - [[Fila e SLA]] — filas de atendimento humano com SLA e horário **por fila**, capacidade por agente e assunção atômica (FASE 5).
@@ -45,6 +45,8 @@ Princípio arquitetural central: **as credenciais de integração (SGP, Evolutio
 - [[Modelo de Dados]] — **44 tabelas** (+`_migrations`), single-tenant, 23 migrations.
 - [[Frontend Maxxi]] e [[Design System Maxxi]] — painel React e o tema visual.
 - [[API Backend Maxxi]] — superfície de rotas REST.
+- **Analytics** — indicadores sobre duas views (`conversa_fatos`, `nps_unificado`); **não há event store**, e isso foi decisão (FASE 12).
+- **Observabilidade** — log estruturado com correlation ID que atravessa webhook → worker → motor → SGP, PII redigida no log, disjuntor no SGP, error tracking com deduplicação e a tela **Saúde do Sistema** (FASE 13). Backup em [[Backup e Restore]].
 
 ### Filas internas (FASE 4) — não confundir com a fila de gente
 `inbox` (entrada durável), `outbox` (envio write-ahead) e `jobs` (relógio). Mensagem que
@@ -63,18 +65,19 @@ verdade e a IA comercial roda com tool calling.
 | Fila humana | filas com SLA/horário próprios, capacidade, "assumir próximo" atômico |
 | Painel do atendente | Cliente 360 + Copiloto + handoff estruturado |
 | Conhecimento | base com workflow editorial; **55 artigos** carregados pelo operador |
+| Qualidade | auditoria pós-atendimento com evidência, revisão humana e coaching |
+| Indicadores | resolução aparente × efetiva, custo de IA, FCR, NPS unificado |
+| Operação | Saúde do Sistema, logs correlacionados, disjuntor no SGP |
 | Procedimentos | 2 playbooks (suporte e comercial), em rascunho |
 | Segurança | PII mascarada **no servidor**, permissões efetivas, cripto em repouso, audit log |
 | Multi-tenant | inexistente por decisão — **uma instância por provedor** |
-| Testes | **436 puros + 221 de integração** contra Postgres e Redis reais |
+| Testes | **472 puros + 267 de integração** contra Postgres e Redis reais, mais CI no GitHub Actions |
 
-**10 de 13 fases** do Plano de Evolução V1.0 entregues. Detalhe e dívida assumida por
-fase em [[Plano de Evolução V1.0 — status consolidado]].
+**✅ 13 de 13 fases** do Plano de Evolução V1.0 entregues (agosto/2026). Detalhe e
+dívida assumida por fase em [[Plano de Evolução V1.0 — status consolidado]].
 
 ## O que ainda não existe
 
-- **FASES 11 a 13**: Quality AI (auditoria de atendimento), Conversation Events +
-  Analytics, e observabilidade/hardening.
 - **Parametrizar o acoplamento NetGo** (POP, `nas_id=53`, textos nos prompts) — é o que
   falta para revender a instância.
 - **Volume real**: o sistema está no ar, mas o atendimento em produção segue perto de

@@ -8,6 +8,7 @@ Last rebuilt: 2026-08-22
 
 - **Maxxi v2 / GoCHAT — Visão geral** (também: Maxxi, GoCHAT, AtendimentoApp) — produto de atendimento omnichannel com IA para ISP; ponto de entrada — `systems/maxxi/overview.md`
 - **Runbooks Maxxi** (também: subir Maxxi, deploy, Coolify) — como subir em dev e fazer deploy; configurar a instância — `systems/maxxi/runbooks/subir-e-deploy.md`
+- **Backup e Restore** (backup, restore, pg_dump, drill) — procedimento + as duas armadilhas deste sistema (dump tem credencial e PII; KV_SECRET) — `systems/maxxi/runbooks/backup-e-restore.md`
 
 ### Componentes
 - **Motor de Fluxo** (motorFluxo, execução de fluxo) — interpretador de grafo do atendimento, estado em memória, padrão 2 fases — `systems/maxxi/components/motor-fluxo.md`
@@ -79,6 +80,9 @@ Last rebuilt: 2026-08-22
 - **FASE 8 — Playbook Engine** — `work/tasks/2026-08-22_fase-8-playbook-engine.md`
 - **FASE 9 — AI Runtime V1** — `work/tasks/2026-08-22_fase-9-ai-runtime.md`
 - **FASE 10 — Copiloto V1** — `work/tasks/2026-08-22_fase-10-copiloto.md`
+- **FASE 11 — Quality AI V1** — `work/tasks/2026-08-22_fase-11-quality-ai.md`
+- **FASE 12 — Conversation Events + Analytics** — `work/tasks/2026-08-22_fase-12-analytics.md`
+- **FASE 13 — Observabilidade e hardening** — `work/tasks/2026-08-22_fase-13-observabilidade.md`
 
 ### Outros
 - **Achados de código (2026-06-30)** (bugs, dívida técnica, segurança) — levantamento do estudo estático — `work/bugs/2026-06-30_achados-codigo.md`

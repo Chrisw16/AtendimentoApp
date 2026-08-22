@@ -459,3 +459,21 @@ Fora do plano, dois achados que mudaram o processo:
 `telas-e-navegacao`, `api-backend` e `catalogo-de-nos`. **Três páginas novas**:
 `knowledge-hub`, `playbook-engine`, `cliente-360-e-copiloto`. `_index` reconstruído com a
 seção do Plano de Evolução.
+
+## [2026-08-22] MARCO | Plano de Evolução V1.0 COMPLETO — 13 de 13 fases
+
+FASES 11, 12 e 13 fechadas na mesma sessão, com design das duas últimas revisado
+por agentes especialistas contra o plano antes de codar.
+
+- **FASE 11 — Quality AI**: audita o que foi FEITO (tools, procedimento,
+  desfecho, tempos), não o que foi dito. A IA propõe nota, a aritmética é nossa.
+  Violação crítica é TETO, não desconto.
+- **FASE 12 — Analytics**: **não existe event store** — 21 dos 24 eventos do
+  §100 já tinham casa tipada. Consertou um KPI que era **~100% por construção**
+  (a "resolução IA" contava `agente_id IS NULL`, e `encerrar` zera esse campo).
+- **FASE 13 — Observabilidade**: `console` substituído no boot (200 call sites
+  intactos), `inbox.id` como âncora de correlação, PII redigida no log, UM
+  disjuntor (SGP), error tracking com dedup, tela de Saúde e CI.
+
+Suítes finais: **472 puros · 267 de integração**. Brain atualizado: 3 páginas de
+fase novas, runbook de backup/restore, overview e `_index`.
