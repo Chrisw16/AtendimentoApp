@@ -6,7 +6,7 @@ last_updated: 2026-08-22
 status: active
 priority: p1
 knowledge_refs: ["systems/maxxi/overview"]
-related: ["[[FASE 8 — Playbook Engine]]", "[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
+related: ["[[FASE 9 — AI Runtime V1]]", "[[FASE 8 — Playbook Engine]]", "[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 aliases: ["status do plano", "onde estamos", "roadmap V1.0", "progresso das fases"]
 tags: [work, task, plano-evolucao, status, roadmap]
 ---
@@ -19,7 +19,7 @@ detalhe; aqui fica só o quadro.
 
 ## Placar
 
-**9 de 13 fases entregues.** As 0–5 estão **em produção** (a FASE 5 confirmada
+**10 de 13 fases entregues.** As 0–5 estão **em produção** (a FASE 5 confirmada
 no ar em 2026-08-22 14:04 UTC — `GET /api/atendimento/filas` em 401 nas 12 de
 12 requisições, e `/health/ready` em 200, provando as migrations até a 017).
 A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
@@ -35,13 +35,13 @@ A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
 | 6 | Cliente 360 | ✅ | [[FASE 6 — Cliente 360]] |
 | 7 | Knowledge Hub | ✅ | [[FASE 7 — Knowledge Hub]] |
 | 8 | Playbook Engine | ✅ | [[FASE 8 — Playbook Engine]] |
-| 9 | AI Runtime V1 | ⬜ | — |
+| 9 | AI Runtime V1 | ✅ | [[FASE 9 — AI Runtime V1]] |
 | 10 | Copilot V1 | ⬜ | — |
 | 11 | Quality AI V1 | ⬜ | — |
 | 12 | Conversation Events + Analytics | ⬜ | — |
 | 13 | Observabilidade e hardening | ⬜ | — |
 
-Suítes ao fechar a FASE 8: **362 testes puros · 176 de integração**.
+Suítes ao fechar a FASE 9: **388 testes puros · 190 de integração**.
 Migrations: **16 arquivos, até a 017** (014 `flow_executions`, 015 `audit_log`,
 016 `inbox`/`outbox`/`jobs`, 017 `filas`/`agentes_filas`).
 
@@ -84,6 +84,8 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | ~~FASE 3~~ | ~~Mascarar CPF/telefone na UI~~ | ✅ FASE 6 — e mais forte: mascarado **no servidor**, não na tela |
 | FASE 6 | Cliente multi-contrato: a ação age sempre no contrato principal | falta a UI de escolha (o backend já valida) |
 | FASE 6 | Sem endereço, tags e tempo de relacionamento | o `/api/ura/consultacliente/` não devolve; falta mapear endpoint |
+| FASE 9 | O LLM Gateway existe mas não é o único caminho (motor e supervisora seguem diretos) | chamada nova nasce nele; migrar o laço é reescrita |
+| FASE 9 | Multi-intenção (§72) não implementada — conflita com o Flow Engine hoje | quando o roteamento por intenção existir |
 | FASE 8 | Sem score de aderência ao playbook | é FASE 11 (Quality AI) — não se inventa métrica antes de quem a consome |
 | FASE 8 | Subplaybooks (§63) têm coluna, não têm UI nem execução aninhada | quando houver caso real |
 | FASE 8 | Gatilhos por intenção são guardados e não roteiam | escolher playbook por intenção é FASE 9 |
@@ -189,6 +191,29 @@ Os dois playbooks nomeados pelo plano (§60 "Sem conexão" e §62 "Venda
 residencial") entraram no seed, em rascunho: são estrutura definida pelo próprio
 documento, não fato sobre o provedor — ao contrário dos artigos de conhecimento,
 que não se semeiam.
+
+## FASE 9 — entregue (2026-08-22)
+
+Detalhe em [[FASE 9 — AI Runtime V1]]. A regra do plano ("evoluir, não
+reescrever") foi seguida à risca: a mecânica do laço agêntico não foi tocada.
+
+O que entrou e não existia: **três blocos de prompt que nenhum nó desliga** —
+hierarquia de confiança (dado vivo vence documento), lista **nominal** do que
+não se inventa, e guardrails de campo que proíbem orientar o cliente a abrir
+ONU, mexer em fibra ou subir em poste **mesmo que ele peça**.
+
+E o **motivo de transferência virou enum**: a IA escreve "cliente nervoso",
+"está bravo", "furioso" — três strings, o mesmo fato. `normalizarMotivo`
+colapsa, e o motivo vira **prioridade na fila da FASE 5**: quem chega escalado
+não espera atrás de quem quer 2ª via.
+
+De quebra, o **handoff** diz ao agente humano, em uma linha, quem é o cliente,
+o que a IA já consultou (para ele não repetir) e onde parou o procedimento.
+
+**Correção de percurso da FASE 7:** as categorias de conhecimento não tinham
+tela de cadastro — a API existia e o seed criava cinco, mas o seed **não roda no
+deploy**, então em produção a lista nascia vazia e sem porta de entrada. Agora
+há uma aba **Categorias** em Conhecimento.
 
 ## See Also
 

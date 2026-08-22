@@ -732,15 +732,30 @@ async function processarIAResponde(no, ctx) {
   // `aguardar_tempo → ia_responde` não é suportado; use `→ enviar_texto`.
   if (ctx.mensagem?.tipo === 'sistema' || ctx.mensagem?.tipo === 'timer') return aguardar();
 
-  const slug      = cfg.contexto || 'outros';
+  // FASE 9 (§66): o PERFIL traz prompt, tools, playbook e limites juntos; a
+  // config do nó tem precedência sobre ele, porque o nó é mais específico do
+  // que o perfil — quem configurou o nó estava olhando para aquele ramo.
+  const perfil = cfg.perfil ? await carregarPerfil(ctx.db, cfg.perfil) : null;
+
+  const slug      = cfg.contexto || perfil?.prompt_slug || 'outros';
   // Fonte única dos dois campos com alias — ver `camposIaResponde`.
-  const { instrucao, maxTurnos } = camposIaResponde(cfg);
+  const camposNo  = camposIaResponde(cfg);
+  const instrucao = camposNo.instrucao;
+  const maxTurnos = cfg.max_turnos ?? cfg.max_turns ?? perfil?.max_turnos ?? camposNo.maxTurnos;
+  // §74: o handoff precisa saber o que já foi executado — sem isso o agente
+  // humano repete as mesmas consultas que a IA acabou de fazer.
+  const toolsUsadas = [];
   const turnosKey = `_ia_turnos_${no.id}`;
   const histKey   = `_ia_hist_${no.id}`;
 
   // Controla turnos
   const turnosUsados = ctx.estado.contexto[turnosKey] || 0;
   if (turnosUsados >= maxTurnos) {
+    // §71: estourar o limite NÃO é resolução — é desistência, e o relatório
+    // precisa saber a diferença.
+    await registrarExecucao(ctx, {
+      noId: no.id, perfil, desfecho: 'max_turnos', motivo: 'max_turns', turnos: turnosUsados, tools: [],
+    });
     ctx.estado.contexto[turnosKey] = 0;
     ctx.estado.contexto[histKey]   = [];
     return avancar('max_turnos');
@@ -764,12 +779,15 @@ async function processarIAResponde(no, ctx) {
   // cumpridas marcadas. Injetar só na primeira passagem faria a IA esquecer o
   // roteiro no segundo turno, que é exatamente quando ela começa a improvisar.
   const { prepararParaIA } = await import('./playbook.js');
-  const pb = cfg.playbook
-    ? await prepararParaIA(cfg.playbook, { conversaId: ctx.conversa.id, sandbox: ctx.sandbox }).catch(err => {
+  const slugPlaybook = cfg.playbook || perfil?.playbook_slug || null;
+  const pb = slugPlaybook
+    ? await prepararParaIA(slugPlaybook, { conversaId: ctx.conversa.id, sandbox: ctx.sandbox }).catch(err => {
         console.error('[Playbook] falhou, seguindo sem procedimento:', err.message);
         return null;
       })
     : null;
+
+  const { blocosRuntime } = await import('./iaRuntime.js');
 
   const system = montarSystemPrompt({
     systemBase,
@@ -777,6 +795,10 @@ async function processarIAResponde(no, ctx) {
     ctxCliente,
     ficha,
     playbook: pb?.bloco || '',
+    // §67/§68/§75 — hierarquia de confiança, o que não se inventa e os
+    // guardrails de campo. Entram em TODA execução: são regra de casa, não
+    // configuração de nó, e um nó esquecido não pode virar orientação perigosa.
+    runtime: blocosRuntime(),
     regrasTools: `## REGRAS CRÍTICAS DE FERRAMENTAS
 - Você tem acesso a ferramentas reais (tool_use). Use-as diretamente — NUNCA escreva o nome delas no texto.
 - ERRADO: "Deixa eu verificar... verificar_conexao"
@@ -814,7 +836,7 @@ async function processarIAResponde(no, ctx) {
   // Lista padrão (suporte/atendimento). Tools sensíveis como `precadastrar_cliente`
   // ficam fora do default — devem ser ativadas explicitamente em cfg.tools_ativas
   // (ex.: no nó IA Responde do fluxo comercial).
-  const toolsAtivas = cfg.tools_ativas || TOOLS_PADRAO;
+  const toolsAtivas = cfg.tools_ativas || (perfil?.tools?.length ? perfil.tools : TOOLS_PADRAO);
   // salvar_dado sempre disponível — memória não pode ser desligada por config de nó.
   // Só os campos que a API da Anthropic aceita — os metadados de risco da FASE 2
   // (`is_write`, `allowed_in_sandbox`) são nossos e um campo desconhecido na
@@ -834,6 +856,8 @@ async function processarIAResponde(no, ctx) {
     let faladoNoTurno = '';   // tudo que a IA falou neste turno (p/ histórico coerente)
     let transferiu = false;
     let resolveu = false;
+    // §73: o motivo cru que a IA deu; a classificação acontece num lugar só.
+    let motivoTransferencia = null;
 
     // ── Loop agentico: IA pode chamar múltiplas tools antes de responder ──
     let loopMessages = [...messages];
@@ -914,6 +938,7 @@ async function processarIAResponde(no, ctx) {
           // Sem `tu.input`: consultar_cliente/precadastrar_cliente carregam CPF
           // e ficha completa do assinante.
           console.log(`[IA] Executando tool: ${tu.name} (${Object.keys(tu.input || {}).join(',') || 'sem args'})`);
+          toolsUsadas.push(tu.name);
           const result = await executarTool(tu.name, tu.input || {}, {
             cliente: ctx.estado.contexto.cliente || {},
             conversa: ctx.conversa,
@@ -930,6 +955,10 @@ async function processarIAResponde(no, ctx) {
           // Detecta ações especiais
           if (typeof result === 'string' && result.startsWith('__TRANSFERIR__')) {
             transferiu = true;
+            // O motivo vem em português livre da IA e é guardado cru para o
+            // `registrarExecucao` classificar (§73) — classificar aqui
+            // espalharia a regra por dois lugares.
+            motivoTransferencia = tu.input?.motivo || result.replace('__TRANSFERIR__:', '').trim();
             texto = result.replace('__TRANSFERIR__:', '').trim();
           } else if (typeof result === 'string' && result.startsWith('__ENCERRAR__')) {
             resolveu = true;
@@ -969,11 +998,19 @@ async function processarIAResponde(no, ctx) {
     ].slice(-50);
 
     if (transferiu) {
+      await registrarHandoff(ctx, {
+        no, perfil, pb, toolsUsadas, motivo: motivoTransferencia,
+        turnos: turnosUsados + 1, historico: ctx.estado.contexto[histKey],
+      });
       ctx.estado.contexto[turnosKey] = 0;
       ctx.estado.contexto[histKey]   = [];
       return avancar('transferir');
     }
     if (resolveu) {
+      await registrarExecucao(ctx, {
+        noId: no.id, perfil, desfecho: 'resolvido', motivo: null,
+        turnos: turnosUsados + 1, tools: toolsUsadas,
+      });
       ctx.estado.contexto[turnosKey] = 0;
       ctx.estado.contexto[histKey]   = [];
       return avancar('resolvido');
@@ -982,11 +1019,19 @@ async function processarIAResponde(no, ctx) {
     // Heurística de roteamento pelo texto (fallback)
     const lwr = texto.toLowerCase();
     if (lwr.includes('transferir') || lwr.includes('atendente humano')) {
+      await registrarHandoff(ctx, {
+        no, perfil, pb, toolsUsadas, motivo: texto,
+        turnos: turnosUsados + 1, historico: ctx.estado.contexto[histKey],
+      });
       ctx.estado.contexto[turnosKey] = 0;
       ctx.estado.contexto[histKey]   = [];
       return avancar('transferir');
     }
     if (lwr.includes('mais alguma coisa') || lwr.includes('foi um prazer') || lwr.includes('até mais')) {
+      await registrarExecucao(ctx, {
+        noId: no.id, perfil, desfecho: 'resolvido', motivo: null,
+        turnos: turnosUsados + 1, tools: toolsUsadas,
+      });
       ctx.estado.contexto[turnosKey] = 0;
       ctx.estado.contexto[histKey]   = [];
       return avancar('resolvido');
@@ -994,6 +1039,9 @@ async function processarIAResponde(no, ctx) {
 
   } catch (err) {
     console.error(`[Motor] ia_responde (${slug}):`, err.message);
+    await registrarExecucao(ctx, {
+      noId: no.id, perfil, desfecho: 'erro', motivo: 'tool_failure', turnos: turnosUsados, tools: toolsUsadas,
+    });
     ctx.respostas.push({ tipo: 'texto', texto: 'Desculpe, ocorreu um erro. Tente novamente em instantes.' });
     return avancar('transferir');
   }
@@ -1341,6 +1389,79 @@ async function verificarHorario(db, fila = null) {
   if (fila?.horario != null) return { dentro: dentroDoHorario(fila.horario) };
   const kv = await db('sistema_kv').where({ chave: 'horario' }).first().catch(() => null);
   return { dentro: dentroDoHorario(kv?.valor) };
+}
+
+/** Perfil de IA (§66). Só os ATIVOS — perfil desligado não deve orientar nada. */
+async function carregarPerfil(db, slug) {
+  const p = await db('ia_perfis').where({ slug, ativo: true }).first().catch(() => null);
+  if (!p) console.warn(`[Motor] perfil de IA "${slug}" não existe ou está inativo — seguindo com a config do nó`);
+  return p || null;
+}
+
+/**
+ * §71 — registra COMO a execução terminou, e não só por qual porta saiu.
+ *
+ * Nunca lança: telemetria que derruba atendimento é pior que telemetria
+ * ausente. E não roda no sandbox — "Testar fluxo" encheria o relatório da
+ * FASE 12 com atendimentos que nunca existiram.
+ */
+async function registrarExecucao(ctx, { noId, perfil, desfecho, motivo, turnos, tools, handoff }) {
+  if (ctx.sandbox || !ehUuid(ctx.conversa.id)) return;
+  try {
+    await ctx.db('ia_execucoes').insert({
+      conversa_id: ctx.conversa.id,
+      no_id: noId,
+      perfil_slug: perfil?.slug || null,
+      goal: perfil?.goal || null,
+      desfecho,
+      motivo: motivo || null,
+      turnos: turnos || 0,
+      tools_usadas: JSON.stringify([...new Set(tools || [])]),
+      handoff: handoff ? JSON.stringify(handoff) : null,
+    });
+  } catch (err) {
+    console.error('[Motor] registrarExecucao:', err.message);
+  }
+}
+
+/**
+ * §74 — monta o pacote de handoff, grava a execução e sobe a prioridade da fila.
+ *
+ * A prioridade vem do MOTIVO: cliente frustrado e caso sensível entram como 2,
+ * que é exatamente o que `calcularUrgencia` da FASE 5 já lê como crítico. Sem
+ * isto, quem chega escalado espera na mesma fila de quem quer 2ª via.
+ */
+async function registrarHandoff(ctx, { no, perfil, pb, toolsUsadas, motivo, turnos, historico }) {
+  const { montarHandoff, normalizarMotivo, prioridadeDoMotivo, contextoEstruturado } = await import('./iaRuntime.js');
+
+  const feitas = Array.isArray(pb?.exec?.etapas_feitas) ? pb.exec.etapas_feitas.length : 0;
+  const handoff = montarHandoff({
+    motivo,
+    cliente: ctx.estado.contexto.cliente || {},
+    goal: perfil?.goal || null,
+    tools: toolsUsadas,
+    playbook: pb?.playbook ? { nome: pb.playbook.nome, slug: pb.playbook.slug, feitas, total: pb.etapas.length } : null,
+    contexto: contextoEstruturado(ctx.estado, {
+      goal: perfil?.goal,
+      playbook: pb?.playbook?.slug,
+      playbookEstado: pb ? `${feitas}/${pb.etapas.length}` : null,
+    }),
+    ultimasMensagens: (historico || []).map(m => ({ role: m.role, texto: String(m.content || '').slice(0, 300) })),
+  });
+
+  await registrarExecucao(ctx, {
+    noId: no.id, perfil, desfecho: 'transferido',
+    motivo: normalizarMotivo(motivo), turnos, tools: toolsUsadas, handoff,
+  });
+
+  // O handoff também vira prioridade na fila humana — é o elo com a FASE 5.
+  if (!ctx.sandbox) {
+    const prio = prioridadeDoMotivo(motivo);
+    if (prio > 0) {
+      await ctx.db('conversas').where({ id: ctx.conversa.id })
+        .update({ prioridade: prio }).catch(() => {});
+    }
+  }
 }
 
 /** `cfg.fila` guarda o SLUG da fila (é o que a tela grava); aceita id por via das dúvidas. */

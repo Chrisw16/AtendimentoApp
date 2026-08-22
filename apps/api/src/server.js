@@ -34,6 +34,7 @@ import { filasAtendimentoRouter } from './routes/filasAtendimento.js';
 import { cliente360Router } from './routes/cliente360.js';
 import { knowledgeRouter } from './routes/knowledge.js';
 import { playbooksRouter } from './routes/playbooks.js';
+import { iaRuntimeRouter } from './routes/iaRuntime.js';
 import { filasRouter }       from './routes/filas.js';
 import { errorHandler }      from './middlewares/errorHandler.js';
 
@@ -104,6 +105,7 @@ app.use('/api/atendimento', filasAtendimentoRouter); // FASE 5: filas de GENTE (
 app.use('/api/cliente360',  cliente360Router);  // FASE 6: painel do assinante
 app.use('/api/knowledge',   knowledgeRouter);   // FASE 7: base de conhecimento
 app.use('/api/playbooks',   playbooksRouter);   // FASE 8: procedimentos oficiais
+app.use('/api/ia',          iaRuntimeRouter);   // FASE 9: perfis, motivos e handoff
 
 // Frontend estático
 if (existsSync(frontendDist)) {

@@ -322,6 +322,116 @@ const TEST_TOOLS = [
 const CATEGORY_ORDER = ['SGP — Clientes','SGP — Diagnóstico','SGP — Financeiro','SGP — Atendimento','SGP — Comercial'];
 
 // ── COMPONENTE PRINCIPAL ──────────────────────────────────────────
+/**
+ * Perfis de IA (FASE 9, §66).
+ *
+ * Um perfil junta prompt, playbook, tools e limites — o que antes era
+ * reconfigurado nó a nó no editor de fluxo. O nó continua podendo sobrescrever
+ * qualquer campo: ele é mais específico que o perfil.
+ */
+function PerfisIA() {
+  const qc    = useQueryClient();
+  const toast = useStore(s => s.toast);
+  const [novo, setNovo] = useState('');
+
+  const { data: perfis = [] } = useQuery({ queryKey: ['ia-perfis'], queryFn: () => api.get('/ia/perfis') });
+  const { data: prompts = [] } = useQuery({ queryKey: ['prompts-ia'], queryFn: () => api.get('/prompts') });
+  const { data: playbooks = [] } = useQuery({ queryKey: ['playbooks'], queryFn: () => api.get('/playbooks') });
+  const invalidar = () => qc.invalidateQueries({ queryKey: ['ia-perfis'] });
+
+  const salvar = async (p, campo, valor) => {
+    try { await api.put(`/ia/perfis/${p.id}`, { [campo]: valor }); invalidar(); }
+    catch (err) { toast(err.message, 'error'); }
+  };
+
+  const criar = async () => {
+    if (!novo.trim()) return;
+    try { await api.post('/ia/perfis', { nome: novo.trim() }); setNovo(''); invalidar(); toast('Perfil criado', 'success'); }
+    catch (err) { toast(err.message, 'error'); }
+  };
+
+  const remover = async (p) => {
+    if (!confirm(`Remover o perfil "${p.nome}"? Os nós que o usam voltam a valer só pela própria config.`)) return;
+    try { await api.delete(`/ia/perfis/${p.id}`); invalidar(); toast('Perfil removido', 'success'); }
+    catch (err) { toast(err.message, 'error'); }
+  };
+
+  const campo = { width:'100%', padding:'6px 8px', fontSize:12, borderRadius:6,
+    border:'1px solid var(--border)', background:'var(--bg-elevated)', color:'var(--text-primary)' };
+  const rotulo = { fontSize:10, textTransform:'uppercase', letterSpacing:'.04em', color:'var(--text-tertiary)', marginBottom:3, display:'block' };
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      <p style={{ fontSize:12, color:'var(--text-secondary)', margin:0 }}>
+        Um perfil junta prompt, procedimento, ferramentas e limites. No editor de fluxo, o nó
+        <strong> IA Responde</strong> escolhe o perfil — e qualquer campo configurado no próprio nó tem precedência.
+      </p>
+
+      <div style={{ display:'flex', gap:6 }}>
+        <input style={{ ...campo, maxWidth:280 }} placeholder="Nome do novo perfil" value={novo}
+          onChange={e => setNovo(e.target.value)} onKeyDown={e => e.key === 'Enter' && criar()} />
+        <button onClick={criar} style={{ padding:'6px 14px', fontSize:12, borderRadius:6, border:'none',
+          background:'var(--brand-blue)', color:'#fff', cursor:'pointer' }}>Criar</button>
+      </div>
+
+      {perfis.length === 0 && (
+        <p style={{ fontSize:13, color:'var(--text-tertiary)', padding:20, textAlign:'center' }}>
+          Nenhum perfil. O `npm run seed` cria dois — Suporte e Comercial.
+        </p>
+      )}
+
+      {perfis.map(p => (
+        <div key={p.id} style={{ border:'1px solid var(--border)', borderRadius:9, padding:12,
+          background:'var(--bg-elevated)', display:'flex', flexDirection:'column', gap:8 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <strong style={{ fontSize:14 }}>{p.nome}</strong>
+            <code style={{ fontSize:11, color:'var(--text-tertiary)' }}>{p.slug}</code>
+            <label style={{ marginLeft:'auto', fontSize:11, display:'flex', alignItems:'center', gap:4 }}>
+              <input type="checkbox" checked={!!p.ativo} onChange={e => salvar(p, 'ativo', e.target.checked)} />
+              ativo
+            </label>
+            <button onClick={() => remover(p)} style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:11 }}>remover</button>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:8 }}>
+            <div>
+              <span style={rotulo}>Prompt base</span>
+              <select style={campo} value={p.prompt_slug || ''} onChange={e => salvar(p, 'prompt_slug', e.target.value)}>
+                <option value="">— nenhum —</option>
+                {prompts.filter(x => !['regras','estilo'].includes(x.slug)).map(x => <option key={x.slug} value={x.slug}>{x.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <span style={rotulo}>Procedimento</span>
+              <select style={campo} value={p.playbook_slug || ''} onChange={e => salvar(p, 'playbook_slug', e.target.value)}>
+                <option value="">— nenhum —</option>
+                {playbooks.map(x => <option key={x.id} value={x.slug}>{x.nome}{x.status!=='publicado'?` (${x.status})`:''}</option>)}
+              </select>
+            </div>
+            <div>
+              <span style={rotulo}>Objetivo (goal)</span>
+              <input style={campo} defaultValue={p.goal || ''} placeholder="resolver_suporte"
+                onBlur={e => e.target.value !== (p.goal || '') && salvar(p, 'goal', e.target.value)} />
+            </div>
+            <div>
+              <span style={rotulo}>Máx. turnos</span>
+              <input style={campo} type="number" min="1" defaultValue={p.max_turnos}
+                onBlur={e => Number(e.target.value) !== p.max_turnos && salvar(p, 'max_turnos', e.target.value)} />
+            </div>
+          </div>
+
+          <div>
+            <span style={rotulo}>Quando transferir para humano</span>
+            <textarea style={{ ...campo, resize:'vertical' }} rows={2} defaultValue={p.regras_transferencia || ''}
+              placeholder="Ex.: se exigir visita técnica, se o cliente pedir humano, se demonstrar irritação."
+              onBlur={e => e.target.value !== (p.regras_transferencia || '') && salvar(p, 'regras_transferencia', e.target.value)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PromptsIA() {
   const toast = useStore(s => s.toast);
   const qc    = useQueryClient();
@@ -434,7 +544,7 @@ export default function PromptsIA() {
 
       {/* TABS */}
       <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:'1px solid var(--border)', paddingBottom:0 }}>
-        {[{id:'prompt',label:'🧠 Prompts'},{id:'tools',label:'🛠 Catálogo'},{id:'test',label:'⚡ Testar Tools'}].map(t => (
+        {[{id:'prompt',label:'🧠 Prompts'},{id:'perfis',label:'🎯 Perfis'},{id:'tools',label:'🛠 Catálogo'},{id:'test',label:'⚡ Testar Tools'}].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding:'8px 18px', border:'none', background:'transparent', cursor:'pointer',
             fontSize:13, fontWeight: tab===t.id ? 700 : 400,
@@ -444,6 +554,9 @@ export default function PromptsIA() {
           }}>{t.label}</button>
         ))}
       </div>
+
+      {/* PERFIS (FASE 9, §66) */}
+      {tab === 'perfis' && <PerfisIA />}
 
       {/* TOOLS TAB */}
       {tab === 'tools' && (

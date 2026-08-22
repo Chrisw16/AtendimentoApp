@@ -163,6 +163,7 @@ export const knowledgeApi = {
   remover:    (id)          => api.delete(`/knowledge/${id}`),
   categorias: ()            => api.get('/knowledge/categorias'),
   criarCategoria: (body)    => api.post('/knowledge/categorias', body),
+  removerCategoria: (id)    => api.delete(`/knowledge/categorias/${id}`),
   gaps:       (params = {}) => api.get('/knowledge/gaps?' + new URLSearchParams(params)),
   atualizarGap: (id, body)  => api.put(`/knowledge/gaps/${id}`, body),
 };

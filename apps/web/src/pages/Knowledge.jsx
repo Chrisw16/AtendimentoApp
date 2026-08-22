@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { knowledgeApi } from '../lib/api';
 import { useStore } from '../store';
-import { Plus, Search, BookOpen, AlertCircle, Trash2, ArrowRight } from 'lucide-react';
+import { Plus, Search, BookOpen, AlertCircle, Trash2, ArrowRight, FolderTree } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input  from '../components/ui/Input';
 import styles from './Knowledge.module.css';
@@ -77,6 +77,7 @@ function ArtigoModal({ artigo, categorias, onClose, onSave }) {
                 <option value="">— sem categoria —</option>
                 {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
+              {!categorias.length && <span className={styles.hintInline}>Cadastre em Conhecimento → Categorias.</span>}
             </div>
             <Input
               label="Revisar até" type="date" value={form.valido_ate}
@@ -110,6 +111,66 @@ function ArtigoModal({ artigo, categorias, onClose, onSave }) {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Cadastro de categorias.
+ *
+ * Existe porque o `seed` só roda em instalação nova: em produção as migrations
+ * sobem sozinhas e o seed não, então a lista nascia vazia e sem porta de
+ * entrada — a API estava lá desde o começo, faltava a tela.
+ */
+function Categorias() {
+  const qc = useQueryClient();
+  const toast = useStore(s => s.toast);
+  const [nome, setNome] = useState('');
+  const [descricao, setDescricao] = useState('');
+
+  const { data: cats = [] } = useQuery({ queryKey: ['knowledge-cats'], queryFn: knowledgeApi.categorias });
+  const invalidar = () => qc.invalidateQueries({ queryKey: ['knowledge-cats'] });
+
+  const criar = async () => {
+    if (!nome.trim()) return;
+    try {
+      await knowledgeApi.criarCategoria({ nome: nome.trim(), descricao: descricao.trim() || undefined });
+      setNome(''); setDescricao(''); invalidar();
+      toast('Categoria criada', 'success');
+    } catch (err) { toast(err.message, 'error'); }
+  };
+
+  const remover = async (c) => {
+    if (!confirm(`Remover "${c.nome}"? Os artigos dela ficam sem categoria (não são apagados).`)) return;
+    try { await knowledgeApi.removerCategoria(c.id); invalidar(); toast('Categoria removida', 'success'); }
+    catch (err) { toast(err.message, 'error'); }
+  };
+
+  return (
+    <div className={styles.gaps}>
+      <p className={styles.hint}>
+        Categorias organizam a base e servem de filtro na busca. Um artigo pode ficar sem categoria.
+      </p>
+
+      <div className={styles.catForm}>
+        <input className={styles.catInput} placeholder="Nome da categoria" value={nome}
+          onChange={e => setNome(e.target.value)} onKeyDown={e => e.key === 'Enter' && criar()} />
+        <input className={styles.catInput} placeholder="Descrição (opcional)" value={descricao}
+          onChange={e => setDescricao(e.target.value)} onKeyDown={e => e.key === 'Enter' && criar()} />
+        <Button variant="primary" size="sm" icon={Plus} onClick={criar}>Adicionar</Button>
+      </div>
+
+      {cats.length === 0 ? (
+        <p className={styles.vazio}>Nenhuma categoria ainda. Sugestões: Suporte técnico, Financeiro, Comercial, Políticas, Equipamentos.</p>
+      ) : cats.map(c => (
+        <div key={c.id} className={styles.gap}>
+          <div className={styles.gapTexto}>
+            <p>{c.nome}</p>
+            <span className={styles.gapData}>{c.descricao || c.slug}</span>
+          </div>
+          <button className={styles.gapAcao} onClick={() => remover(c)}>remover</button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -199,6 +260,9 @@ export default function Knowledge() {
           <button role="tab" aria-selected={aba === 'gaps'} className={[styles.aba, aba === 'gaps' && styles.abaAtiva].filter(Boolean).join(' ')} onClick={() => setAba('gaps')}>
             <AlertCircle size={13} /> Lacunas
           </button>
+          <button role="tab" aria-selected={aba === 'categorias'} className={[styles.aba, aba === 'categorias' && styles.abaAtiva].filter(Boolean).join(' ')} onClick={() => setAba('categorias')}>
+            <FolderTree size={13} /> Categorias
+          </button>
         </div>
         {aba === 'artigos' && (
           <>
@@ -214,7 +278,7 @@ export default function Knowledge() {
         )}
       </div>
 
-      {aba === 'gaps' ? <Gaps /> : (
+      {aba === 'categorias' ? <Categorias /> : aba === 'gaps' ? <Gaps /> : (
         <div className={styles.lista}>
           {isLoading ? (
             Array.from({ length: 4 }).map((_, i) => <div key={i} className={`skeleton ${styles.skel}`} />)

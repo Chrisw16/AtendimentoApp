@@ -311,6 +311,8 @@ function PropsPanel({ node, onChange, onDelete }) {
   // FASE 8: procedimentos oficiais. Só os PUBLICADOS orientam atendimento real
   // — a lista aqui mostra todos para o admin saber que existem, mas marca.
   const { data: playbooks = [] } = useQuery({ queryKey: ['playbooks'], queryFn: () => api.get('/playbooks'), staleTime: 60000 });
+  // FASE 9: perfis juntam prompt+procedimento+tools+limites num pacote só.
+  const { data: perfisIA = [] } = useQuery({ queryKey: ['ia-perfis'], queryFn: () => api.get('/ia/perfis'), staleTime: 60000 });
   if (!node) return null;
   const def = NODE_TYPES[node.data.tipo] || {};
   const cfg = node.data.config || {};
@@ -381,6 +383,12 @@ function PropsPanel({ node, onChange, onDelete }) {
           const cats = [...new Set(IA_TOOLS_LIST.map(t => t.cat))];
           return (
             <>
+              <Fld label="Perfil de IA" hint="Junta prompt, procedimento, ferramentas e limites. O que você configurar abaixo TEM PRECEDÊNCIA sobre o perfil.">
+                <select value={cfg.perfil||''} onChange={e=>set('perfil',e.target.value)} style={{...IS,cursor:'pointer'}}>
+                  <option value="">— sem perfil (configuro tudo aqui) —</option>
+                  {perfisIA.filter(p=>p.ativo).map(p => <option key={p.id} value={p.slug}>{p.nome}</option>)}
+                </select>
+              </Fld>
               <Fld label="Contexto (prompt base)" hint="Puxa o prompt da aba Prompts IA — o coração da IA neste nó">
                 <select value={cfg.contexto||''} onChange={e=>set('contexto',e.target.value)} style={{...IS,cursor:'pointer'}}>
                   <option value="">— padrão (Outros/Fallback) —</option>

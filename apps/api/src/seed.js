@@ -191,6 +191,33 @@ async function seed() {
   }
   console.log('  ✓ Playbooks inseridos (rascunho)');
 
+  // ── PERFIS DE IA (FASE 9, §66) ────────────────────────────────
+  // Um perfil junta prompt, tools, playbook e limites — o que hoje é
+  // reconfigurado nó a nó. O `max_turnos` de cada um vem da prática: cadastro
+  // comercial precisa de ~25 (a janela de histórico é 50 msgs ≈ 25 trocas),
+  // suporte com diagnóstico, ~12.
+  for (const p of [
+    {
+      slug: 'suporte', nome: 'Suporte técnico',
+      descricao: 'Diagnóstico e resolução de problemas de conexão.',
+      prompt_slug: 'suporte', playbook_slug: 'suporte_sem_conexao',
+      goal: 'resolver_suporte', max_turnos: 12,
+      regras_transferencia: 'Transfira se exigir visita técnica, se o cliente pedir humano ou se demonstrar irritação.',
+      tools: JSON.stringify([]),
+    },
+    {
+      slug: 'comercial', nome: 'Comercial',
+      descricao: 'Venda residencial: da dúvida ao pré-cadastro.',
+      prompt_slug: 'comercial', playbook_slug: 'comercial_venda_residencial',
+      goal: 'converter_venda', max_turnos: 25,
+      regras_transferencia: 'Transfira se o endereço não tiver cobertura, se pedirem condição fora da tabela ou se for cliente empresarial.',
+      tools: JSON.stringify([]),
+    },
+  ]) {
+    await db('ia_perfis').insert(p).onConflict('slug').ignore();
+  }
+  console.log('  ✓ Perfis de IA inseridos');
+
   // ── FLUXO PADRÃO ──────────────────────────────────────────────
   const fluxoExiste = await db('fluxos').where({ nome: 'Atendimento Padrão' }).first();
   if (!fluxoExiste) {
