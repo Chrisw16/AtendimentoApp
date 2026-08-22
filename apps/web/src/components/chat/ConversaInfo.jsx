@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { filasApi, cliente360Api } from '../../lib/api';
+import { filasApi, cliente360Api, api } from '../../lib/api';
 import { useStore } from '../../store';
 import {
-  Phone, Mail, MapPin, Clock, User, Tag, Wifi, WifiOff, Activity,
+  Phone, Mail, MapPin, Clock, User, Tag, Wifi, WifiOff, Activity, Bot,
   ChevronDown, ExternalLink, AlertCircle, AlertTriangle, X, Stethoscope, FileText,
 } from 'lucide-react';
 import Button from '../ui/Button';
@@ -78,6 +78,15 @@ export default function ConversaInfo({ conversa, chat }) {
     staleTime: 5 * 60_000,
   });
 
+  // FASE 9 (§74): por que esta conversa caiu na mão de um humano, e o que a IA
+  // já tinha feito. Sem isto o agente lê 40 mensagens para descobrir.
+  const { data: handoff } = useQuery({
+    queryKey: ['handoff', conversa.id],
+    queryFn:  () => api.get(`/ia/handoff/${conversa.id}`),
+    enabled:  conversa.status !== 'ia',
+    retry: false,
+  });
+
   const { data: ficha, isLoading, refetch } = useQuery({
     queryKey: ['cliente360', conversa.id],
     queryFn:  () => cliente360Api.ficha(conversa.id),
@@ -129,6 +138,27 @@ export default function ConversaInfo({ conversa, chat }) {
       </div>
 
       <div className={styles.scroll}>
+        {/* ── HANDOFF DA IA (§74) ── */}
+        {handoff && (
+          <div className={styles.handoff} data-prio={handoff.prioridade}>
+            <div className={styles.handoffTop}>
+              <Bot size={12} />
+              <strong>A IA transferiu: {handoff.motivo_label}</strong>
+            </div>
+            <p className={styles.handoffResumo}>{handoff.resumo}</p>
+            {handoff.tools_executadas?.length > 0 && (
+              <p className={styles.handoffTools}>
+                Já consultado: {handoff.tools_executadas.join(', ')} — não repita.
+              </p>
+            )}
+            {handoff.playbook && (
+              <p className={styles.handoffTools}>
+                Procedimento “{handoff.playbook.nome}”: {handoff.playbook.feitas} de {handoff.playbook.total} etapas.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* ── CONTEXT CARDS ── */}
         {isLoading && <div className={`skeleton ${styles.skelCard}`} />}
         {ficha?.cards?.length > 0 && (

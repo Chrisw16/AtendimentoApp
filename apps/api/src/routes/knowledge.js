@@ -78,6 +78,16 @@ knowledgeRouter.post('/categorias', adminMiddleware, asyncHandler(async (req, re
   res.status(201).json(cat);
 }));
 
+knowledgeRouter.delete('/categorias/:id', adminMiddleware, asyncHandler(async (req, res) => {
+  // `knowledge_artigos.categoria_id` é ON DELETE SET NULL: os artigos não somem
+  // junto, ficam sem categoria. Perder o agrupamento é ruim; perder o artigo
+  // porque alguém arrumou a taxonomia seria bem pior.
+  const n = await getDb()('knowledge_categorias').where({ id: req.params.id }).del();
+  if (!n) throw new HttpError(404, 'Categoria não encontrada');
+  auditar({ actorType: 'human', actorId: req.agente.id, action: 'knowledge_categoria_removida', resource: req.params.id, ip: ipDe(req) });
+  res.status(204).end();
+}));
+
 // ── LACUNAS (§56) ─────────────────────────────────────────────────
 knowledgeRouter.get('/gaps', adminMiddleware, asyncHandler(async (req, res) => {
   const rows = await getDb()('knowledge_gaps')
