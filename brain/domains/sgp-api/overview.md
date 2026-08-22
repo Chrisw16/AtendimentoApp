@@ -45,6 +45,35 @@ Endpoints que o código/brain tinham **errados** (referência antiga era derivad
 - **`cidade` é texto** (nome), não ID/IBGE.
 - **`datanasc` = `AAAA-MM-DD`** estrito (o GoCHAT normaliza qualquer formato antes de enviar).
 
+## O `consultacliente` devolve MUITO mais do que o GoCHAT lia (2026-08-22)
+
+Descoberto ao montar o Painel do assinante. A resposta de `/api/ura/consultacliente/`
+já traz, **sem flag nenhuma**, tudo que faltava para o Cliente 360:
+
+- **Endereço completo:** `endereco_logradouro`, `_numero`, `_complemento`, `_bairro`,
+  `_cidade`, `_uf`, `_cep`, `_pontoreferencia` e `endereco_ll` (`"lat,lng"`).
+- **Serviço:** `servico_login`, `servico_senha`, `servico_mac`/`_mac2`, `servico_vlan`,
+  `servico_tipo_conexao`, `servico_grupo`, `servico_plano`.
+- **WiFi:** `servico_wifi_ssid`/`_password`/`_channel` e as versões `_5`.
+- **Central do Assinante:** `contratoCentralLogin`, `contratoCentralSenha`.
+- **Relacionamento:** `dataCadastro`, `dataNascimento`, `tags`, `motivo_status`,
+  `promessasPagamentoMes`, `link_quitacao`, `clienteId`.
+
+Flags que só ACRESCENTAM (não filtram): `exibir_observacao_cliente`,
+`exibir_observacao_servicos`, `servicos_dados`, `radius`, `exibir_historico_status`.
+⚠️ `titulo_status` e `atrasado` **filtram o cliente**, não enriquecem — usar como
+"traga os títulos" some com quem não tem título.
+
+Duas armadilhas do payload, as duas já tratadas em `sgpHelpers.mapearContrato`:
+- **`"None"` do Python vem como STRING** (`servico_vlan: "None"`). Renderizar isso
+  escreve "None" na cara do atendente.
+- **Contato ora é string, ora é objeto** `{contato, tipoContato, inscricoes}`. O objeto
+  cru chegando ao React matou o painel inteiro (#31) em 22/08/2026.
+
+Topologia da fibra (OLT/slot/PON/VLAN/CTO) **não** vem daqui: é
+`GET /api/fttx/onu/list/?contrato=` (módulo FTTH). E o **sinal** (Rx/Tx, online,
+uptime) não vem de API nenhuma — sai do `sgpDb.js`, leitura direta no Postgres do SGP.
+
 ## Oportunidades (relevantes p/ revenda e evolução)
 
 - **De-hardcodar IDs NetGo:** existem `list` de NAS (`/api/ura/nas/list/`), POP (`/api/ura/pops/`), portador (`/api/ura/portador/`) e plano (`/api/ura/consultaplano/` e `/api/precadastro/plano/list`). Hoje NAS=53/POP/portador são fixos em `integrations.js` — poderiam ser descobertos por API por instância. Ver [[Integração SGP]].

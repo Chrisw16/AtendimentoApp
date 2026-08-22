@@ -88,3 +88,35 @@ fundos que a FASE 6 fechou.
 ## See Also
 
 - [[FASE 6 — Cliente 360]] · [[FASE 10 — Copiloto V1]] · [[Auth e Segurança]] · [[Playbook Engine]]
+
+## Painel do assinante — o drawer (2026-08-22)
+
+A lateral virou **resumo + porta**: contato, seletor de contrato, cards de contexto,
+conexão, financeiro resumido, ações, histórico e o botão **"Painel completo"**, que
+abre o `PainelSGP` — um drawer de 560px com o operacional inteiro:
+
+| Bloco | Fonte |
+|---|---|
+| Dados do atendimento | conversa + ficha (PII já mascarada no servidor) |
+| Contratos | `ficha.contratos` — seletor local, **zero request** |
+| Endereço | `consultacliente` (+ link pro mapa via `endereco_ll`) |
+| Serviço | `consultacliente`: login, senha, MAC, VLAN, tipo de conexão, grupo |
+| Wi-Fi | `consultacliente` (SSID/senha/canal, 2.4 e 5) |
+| Central do assinante | `consultacliente` |
+| Fibra (ONU) | topologia da **API FTTH** + sinal do **`sgpDb`** |
+| Financeiro | `GET /:id/faturas` — PIX, linha digitável e PDF separados |
+| Observações do cadastro | flags `exibir_observacao_cliente/servicos` |
+
+**O que a montagem ensinou**
+
+- **A dívida da FASE 6 estava errada.** "O `consultacliente` não devolve endereço" era
+  premissa, não fato: devolve endereço completo, dados do serviço, WiFi e Central. O
+  código lia 8 campos e jogava fora o resto — durante meses o painel disse "não sei"
+  sobre dado que já estava no payload.
+- **Mapeamento saiu de `integrations.js` para `sgpHelpers.js`.** Puro, testado com o
+  payload REAL da coleção oficial como fixture. Antes não havia como testar: o mapa
+  vivia dentro da função que faz o HTTP.
+- **Duas fontes para a ONU** porque nenhuma responde tudo: a API FTTH sabe onde o
+  cliente está na rede, e só o banco do SGP sabe o Rx/Tx que a OLT mediu.
+- **O caro fica atrás do clique.** Fibra e faturas na ficha custariam 2 idas ao SGP a
+  cada conversa aberta — a maioria sem ninguém olhar.

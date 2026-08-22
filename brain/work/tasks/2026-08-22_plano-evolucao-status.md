@@ -82,8 +82,8 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | FASE 5 | SSE não é filtrado por fila — o evento vai para todos | filtro por assinatura de fila no `sseManager` |
 | FASE 5 | Sem distribuição automática (round-robin/push): o agente **puxa** | roteamento ativo, se o volume exigir |
 | ~~FASE 3~~ | ~~Mascarar CPF/telefone na UI~~ | ✅ FASE 6 — e mais forte: mascarado **no servidor**, não na tela |
-| FASE 6 | Cliente multi-contrato: a ação age sempre no contrato principal | falta a UI de escolha (o backend já valida) |
-| FASE 6 | Sem endereço, tags e tempo de relacionamento | o `/api/ura/consultacliente/` não devolve; falta mapear endpoint |
+| ~~FASE 6~~ | ~~Cliente multi-contrato: a ação age sempre no principal~~ | ✅ 2026-08-22 — seletor de contrato na lateral e no painel; a rota `/acao` já validava |
+| ~~FASE 6~~ | ~~Sem endereço, tags e tempo de relacionamento~~ — **a premissa estava errada**: o `/api/ura/consultacliente/` SEMPRE devolveu endereço, serviço, WiFi e Central do Assinante; o código lia 8 campos e descartava o resto | ✅ 2026-08-22 (Painel do assinante) |
 | FASE 13 | Sem OpenTelemetry/Prometheus e sem série temporal de métricas | 1 container, 1 processo, sem scraper |
 | FASE 13 | Sem alerta ativo (o §140 pede tela, não alerta) | decisão de produto |
 | FASE 13 | O drill de restore **nunca foi executado** | a tabela do runbook espera a primeira data |

@@ -1,0 +1,180 @@
+/* PainelSGP — o painel completo do assinante, em drawer.
+   Segue os tokens de tokens.css; nada de cor solta. */
+
+.pgSgpOverlay {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(15, 23, 42, .45);
+  display: flex; justify-content: flex-end;
+  animation: pgSgpFade var(--duration-fast) var(--ease-out);
+}
+@keyframes pgSgpFade { from { opacity: 0 } to { opacity: 1 } }
+
+.pgSgpDrawer {
+  width: min(560px, 100vw);
+  height: 100%;
+  background: var(--bg-base);
+  display: flex; flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  animation: pgSgpSlide var(--duration-base) var(--ease);
+}
+@keyframes pgSgpSlide { from { transform: translateX(24px); opacity: .6 } to { transform: none; opacity: 1 } }
+
+.pgSgpHeader {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--sidebar-bg); color: var(--text-inverse);
+  flex-shrink: 0;
+}
+.pgSgpHeader h2 { font-size: var(--text-lg); font-weight: 600; margin: 0; }
+.pgSgpClose {
+  background: none; border: none; color: var(--text-inverse);
+  cursor: pointer; display: flex; padding: var(--space-1); border-radius: var(--radius-sm);
+}
+.pgSgpClose:hover { background: var(--sidebar-hover); }
+
+.pgSgpScroll {
+  flex: 1; overflow-y: auto;
+  padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3);
+}
+
+/* ── bloco ── */
+.pgSgpBloco {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--sidebar-bg);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.pgSgpBlocoTop {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.pgSgpBlocoTop h3 {
+  font-size: var(--text-md); font-weight: 700; margin: 0; flex: 1;
+  color: var(--text-primary);
+}
+.pgSgpBlocoIcon {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--radius-md);
+  background: var(--bg-overlay); color: var(--text-secondary);
+}
+.pgSgpBlocoBody { padding: 0 var(--space-4) var(--space-4); }
+
+/* ── campo ── */
+.pgSgpField {
+  display: flex; align-items: baseline; gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+.pgSgpField:first-child { border-top: none; }
+.pgSgpFieldLabel {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--text-xs); color: var(--text-tertiary);
+  min-width: 108px; flex-shrink: 0;
+}
+.pgSgpFieldValue {
+  font-size: var(--text-base); color: var(--text-primary);
+  font-weight: 500; word-break: break-word;
+  display: inline-flex; align-items: center; gap: var(--space-2);
+}
+.pgSgpMono { font-family: var(--font-mono); font-size: var(--text-sm); }
+
+.pgSgpCopyWrap { display: inline-flex; align-items: center; gap: 6px; }
+.pgSgpCopyBtn, .pgSgpEye {
+  background: none; border: none; cursor: pointer; padding: 2px;
+  color: var(--text-tertiary); display: inline-flex; border-radius: var(--radius-sm);
+}
+.pgSgpCopyBtn:hover, .pgSgpEye:hover { color: var(--accent); background: var(--accent-muted); }
+
+/* ── identidade ── */
+.pgSgpIdent { display: flex; align-items: center; gap: var(--space-3); padding-bottom: var(--space-3); }
+.pgSgpAvatar {
+  width: 44px; height: 44px; border-radius: var(--radius-full);
+  background: var(--accent); color: var(--text-inverse);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: var(--text-lg); flex-shrink: 0;
+}
+.pgSgpNome { font-size: var(--text-md); font-weight: 600; margin: 0; color: var(--text-primary); }
+.pgSgpSub  { font-size: var(--text-sm); color: var(--text-secondary); margin: 2px 0 0; }
+.pgSgpNota { font-size: var(--text-xs); color: var(--text-tertiary); margin: var(--space-2) 0 0; }
+.pgSgpAviso{ font-size: var(--text-xs); color: var(--warning); margin: var(--space-2) 0 0; }
+.pgSgpObs  { font-size: var(--text-sm); color: var(--text-secondary); margin: 0 0 var(--space-2); white-space: pre-wrap; }
+
+/* ── contrato ── */
+.pgSgpContratoSel { background: var(--bg-overlay); border-radius: var(--radius-md); padding: var(--space-3); }
+.pgSgpContratoAtual { font-size: var(--text-md); font-weight: 600; margin: 2px 0; color: var(--text-primary); }
+.pgSgpSelect {
+  width: 100%; margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+  font-family: var(--font-body); font-size: var(--text-sm); background: var(--bg-surface);
+}
+.pgSgpTags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.pgSgpTag {
+  font-size: var(--text-xs); padding: 2px var(--space-2);
+  border-radius: var(--radius-full); background: var(--accent-muted); color: var(--accent);
+}
+
+/* ── sinal da fibra ── */
+.pgSgpSinal {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2);
+  padding: var(--space-3); border-radius: var(--radius-md);
+  background: var(--bg-overlay); margin-bottom: var(--space-2);
+}
+.pgSgpSinal > div { display: flex; flex-direction: column; gap: 2px; }
+.pgSgpSinal strong { font-size: var(--text-md); color: var(--text-primary); }
+.pgSgpSinalLabel { font-size: var(--text-xs); color: var(--text-tertiary); }
+.pgSgpSinal[data-nivel="bom"]     { background: var(--success-bg); }
+.pgSgpSinal[data-nivel="bom"]     strong { color: var(--success); }
+.pgSgpSinal[data-nivel="atencao"] { background: var(--warning-bg); }
+.pgSgpSinal[data-nivel="atencao"] strong { color: var(--warning); }
+.pgSgpSinal[data-nivel="ruim"],
+.pgSgpSinal[data-nivel="critico"] { background: var(--danger-bg); }
+.pgSgpSinal[data-nivel="ruim"]    strong,
+.pgSgpSinal[data-nivel="critico"] strong { color: var(--danger); }
+
+/* ── boleto ── */
+.pgSgpBoleto {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: var(--space-3); margin-bottom: var(--space-2);
+}
+.pgSgpBoleto[data-vencido="1"] { border-color: var(--danger); background: var(--danger-bg); }
+.pgSgpBoletoTop { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
+.pgSgpBoletoTop span   { font-size: var(--text-sm); color: var(--text-secondary); }
+.pgSgpBoletoTop strong { font-size: var(--text-md); color: var(--text-primary); }
+.pgSgpBoletoTag {
+  display: inline-block; margin-top: 4px; font-size: var(--text-xs);
+  color: var(--danger); font-weight: 600;
+}
+.pgSgpBoletoAcoes { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.pgSgpBoletoBtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+  background: var(--bg-surface); color: var(--text-primary);
+  font-family: var(--font-body); font-size: var(--text-sm); font-weight: 500;
+  cursor: pointer; text-decoration: none;
+}
+.pgSgpBoletoBtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
+
+/* ── links e ações ── */
+.pgSgpLink {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--text-sm); color: var(--accent); text-decoration: none; font-weight: 500;
+}
+.pgSgpLink:hover { text-decoration: underline; }
+.pgSgpAcoes { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.pgSgpAcaoChip {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-full);
+  background: var(--bg-surface); color: var(--text-primary);
+  font-family: var(--font-body); font-size: var(--text-sm); cursor: pointer;
+}
+.pgSgpAcaoChip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
+
+.pgSgpSkel { height: 64px; border-radius: var(--radius-md); }
+
+@media (max-width: 600px) {
+  .pgSgpDrawer { width: 100vw; }
+  .pgSgpFieldLabel { min-width: 84px; }
+}

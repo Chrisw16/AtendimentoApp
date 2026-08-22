@@ -43,6 +43,8 @@ apps/api/src/
     filaService.js       ★ fila de atendimento HUMANO: SLA por fila, assunção, capacidade
     filasHelpers.js      ★ puro: horário, faixas de SLA, capacidade, visibilidade + testes
     cliente360.js        ★ compõe a ficha do assinante (FASE 6) — orquestra, não fala HTTP
+    sgpHelpers.js        ★ puro: mapeia o payload do SGP (contrato, endereço, serviço, ONU) + testes
+    sgpDb.js             ★ leitura SOMENTE-LEITURA no Postgres do SGP: sinal óptico e status da ONU
     mascarar.js          ★ puro: PII mascarada NO SERVIDOR + testes
     permissoes.js        ★ puro: o que cada agente pode ver/fazer + testes
     contextCards.js      ★ puro: os cartões do Cliente 360 + testes
@@ -172,6 +174,13 @@ Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/max
   - **O painel nunca derruba o atendimento**: cada bloco é isolado, falha vira `null` + aviso VISÍVEL na tela. Sem o aviso o agente lê "sem débito" quando a verdade é "não sei".
   - **Diagnóstico é opt-in** (`?diagnostico=1`): são 2 chamadas ao SGP e o painel precisa abrir rápido.
   - **Cartão sem ação sugerida é ruído** e empurra para baixo o que importava; há teste exigindo `titulo`+`severidade`+`acao`. Risco de churn exige **combinação** de sinais, e `suspenso` **não** é "sem contrato ativo".
+  - **O painel completo é DRAWER, e é ele que paga o caro** (`PainelSGP.jsx`, 2026-08-22). A lateral é o resumo que o agente lê sem clicar; fibra e faturas só saem no clique que abre o drawer. Fossem na ficha, cada troca de conversa pagaria 2 idas ao SGP por dado que ninguém olhou.
+  - **O `consultacliente` sempre devolveu endereço, serviço, WiFi e Central do Assinante** — o código lia 8 campos e descartava o resto. A dívida da FASE 6 ("o endpoint não devolve endereço") estava **baseada em premissa errada**. Todo o mapeamento virou `sgpHelpers.mapearRespostaCliente` (puro, testado com o payload real da coleção oficial); `integrations.js` só faz o HTTP.
+  - ⚠️ **`"None"` do Python chega como STRING** (`servico_vlan: "None"`), e contato ora é string ora é objeto `{contato,tipoContato,inscricoes}` — o objeto cru no JSX matou o painel inteiro (React #31). `limpo()`/`textoContato()` tratam os dois **na origem**; guarda secundária no `InfoRow`.
+  - **A ONU tem DUAS fontes, de propósito:** topologia (OLT/slot/PON/VLAN/CTO) da API FTTH `/api/fttx/onu/list/?contrato=`, e sinal (Rx/Tx, online, uptime, última queda) do **`sgpDb.js`** — leitura direta no Postgres do SGP, que já era o caminho do `consultar_onu_acs`. Uma fora do ar não apaga a outra.
+  - **`GET /:id/faturas` é LEITURA, não ação.** Usa a mesma `segundaViaBoleto` da tool; o que muda é o formato — a tool devolve texto pronto pro cliente, o painel precisa de PIX, linha digitável e PDF **separados** pra virar botão. A ação `segunda_via_boleto` continua sendo o caminho de MANDAR o boleto.
+  - **Seletor de contrato não custa request:** a ficha já traz os 8 contratos inteiros. A rota `/acao` sempre aceitou e validou `contrato` (`contratosPermitidos`) — faltava só a UI.
+  - ⚠️ **Senha de PPPoE e da Central aparecem para TODO agente** (decisão do operador, 2026-08-22), atrás do olhinho. Para trancar, é pôr o bloco atrás de `pode(agente,'ver_dados_completos')` em `mapearContrato`/no componente.
   - Sonda/inspeção: `GET /api/cliente360/capacidades` (o que ESTE agente pode).
 - **A base de conhecimento busca com FULL-TEXT NATIVO, não com embeddings** (`knowledge`*, migration 018 — FASE 7). Regras não-óbvias:
   - **pgvector foi descartado com a licença do próprio plano** (§54, "salvo melhor justificativa técnica após inspeção"): a extensão **não existe** neste Postgres (exigiria trocar a imagem do banco de produção), a Anthropic **não tem embeddings** e `openai_api_key` é uma chave que **nenhuma linha do código lê**. A recuperação inteira mora em `knowledge.buscar()` — havendo pgvector e uma fonte de embeddings, o ranqueamento vira híbrido **ali dentro**, sem que a tool ou a tela mudem.

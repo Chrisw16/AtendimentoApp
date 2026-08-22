@@ -127,3 +127,149 @@ export function formatarDiagnosticoOnu(row, now = new Date()) {
   }
   return msg;
 }
+
+// ── Cliente 360 v2: o payload do SGP inteiro ──────────────────────
+//
+// O `/api/ura/consultacliente/` sempre devolveu endereço, dados do serviço,
+// WiFi e Central do Assinante — e a gente lia 8 campos e jogava o resto fora.
+// (A dívida da FASE 6 dizia que "o endpoint não devolve endereço". Devolve.)
+//
+// Mapear aqui, puro, é o que torna isso testável: `integrations.js` puxa knex
+// no topo e não roda em teste unitário.
+
+/** Ausência tem muitas caras no SGP: null, '', e o `"None"` do Python. */
+function limpo(v) {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return (s === '' || s === 'None' || s === 'null') ? null : s;
+}
+
+/**
+ * Contato do SGP: às vezes string, às vezes `{contato, tipoContato, inscricoes}`.
+ * O objeto cru chegando ao React matou o painel inteiro em 22/08/2026 (#31) —
+ * a conversão mora na origem, não na tela.
+ */
+export function textoContato(v) {
+  if (v && typeof v === 'object') return limpo(v.contato ?? v.valor);
+  return limpo(v);
+}
+
+/** `"-24.51,-50.41"` → `{lat, lng}`. Coordenada inválida é ausência, não zero. */
+function parseLL(v) {
+  const s = limpo(v);
+  if (!s) return null;
+  const [lat, lng] = s.split(',').map(n => Number(n.trim()));
+  return (Number.isFinite(lat) && Number.isFinite(lng)) ? { lat, lng } : null;
+}
+
+const STATUS_MAP   = { 1:'ativo', 2:'inativo', 3:'cancelado', 4:'suspenso', 5:'inviabilidade técnica', 6:'novo', 7:'ativo vel. reduzida' };
+const STATUS_ORDEM = { ativo:0, novo:0, suspenso:1, 'ativo vel. reduzida':1, inativo:2, 'inviabilidade técnica':2, cancelado:3 };
+
+export function normalizarStatusContrato(ct) {
+  const display = (ct?.contratoStatusDisplay || '').toLowerCase().trim();
+  return display || STATUS_MAP[ct?.contratoStatus] || 'desconhecido';
+}
+
+/** Um contrato do SGP → o contrato do GoCHAT. */
+export function mapearContrato(ct) {
+  return {
+    id:              ct.contratoId,
+    plano:           ct.planointernet || ct.planotv || ct.servico_plano || '',
+    status:          normalizarStatusContrato(ct),
+    motivo_status:   limpo(ct.motivo_status),
+    titulos_abertos: ct.contratoTitulosAReceber || 0,
+    valor_aberto:    ct.contratoValorAberto     || 0,
+    cidade:          limpo(ct.endereco_cidade) || limpo((ct.popNome || '').split('/')[0]),
+    popId:           ct.popId   || null,
+    popNome:         limpo(ct.popNome),
+    venc_dia:        ct.cobVencimento ? `dia ${ct.cobVencimento}` : null,
+    cliente_id:      ct.clienteId || null,
+    cadastrado_em:   limpo(ct.dataCadastro),
+    promessas_mes:   ct.promessasPagamentoMes ?? null,
+    link_quitacao:   limpo(ct.link_quitacao),
+    tags:            Array.isArray(ct.tags) ? ct.tags.map(limpo).filter(Boolean) : [],
+    endereco: {
+      logradouro:  limpo(ct.endereco_logradouro),
+      numero:      limpo(ct.endereco_numero),
+      complemento: limpo(ct.endereco_complemento),
+      bairro:      limpo(ct.endereco_bairro),
+      cidade:      limpo(ct.endereco_cidade),
+      uf:          limpo(ct.endereco_uf),
+      cep:         limpo(ct.endereco_cep),
+      referencia:  limpo(ct.endereco_pontoreferencia),
+      ll:          parseLL(ct.endereco_ll),
+    },
+    servico: {
+      plano:        limpo(ct.servico_plano),
+      login:        limpo(ct.servico_login),
+      senha:        limpo(ct.servico_senha),
+      mac:          limpo(ct.servico_mac),
+      mac2:         limpo(ct.servico_mac2),
+      vlan:         limpo(ct.servico_vlan),
+      tipo_conexao: limpo(ct.servico_tipo_conexao),
+      grupo:        limpo(ct.servico_grupo),
+    },
+    wifi: {
+      ssid:    limpo(ct.servico_wifi_ssid),      senha:    limpo(ct.servico_wifi_password),
+      canal:   limpo(ct.servico_wifi_channel),
+      ssid_5:  limpo(ct.servico_wifi_ssid_5),    senha_5:  limpo(ct.servico_wifi_password_5),
+      canal_5: limpo(ct.servico_wifi_channel_5),
+    },
+    central: { login: limpo(ct.contratoCentralLogin), senha: limpo(ct.contratoCentralSenha) },
+    observacao_cliente: limpo(ct.observacao_cliente),
+    observacao_servico: limpo(ct.observacao_servico),
+  };
+}
+
+/**
+ * A resposta inteira do `consultacliente` → a ficha do GoCHAT.
+ * Ordena por status (quem atende quer o contrato ATIVO na frente) e corta em 8.
+ */
+export function mapearRespostaCliente(raw, digits = '') {
+  const todos = raw?.contratos || [];
+  if (!todos.length) return { erro: true, mensagem: 'Cliente não encontrado para este CPF/CNPJ.' };
+
+  const primeiro = todos[0];
+  const ordenados = [...todos]
+    .sort((a, b) => (STATUS_ORDEM[normalizarStatusContrato(a)] ?? 3) - (STATUS_ORDEM[normalizarStatusContrato(b)] ?? 3))
+    .slice(0, 8);
+
+  return {
+    nome:    primeiro.razaoSocial || '',
+    cpfcnpj: primeiro.cpfCnpj || digits,
+    // emails/telefones são arrays DIRETO no contrato, não no cliente
+    email: textoContato(primeiro.emails?.[0]) || '',
+    fone:  textoContato(primeiro.telefones?.[0]) || textoContato(primeiro.telefones_cargos?.[0]) || '',
+    nascimento: limpo(primeiro.dataNascimento),
+    contratos: ordenados.map(mapearContrato),
+  };
+}
+
+/**
+ * Topologia da fibra, de `/api/fttx/onu/list/?contrato=`.
+ *
+ * Só a TOPOLOGIA: o sinal (Rx/Tx, online, uptime) vem do `sgpDb.js`, que lê o
+ * banco do SGP direto e já era usado pelo `consultar_onu_acs`. Duas fontes de
+ * propósito — cada uma responde o que sabe, e uma fora do ar não apaga a outra.
+ */
+export function mapearOnuFttx(rows) {
+  const r = Array.isArray(rows) ? rows[0] : null;
+  if (!r) return null;
+  const cto = limpo(r.cto);
+  return {
+    id:      r.id ?? null,
+    serial:  limpo(r.phy_addr),
+    olt:     limpo(r.olt_name),
+    olt_id:  r.olt_id ?? null,
+    slot:    r.slot ?? null,
+    pon:     r.pon  ?? null,
+    onu:     r.onu  ?? null,
+    vlan:    r.vlan ?? null,
+    modelo:  limpo(r.type),
+    modo:    limpo(r.mode),
+    // "NETGO-LMR 03 (Porta 5)" é como o técnico fala. Sem porta, só a CTO —
+    // "(Porta null)" na tela é pior que a informação faltando.
+    cto:     cto ? (r.ctoport != null ? `${cto} (Porta ${r.ctoport})` : cto) : null,
+    login:   limpo(r.service_login),
+  };
+}

@@ -513,3 +513,29 @@ chegando ao JSX.
   `[object Object]` no prompt da IA.
 - **Segunda guarda no render** (`InfoRow`): campo objeto não pode derrubar o
   painel, que por regra da FASE 6 **nunca derruba o atendimento**.
+
+## [2026-08-22] FEAT | Painel do assinante — a lateral do Cliente 360 virou painel
+
+Pedido do operador com prints de um "Módulo SGP" concorrente. O achado que mudou o
+tamanho do trabalho: **o `/api/ura/consultacliente/` que já chamávamos sempre devolveu
+endereço completo, dados do serviço (login/senha/MAC/VLAN), WiFi e Central do
+Assinante** — e o código lia 8 campos e descartava o resto. A dívida da FASE 6 ("o
+endpoint não devolve endereço") estava **baseada em premissa errada**.
+
+- Todo o mapeamento saiu de `integrations.js` para `sgpHelpers.js` — puro e testado
+  com o payload REAL da coleção oficial como fixture (11 testes novos). Antes não
+  havia como testar: o mapa vivia dentro da função que faz o HTTP.
+- **Duas armadilhas do payload viraram teste:** o `"None"` do Python que chega como
+  string (renderizar escreve "None" na tela) e o contato que ora é string ora é
+  objeto — este último matou o painel inteiro hoje de manhã (React #31).
+- **`PainelSGP.jsx`**: drawer de 560px com endereço (+mapa), serviço, WiFi, Central,
+  **fibra** e **financeiro com PIX/linha digitável/PDF em botão** — antes a 2ª via
+  cuspia texto cru num `<pre>`.
+- **A ONU tem duas fontes de propósito:** topologia pela API FTTH, sinal pelo
+  `sgpDb.js` (leitura direta no Postgres do SGP). Nenhuma responde tudo.
+- **O caro fica atrás do clique:** fibra e faturas na ficha custariam 2 idas ao SGP a
+  cada conversa aberta.
+- Fechou também a dívida do **multi-contrato**: seletor na lateral e no drawer. O
+  backend já validava (`contratosPermitidos`); faltava a UI.
+
+Decisão do operador: senha de PPPoE e da Central visíveis para **todo agente**.

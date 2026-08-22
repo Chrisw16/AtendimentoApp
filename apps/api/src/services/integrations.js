@@ -5,7 +5,8 @@
 import { getDb } from '../config/db.js';
 import { lerValorKV } from './kvSeguro.js';
 import { normalizarData } from './fluxoHelpers.js';
-import { manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado } from './sgpHelpers.js';
+import { manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado,
+         mapearRespostaCliente, mapearOnuFttx } from './sgpHelpers.js';
 
 // ── CACHE DE CONFIG (5 min) ───────────────────────────────────────
 const cache = new Map();
@@ -143,6 +144,10 @@ function formatarCPFCNPJ(digits) {
 }
 
 // ── SGP: CONSULTAR CLIENTE ────────────────────────────────────────
+// Flags que só ACRESCENTAM campos à resposta (não filtram contrato) — as
+// observações do cadastro são o "cuidado, este cliente..." que o atendente
+// precisa ler antes de falar.
+const EXTRAS_CLIENTE = { exibir_observacao_cliente: '1', exibir_observacao_servicos: '1' };
 // POST /api/ura/consultacliente/ — retorna contratos com status, títulos, etc.
 export async function consultarClientes(cpfcnpj) {
   const digits = (cpfcnpj || '').replace(/\D/g, '');
@@ -156,7 +161,7 @@ export async function consultarClientes(cpfcnpj) {
   try {
     const { url } = await getSGPConfig();
     console.log(`[SGP] consultacliente: URL=${url}`);
-    raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: digits });
+    raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: digits, ...EXTRAS_CLIENTE });
     console.log(`[SGP] consultacliente (digits): ${raw?.contratos?.length ?? 0} contrato(s)`);
   } catch(e) {
     console.error('[SGP] Erro consultacliente (digits):', e.message);
@@ -164,7 +169,7 @@ export async function consultarClientes(cpfcnpj) {
   }
   if (!raw?.contratos?.length) {
     try {
-      raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: formatted });
+      raw = await sgpPost('/api/ura/consultacliente/', { cpfcnpj: formatted, ...EXTRAS_CLIENTE });
       console.log(`[SGP] consultacliente (formatted): ${raw?.contratos?.length ?? 0} contrato(s)`);
     } catch(e) {
       console.error('[SGP] Erro consultacliente (formatted):', e.message);
@@ -173,50 +178,20 @@ export async function consultarClientes(cpfcnpj) {
   }
   // Endpoint /api/ura/clientes/ não consta na doc oficial SGP — removido
 
-  const todosContratos = raw?.contratos || [];
-  if (!todosContratos.length) return { erro: true, mensagem: 'Cliente não encontrado para este CPF/CNPJ.' };
+  // Todo o mapeamento é PURO e mora em `sgpHelpers.js` — é o que permite testá-lo
+  // com o payload real da coleção oficial. Aqui só sobra o HTTP.
+  return mapearRespostaCliente(raw, digits);
+}
 
-  const primeiro = todosContratos[0];
-  const STATUS_MAP = { 1:'ativo', 2:'inativo', 3:'cancelado', 4:'suspenso', 5:'inviabilidade técnica', 6:'novo', 7:'ativo vel. reduzida' };
-  const STATUS_ORDEM = { ativo:0, novo:0, suspenso:1, 'ativo vel. reduzida':1, inativo:2, 'inviabilidade técnica':2, cancelado:3 };
-
-  function normalizarStatus(ct) {
-    const display = (ct.contratoStatusDisplay || '').toLowerCase().trim();
-    if (display) return display;
-    return STATUS_MAP[ct.contratoStatus] || 'desconhecido';
-  }
-
-  const ordenados = [...todosContratos]
-    .sort((a, b) => (STATUS_ORDEM[normalizarStatus(a)] ?? 3) - (STATUS_ORDEM[normalizarStatus(b)] ?? 3))
-    .slice(0, 8);
-
-  // O SGP devolve contato ora como STRING, ora como OBJETO
-  // (`{contato, tipoContato, inscricoes}`) — depende do cadastro. Sem
-  // normalizar aqui, o objeto atravessa a ficha inteira e o painel do agente
-  // MORRE em React #31 ("objects are not valid as a React child"), levando o
-  // chat junto. E some só para o admin: quem não tem `ver_dados_completos`
-  // recebe o objeto mascarado (`String(obj)` → `****`) e nunca vê o defeito.
-  const texto = v => (v && typeof v === 'object' ? (v.contato ?? v.valor ?? '') : (v ?? ''));
-
-  return {
-    nome:     primeiro.razaoSocial || '',
-    cpfcnpj:  primeiro.cpfCnpj    || digits,
-    // emails é array direto no contrato, não no cliente
-    email:    texto(primeiro.emails?.[0]) || '',
-    // telefones_cargos é o campo real do SGP; telefones é array de strings direto
-    fone:     texto(primeiro.telefones?.[0]) || texto(primeiro.telefones_cargos?.[0]) || '',
-    contratos: ordenados.map(ct => ({
-      id:              ct.contratoId,
-      plano:           ct.planointernet || ct.planotv || ct.servico_plano || '',
-      status:          normalizarStatus(ct),
-      titulos_abertos: ct.contratoTitulosAReceber || 0,
-      valor_aberto:    ct.contratoValorAberto     || 0,
-      cidade:          ct.endereco_cidade || (ct.popNome || '').split('/')[0].trim() || null,
-      popId:           ct.popId  || null,
-      popNome:         ct.popNome || null,
-      venc_dia:        ct.cobVencimento ? `dia ${ct.cobVencimento}` : null,
-    })),
-  };
+// ── SGP: TOPOLOGIA DA FIBRA (FTTH) ────────────────────────────────
+// GET /api/fttx/onu/list/?contrato= — OLT, slot, PON, VLAN, CTO/porta, modelo.
+// O SINAL não vem daqui: `sgpDb.diagnosticoOnu` lê Rx/Tx/online do banco do SGP
+// e já era o caminho do `consultar_onu_acs`. Não duplique.
+export async function consultarOnuFttx(contrato) {
+  const id = Number(contrato);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const raw = await sgpGet('/api/fttx/onu/list/', { contrato: String(id) });
+  return mapearOnuFttx(raw);
 }
 
 // ── SGP: SEGUNDA VIA BOLETO ───────────────────────────────────────

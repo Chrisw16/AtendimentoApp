@@ -23,7 +23,10 @@
 import { getDb } from '../config/db.js';
 import {
   consultarClientes, verificarConexao, historicoOcorrencias, consultarManutencao,
+  consultarOnuFttx, segundaViaBoleto,
 } from './integrations.js';
+import { diagnosticoOnu }  from './sgpDb.js';
+import { classificarSinal } from './sgpHelpers.js';
 import { mascararPII } from './mascarar.js';
 import { gerarCards }  from './contextCards.js';
 import { pode }        from './permissoes.js';
@@ -205,3 +208,57 @@ export const ACOES = {
   criar_chamado:        { tool: 'criar_chamado',        label: 'Abrir chamado',         capacidade: 'acoes', campos: ['conteudo', 'ocorrenciatipo'] },
   listar_planos_ativos: { tool: 'listar_planos_ativos', label: 'Planos disponíveis',    capacidade: 'acoes', campos: ['cidade'] },
 };
+
+/**
+ * O card da FIBRA: topologia + sinal.
+ *
+ * Duas fontes de propósito, e cada uma cai sozinha:
+ *  - topologia (OLT/slot/PON/VLAN/CTO) → API FTTH;
+ *  - sinal (Rx/Tx, online, uptime, última queda) → `sgpDb`, leitura direta no
+ *    banco do SGP, que é o caminho que o `consultar_onu_acs` já usava.
+ *
+ * Não entra na ficha do caminho crítico: são 2 idas ao SGP e o painel tem que
+ * abrir rápido. Carrega quando o agente ABRE o painel completo.
+ */
+export async function dadosTecnicos(contrato) {
+  const avisos = [];
+  const [topologia, sinal] = await Promise.all([
+    tentar('ONU (FTTH)', () => consultarOnuFttx(contrato), avisos),
+    tentar('sinal óptico', () => diagnosticoOnu(contrato), avisos),
+  ]);
+
+  return {
+    onu: (topologia || sinal) ? {
+      ...(topologia || {}),
+      // O serial da topologia e o do banco são o mesmo campo por caminhos
+      // diferentes; o do banco ganha porque é o que a OLT respondeu por último.
+      serial: sinal?.serial || topologia?.serial || null,
+      modelo: sinal?.modelo || topologia?.modelo || null,
+      rx_dbm: sinal?.rx_dbm ?? null,
+      tx_dbm: sinal?.tx_dbm ?? null,
+      olt_rx_dbm: sinal?.olt_rx_dbm ?? null,
+      sinal_lido_em: sinal?.sinal_lido_em || null,
+      online: sinal?.online ?? null,
+      uptime_segundos: sinal?.uptime_segundos ?? null,
+      ultima_queda_motivo: sinal?.ultima_queda_motivo || null,
+      qualidade: classificarSinal(sinal?.rx_dbm ?? null),
+    } : null,
+    avisos,
+  };
+}
+
+/**
+ * Faturas em aberto, ESTRUTURADAS.
+ *
+ * É a MESMA `segundaViaBoleto` que a tool da IA usa — não é integração
+ * paralela; o que muda é o formato: a tool devolve texto pronto para o cliente
+ * ler, e o painel precisa dos campos separados para virar botão de copiar PIX,
+ * copiar linha digitável e abrir o PDF.
+ */
+export async function faturasEmAberto(cpf, contrato) {
+  const r = await segundaViaBoleto(cpf, contrato);
+  if (!r || r.erro)                    return { boletos: [], mensagem: r?.mensagem || r?.erro || 'Não foi possível consultar as faturas.' };
+  if (r.status === 'sem_boleto')       return { boletos: [], mensagem: r.mensagem };
+  if (r.status === 'multiplos_boletos')return { boletos: r.lista, mensagem: null };
+  return { boletos: [r], mensagem: null };
+}

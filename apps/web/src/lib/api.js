@@ -149,6 +149,10 @@ export const cliente360Api = {
   capacidades: ()                => api.get('/cliente360/capacidades'),
   acao:        (convId, body)    => api.post(`/cliente360/${convId}/acao`, body),
   diagnostico: (convId)          => api.post(`/cliente360/${convId}/diagnostico`),
+  // As duas consultas caras do painel completo — fora da ficha de propósito,
+  // para a lateral do chat continuar abrindo rápido.
+  tecnico:     (convId, contrato) => api.get(`/cliente360/${convId}/tecnico${contrato ? `?contrato=${contrato}` : ''}`),
+  faturas:     (convId, contrato) => api.get(`/cliente360/${convId}/faturas${contrato ? `?contrato=${contrato}` : ''}`),
 };
 
 // ── ENDPOINTS — KNOWLEDGE HUB (FASE 7) ────────────────────────────

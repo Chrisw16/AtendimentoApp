@@ -5,8 +5,10 @@ import { useStore } from '../../store';
 import {
   Phone, Mail, MapPin, Clock, User, Tag, Wifi, WifiOff, Activity, Bot,
   ChevronDown, ExternalLink, AlertCircle, AlertTriangle, X, Stethoscope, FileText,
+  LayoutPanelLeft,
 } from 'lucide-react';
 import Button from '../ui/Button';
+import PainelSGP from './PainelSGP';
 import styles from './ConversaInfo.module.css';
 
 /**
@@ -70,6 +72,12 @@ export default function ConversaInfo({ conversa, chat }) {
   const [motivo, setMotivo] = useState('');
   const [filas, setFilas]   = useState([]);
   const [saida, setSaida]   = useState(null);   // resultado da última ação/diagnóstico
+  const [painelAberto, setPainelAberto] = useState(false);
+  // Qual contrato o painel está olhando. `null` = o principal da ficha. Zera ao
+  // trocar de conversa, senão o contrato do cliente anterior atravessa.
+  const [contratoId, setContratoId] = useState(null);
+
+  useEffect(() => { setContratoId(null); setPainelAberto(false); setSaida(null); }, [conversa.id]);
 
   useEffect(() => {
     if (conversa.status === 'encerrada') return;
@@ -101,7 +109,7 @@ export default function ConversaInfo({ conversa, chat }) {
   });
 
   const acaoMut = useMutation({
-    mutationFn: (acao) => cliente360Api.acao(conversa.id, { acao }),
+    mutationFn: (acao) => cliente360Api.acao(conversa.id, { acao, contrato: contratoId || undefined }),
     onSuccess:  (r) => { setSaida({ titulo: r.acao, texto: r.resultado }); refetch(); },
     onError:    (e) => toast(e.message, 'error'),
   });
@@ -122,7 +130,10 @@ export default function ConversaInfo({ conversa, chat }) {
   };
 
   const id  = ficha?.identidade || {};
-  const ctr = ficha?.contrato_principal;
+  // O seletor não custa request: a ficha já traz os contratos inteiros (com
+  // endereço e serviço), então trocar é só re-renderizar.
+  const ctr = (contratoId && ficha?.contratos?.find(c => String(c.id) === String(contratoId)))
+           || ficha?.contrato_principal;
 
   return (
     <aside className={styles.panel}>
@@ -200,7 +211,29 @@ export default function ConversaInfo({ conversa, chat }) {
             </>
           )}
           {ficha?.contratos?.length > 1 && (
-            <p className={styles.nota}>+{ficha.contratos.length - 1} outro(s) contrato(s).</p>
+            <>
+              <label className={styles.filaLabel} htmlFor="contrato-sel">Contrato</label>
+              <select
+                id="contrato-sel"
+                className={styles.filaSelect}
+                value={ctr?.id ?? ''}
+                onChange={e => setContratoId(e.target.value)}
+              >
+                {ficha.contratos.map(c => (
+                  <option key={c.id} value={c.id}>#{c.id} — {c.status} — {c.plano || 'sem plano'}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {ficha && (
+            <Button
+              variant="ghost" size="sm" icon={LayoutPanelLeft}
+              className={styles.acaoBtn}
+              onClick={() => setPainelAberto(true)}
+            >
+              Painel completo
+            </Button>
           )}
         </Section>
 
@@ -335,6 +368,19 @@ export default function ConversaInfo({ conversa, chat }) {
           </Section>
         )}
       </div>
+
+      {painelAberto && (
+        <PainelSGP
+          conversa={conversa}
+          ficha={ficha}
+          contrato={ctr}
+          contratos={ficha?.contratos || []}
+          onTrocarContrato={c => setContratoId(c?.id ?? null)}
+          onFechar={() => setPainelAberto(false)}
+          caps={caps}
+          onAcao={(acao) => { acaoMut.mutate(acao); setPainelAberto(false); }}
+        />
+      )}
     </aside>
   );
 }

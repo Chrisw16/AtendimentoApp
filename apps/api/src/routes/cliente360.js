@@ -5,6 +5,8 @@
  * GET  /api/cliente360/:conversaId?diagnostico=1 — inclui conexão e chamados (lento)
  * POST /api/cliente360/:conversaId/acao         — executa UMA tool do catálogo
  * POST /api/cliente360/:conversaId/diagnostico  — roda as tools de leitura juntas
+ * GET  /api/cliente360/:conversaId/tecnico      — fibra: ONU, topologia e sinal
+ * GET  /api/cliente360/:conversaId/faturas      — boletos em aberto, estruturados
  * GET  /api/cliente360/capacidades              — o que ESTE agente pode
  *
  * Toda ação passa pelo Tool Registry (`executarTool`), com `actorType: human`
@@ -17,7 +19,7 @@ import { getDb } from '../config/db.js';
 import { conversaRepo }   from '../repositories/conversaRepository.js';
 import { auditar, ipDe }  from '../services/auditoria.js';
 import { pode, capacidadesDe } from '../services/permissoes.js';
-import { montarFicha, identificar, contratosPermitidos, ACOES, TOOLS_DIAGNOSTICO } from '../services/cliente360.js';
+import { montarFicha, identificar, contratosPermitidos, dadosTecnicos, faturasEmAberto, ACOES, TOOLS_DIAGNOSTICO } from '../services/cliente360.js';
 import { executarTool }   from '../services/iaTools.js';
 
 export const cliente360Router = Router();
@@ -131,4 +133,48 @@ cliente360Router.post('/:conversaId/diagnostico', asyncHandler(async (req, res) 
   });
 
   res.json({ passos, falhas: passos.filter(p => !p.ok).length });
+}));
+
+/**
+ * Fibra: topologia da ONU + sinal óptico.
+ *
+ * Rota SEPARADA da ficha de propósito: são 2 idas ao SGP e a lateral do chat
+ * precisa abrir rápido. Quem chama é o painel completo, no clique do agente.
+ */
+cliente360Router.get('/:conversaId/tecnico', asyncHandler(async (req, res) => {
+  if (!pode(req.agente, 'diagnostico')) throw new HttpError(403, 'Sem permissão para diagnóstico');
+  const { conversa, ctx } = await contextoDa(req, req.query.contrato || null);
+  if (!ctx.cliente.contrato) return res.json({ onu: null, avisos: ['Cliente sem contrato identificado nesta conversa.'] });
+
+  auditar({
+    actorType: 'human', actorId: req.agente.id, action: 'cliente360_tecnico',
+    conversaId: conversa.id, ip: ipDe(req),
+  });
+
+  res.json(await dadosTecnicos(ctx.cliente.contrato));
+}));
+
+/**
+ * Boletos em aberto com PIX, linha digitável e PDF separados.
+ *
+ * A ação `segunda_via_boleto` continua existindo e continua sendo o caminho
+ * quando o agente quer MANDAR o boleto — aquela passa por `executarTool` e é
+ * auditada como tool. Esta é LEITURA para a tela, sobre a mesma integração.
+ */
+cliente360Router.get('/:conversaId/faturas', asyncHandler(async (req, res) => {
+  if (!pode(req.agente, 'financeiro')) throw new HttpError(403, 'Sem permissão para o financeiro');
+  const { conversa, ctx } = await contextoDa(req, req.query.contrato || null);
+  if (!ctx.cliente.cpf || !ctx.cliente.contrato) return res.json({ boletos: [], mensagem: 'Cliente não identificado nesta conversa.' });
+
+  auditar({
+    actorType: 'human', actorId: req.agente.id, action: 'cliente360_faturas',
+    conversaId: conversa.id, ip: ipDe(req),
+  });
+
+  try {
+    res.json(await faturasEmAberto(ctx.cliente.cpf, ctx.cliente.contrato));
+  } catch (err) {
+    // O painel nunca derruba o atendimento: SGP fora vira aviso, não 500.
+    res.json({ boletos: [], mensagem: `Não foi possível consultar as faturas: ${err.message}` });
+  }
 }));
