@@ -41,7 +41,7 @@ A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
 | 12 | Conversation Events + Analytics | ⬜ | — |
 | 13 | Observabilidade e hardening | ⬜ | — |
 
-Suítes ao fechar a FASE 10: **407 testes puros · 201 de integração**.
+Suítes ao fechar a FASE 10: **407 testes puros · 209 de integração**.
 Migrations: **16 arquivos, até a 017** (014 `flow_executions`, 015 `audit_log`,
 016 `inbox`/`outbox`/`jobs`, 017 `filas`/`agentes_filas`).
 
@@ -216,6 +216,24 @@ o que a IA já consultou (para ele não repetir) e onde parou o procedimento.
 tela de cadastro — a API existia e o seed criava cinco, mas o seed **não roda no
 deploy**, então em produção a lista nascia vazia e sem porta de entrada. Agora
 há uma aba **Categorias** em Conhecimento.
+
+## ⚠️ O `seed` nunca rodou em produção (achado em 2026-08-22)
+
+O boot aplica **migrations e mais nada**. Então filas (F5), categorias de
+conhecimento (F7), playbooks (F8) e perfis de IA (F9) foram entregues e **nunca
+existiram em produção** — as telas abriam vazias sem que nada estivesse
+quebrado, que é o pior tipo de defeito: silencioso.
+
+Corrigido pela **migration 022**, que semeia os catálogos no boot (precedente: a
+005 semeia `prompts_ia`). Resolve esta instância e toda revenda futura, sem
+ninguém precisar lembrar de rodar comando.
+
+**O que ela NÃO faz, de propósito:** criar usuário, canal, fluxo ou artigo de
+conhecimento. Rodar o `seed.js` completo num ambiente que já atende inseriria um
+**fluxo legado com `ativo: true`** — e o motor escolhe o fluxo com
+`where({ativo:true}).first()` **sem `ORDER BY`**, então o Postgres poderia
+entregar esse fluxo para toda conversa nova. O `seed.js` ganhou guarda, mas a
+regra que fica é: **catálogo novo se semeia por migration**.
 
 ## FASE 10 — entregue (2026-08-22)
 
