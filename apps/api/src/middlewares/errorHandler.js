@@ -3,6 +3,14 @@
  * Captura todos os erros lançados nas rotas e retorna JSON padronizado
  */
 export function errorHandler(err, req, res, _next) {
+  // §139: só ≥500. 4xx é o cliente errando (CPF inválido, rota errada) — subir
+  // isso para o rastreador afogaria o que importa.
+  if ((err?.status || err?.statusCode || 500) >= 500) {
+    import('../services/erros.js')
+      .then(({ registrar }) => registrar(err, { origem: 'rota', rota: `${req.method} ${req.path}` }))
+      .catch(() => {});
+  }
+
   const status = err.status || err.statusCode || 500;
   const message = err.message || 'Erro interno do servidor';
 

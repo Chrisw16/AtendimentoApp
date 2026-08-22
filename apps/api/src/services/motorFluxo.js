@@ -47,6 +47,9 @@ export function processarConversa(conversa, mensagemCliente, opts = {}) {
 }
 
 async function processarConversaInterno(conversa, mensagemCliente, opts = {}) {
+  // §136: o campo que amarra o log ao atendimento. `anotar` é no-op fora de um
+  // escopo, então o sandbox e os testes não precisam saber que isto existe.
+  import('./log.js').then(({ anotar }) => anotar({ conversa_id: conversa.id })).catch(() => {});
   const db      = opts.db      || getDb();
   const estados = opts.estados || estadoStore;      // sandbox/teste injeta um Map isolado
   const enviar  = opts.enviar  || enviarResposta;   // sandbox captura em vez de enviar no WhatsApp

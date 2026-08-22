@@ -212,6 +212,13 @@ export const analyticsApi = {
   nps:   (dias = 30, corte) => api.get(`/analytics/nps?dias=${dias}${corte ? `&corte=${corte}` : ''}`),
 };
 
+// ── ENDPOINTS — SAÚDE DO SISTEMA (FASE 13) ────────────────────────
+export const saudeApi = {
+  saude:     ()          => api.get('/monitor/saude'),
+  erros:     (params={}) => api.get('/monitor/erros?' + new URLSearchParams(params)),
+  marcarErro:(id, status)=> api.put(`/monitor/erros/${id}`, { status }),
+};
+
 // ── ENDPOINTS — AGENTES ───────────────────────────────────────────
 export const promptsApi = {
   list:      ()           => api.get('/prompts'),

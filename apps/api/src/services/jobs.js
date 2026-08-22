@@ -73,6 +73,12 @@ export async function processarVencidos({ db = getDb(), limite = 10, aoReivindic
 }
 
 async function executar(job, db) {
+  const { comContexto } = await import('./log.js');
+  return comContexto({ correlation_id: String(job.id), origem_entrada: 'job', job_tipo: job.tipo },
+    () => _executar(job, db));
+}
+
+async function _executar(job, db) {
   try {
     const { conversaId, noId } = job.payload || {};
 

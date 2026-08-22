@@ -6,7 +6,7 @@ last_updated: 2026-08-22
 status: active
 priority: p1
 knowledge_refs: ["systems/maxxi/overview"]
-related: ["[[FASE 12 — Conversation Events + Analytics]]", "[[FASE 11 — Quality AI V1]]", "[[Knowledge Hub]]", "[[Playbook Engine]]", "[[Cliente 360 e Copiloto]]", "[[FASE 10 — Copiloto V1]]", "[[FASE 9 — AI Runtime V1]]", "[[FASE 8 — Playbook Engine]]", "[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
+related: ["[[FASE 13 — Observabilidade e hardening]]", "[[FASE 12 — Conversation Events + Analytics]]", "[[FASE 11 — Quality AI V1]]", "[[Knowledge Hub]]", "[[Playbook Engine]]", "[[Cliente 360 e Copiloto]]", "[[FASE 10 — Copiloto V1]]", "[[FASE 9 — AI Runtime V1]]", "[[FASE 8 — Playbook Engine]]", "[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 aliases: ["status do plano", "onde estamos", "roadmap V1.0", "progresso das fases"]
 tags: [work, task, plano-evolucao, status, roadmap]
 ---
@@ -19,7 +19,7 @@ detalhe; aqui fica só o quadro.
 
 ## Placar
 
-**12 de 13 fases entregues.** Falta só a 13 (observabilidade). As 0–5 estão **em produção** (a FASE 5 confirmada
+**✅ 13 de 13 fases entregues.** O Plano de Evolução V1.0 está completo. As 0–5 estão **em produção** (a FASE 5 confirmada
 no ar em 2026-08-22 14:04 UTC — `GET /api/atendimento/filas` em 401 nas 12 de
 12 requisições, e `/health/ready` em 200, provando as migrations até a 017).
 A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
@@ -39,7 +39,7 @@ A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
 | 10 | Copilot V1 | ✅ | [[FASE 10 — Copiloto V1]] |
 | 11 | Quality AI V1 | ✅ | [[FASE 11 — Quality AI V1]] |
 | 12 | Conversation Events + Analytics | ✅ | [[FASE 12 — Conversation Events + Analytics]] |
-| 13 | Observabilidade e hardening | ⬜ | — |
+| 13 | Observabilidade e hardening | ✅ | [[FASE 13 — Observabilidade e hardening]] |
 
 Suítes ao fechar a FASE 10: **407 testes puros · 209 de integração**.
 Migrations: **16 arquivos, até a 017** (014 `flow_executions`, 015 `audit_log`,
@@ -84,6 +84,9 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | ~~FASE 3~~ | ~~Mascarar CPF/telefone na UI~~ | ✅ FASE 6 — e mais forte: mascarado **no servidor**, não na tela |
 | FASE 6 | Cliente multi-contrato: a ação age sempre no contrato principal | falta a UI de escolha (o backend já valida) |
 | FASE 6 | Sem endereço, tags e tempo de relacionamento | o `/api/ura/consultacliente/` não devolve; falta mapear endpoint |
+| FASE 13 | Sem OpenTelemetry/Prometheus e sem série temporal de métricas | 1 container, 1 processo, sem scraper |
+| FASE 13 | Sem alerta ativo (o §140 pede tela, não alerta) | decisão de produto |
+| FASE 13 | O drill de restore **nunca foi executado** | a tabela do runbook espera a primeira data |
 | FASE 12 | `analytics_config` (custos unitários) só se configura pela API — falta tela | senão repete o defeito das categorias da FASE 7 |
 | FASE 12 | Conversão comercial não existe: a venda fecha no SGP | o funil vai até o pré-cadastro, e o rótulo diz isso |
 | FASE 11 | Sem supervisão em tempo real (1º nível do §89) — só auditoria pós-atendimento | quando houver volume |
@@ -220,6 +223,26 @@ o que a IA já consultou (para ele não repetir) e onde parou o procedimento.
 tela de cadastro — a API existia e o seed criava cinco, mas o seed **não roda no
 deploy**, então em produção a lista nascia vazia e sem porta de entrada. Agora
 há uma aba **Categorias** em Conhecimento.
+
+## FASE 13 — entregue (2026-08-22) · PLANO COMPLETO
+
+Detalhe em [[FASE 13 — Observabilidade e hardening]]. Design revisado por agente
+especialista contra o plano antes de codar.
+
+O truque que evitou reescrever ~200 chamadas de log: **substituir o `console` no
+boot**. E a peça que fez o correlation ID valer: o `x-request-id` do webhook
+**morre no 200** — o turno roda depois, no worker —, então a âncora durável é o
+**`inbox.id`**, e o `AsyncLocalStorage` leva o contexto por toda a cadeia de
+`await` sem uma única edição.
+
+**Existe UM disjuntor, e é o do SGP** — o único cujo timeout (8–12 s) é
+aguardado dentro do turno do cliente. Anthropic não (429 pede backoff),
+Evolution não (o outbox já é o disjuntor).
+
+E os testes pegaram um defeito que uma tela de saúde não pode ter: a query de
+fila usava `criado_em` para as três tabelas, mas **`inbox` usa `recebido_em`** —
+o Postgres recusava a query, o `catch` devolvia lista vazia e a tela diria "fila
+normal" enquanto a DLQ enchia.
 
 ## FASE 12 — entregue (2026-08-22)
 

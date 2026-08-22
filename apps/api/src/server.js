@@ -1,5 +1,11 @@
 import 'dotenv/config';
 import express from 'express';
+// FASE 13: instalado ANTES de tudo — `console.*` passa a emitir JSON com
+// correlation ID e PII redigida, sem que nenhum dos ~200 call sites mude.
+import { randomUUID } from 'node:crypto';
+import { instalarLogEstruturado, comContexto, anotar } from './services/log.js';
+instalarLogEstruturado();
+
 import helmet from 'helmet';
 import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
@@ -51,11 +57,22 @@ app.use(rateLimit({ windowMs: 60000, max: 200, standardHeaders: true, legacyHead
 // `verify` guarda o corpo CRU: a assinatura X-Hub-Signature-256 da Meta é o
 // HMAC dos bytes originais — recalcular sobre o objeto re-serializado falha
 // (ordem de chave, unicode). Só webhook usa; o custo é uma referência a buffer.
+// §137 — o escopo de correlação abre aqui e segue a cadeia de `await` sozinho:
+// rota → repositório → motor → tool → SGP herdam o contexto sem nenhuma edição.
+app.use((req, res, next) => {
+  const id = req.headers['x-request-id'] || randomUUID();
+  res.setHeader('x-request-id', id);
+  comContexto({ correlation_id: id, rota: `${req.method} ${req.path}` }, next);
+});
+
 app.use(express.json({ limit: '10mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 
 // Health check — SEMPRE responde, independente do banco (liveness)
 app.get('/health', (_req, res) => res.json({ status: 'ok', version: '2.0.0', ts: new Date().toISOString() }));
+// §134 pede `live`; `/health` já era isso desde a FASE 3. Alias em vez de rota
+// nova, para não haver duas verdades sobre liveness.
+app.get('/health/live', (_req, res) => res.json({ status: 'ok', version: '2.0.0', ts: new Date().toISOString() }));
 
 // Readiness — 503 até as migrations terminarem, 503 PERMANENTE se falharem.
 // Antes, uma migration quebrada só imprimia no console e o app seguia
@@ -65,10 +82,50 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', version: '2.0.0', ts:
 // `app.get('*')` casa `/health/ready`, a condição `!path.startsWith('/health')`
 // é falsa e nenhuma resposta seria enviada — o healthcheck estouraria em
 // timeout em vez de receber 503.
+// §139: sem estes handlers, uma promessa rejeitada derruba o processo em
+// silêncio — e o Coolify reinicia sem que ninguém saiba o que aconteceu.
+process.on('unhandledRejection', (motivo) => {
+  const err = motivo instanceof Error ? motivo : new Error(String(motivo));
+  console.error('[Processo] unhandledRejection:', err.message);
+  import('./services/erros.js').then(({ registrar }) => registrar(err, { origem: 'processo' })).catch(() => {});
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Processo] uncaughtException:', err.message);
+  import('./services/erros.js').then(({ registrar }) => registrar(err, { origem: 'processo' })).catch(() => {});
+});
+
 let prontidao = { pronto: false, motivo: 'migrations em andamento' };
 app.get('/health/ready', (_req, res) => {
   if (prontidao.pronto) return res.json({ status: 'ready' });
   res.status(503).json({ status: 'not_ready', motivo: prontidao.motivo });
+});
+
+/**
+ * §134 — dependências. Três decisões que a tornam segura:
+ *
+ *  1. **Sempre 200.** O veredito vai no corpo. 503 aqui é convite para alguém
+ *     pendurar uma sonda — e o §133 diz que SGP fora é modo DEGRADADO (o chat
+ *     humano segue); um readiness que reprova por SGP mataria um container que
+ *     estava atendendo. `/health/ready` e o HEALTHCHECK do Dockerfile ficam
+ *     intocados.
+ *  2. **Admin.** É o backend da tela de Saúde, não sonda pública: um endpoint
+ *     aberto que toca SGP/Anthropic é DoS pago por nós.
+ *  3. **Passivo por default.** O status vem do tráfego REAL (telemetria e
+ *     filas), não de ping. "O SGP respondeu 500 para o cliente" é mais
+ *     verdadeiro que "a URL de health respondeu".
+ *
+ * Fica aqui, ANTES do bloco estático, pelo mesmo motivo do `/health/ready`.
+ */
+app.get('/health/dependencies', async (req, res, next) => {
+  // Auth por import dinâmico: os middlewares moram em `middlewares/auth.js` e
+  // esta rota precisa ficar ANTES do bloco estático, acima de onde os routers
+  // são montados.
+  const { authMiddleware, adminMiddleware } = await import('./middlewares/auth.js');
+  authMiddleware(req, res, () => adminMiddleware(req, res, async () => {
+    const { dependencias, veredito } = await import('./services/saude.js');
+    const d = await dependencias();
+    res.json({ ...d, veredito: veredito(d) });
+  }));
 });
 
 // O readiness gate o healthcheck do container, mas o Express começa a aceitar

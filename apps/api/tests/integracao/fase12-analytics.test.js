@@ -24,7 +24,19 @@ describe('FASE 12 — Analytics', { skip: motivoSkip() }, () => {
     analytics = await import('../../src/services/analytics.js');
   });
   after(async () => { await db?.destroy?.(); });
-  beforeEach(async () => { await limpar(db, TABELAS); });
+  beforeEach(async () => {
+    await limpar(db, TABELAS);
+    // A config vem da migration 025, mas OUTRAS suítes truncam `sistema_kv` —
+    // e a ordem entre arquivos não é garantida. O teste semeia a própria régua
+    // em vez de depender de um estado global que ele não controla.
+    await db('sistema_kv').insert({
+      chave: 'analytics_config',
+      valor: JSON.stringify({
+        janela_recontato_h: 24, custo_chamado: 0, custo_atendimento_humano: 0,
+        precos_llm: { 'claude-haiku-4-5-20251001': { in: 1.0, out: 5.0 } },
+      }),
+    }).onConflict('chave').merge();
+  });
 
   /** Conversa encerrada, com ou sem fala de agente. */
   const encerrada = async ({ humano = false, desfecho = 'resolvido', telefone = null, min = 10 } = {}) => {
