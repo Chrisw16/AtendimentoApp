@@ -220,9 +220,12 @@ export const NODE_TYPES = {
     group: 'acao',
     color: '#ff6b35',
     // `transferido` = por onde a automação RETOMA quando o agente devolve
-    // (FASE 1). `sem_agente` saiu: detectar fila sem agente livre é FASE 5.
+    // (FASE 1). `sem_agente` seguiu FORA na FASE 5, de propósito: o horário por
+    // fila cobre o caso real ("ninguém atende de madrugada"), e uma porta a
+    // mais obrigaria todo fluxo existente a ligá-la. `cfg.fila` guarda o SLUG
+    // da fila — o motor resolve em `resolverFila`.
     portas: ['transferido', 'fora_horario'],
-    descricao: 'Transfere para atendimento humano',
+    descricao: 'Transfere para uma fila de atendimento humano',
   },
   enviar_email: {
     label: 'Enviar e-mail',

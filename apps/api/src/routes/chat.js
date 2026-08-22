@@ -5,10 +5,12 @@ import { conversaRepo }   from '../repositories/conversaRepository.js';
 import { mensagemRepo }   from '../repositories/mensagemRepository.js';
 import { addClient, removeClient, broadcast, sendToAgente } from '../services/sseManager.js';
 import { getDb } from '../config/db.js';
-import { calcularUrgencia, detectarPalavrasCriticas, marcarAguardando, limparAguardando, getPosicaoNaFila, getTotalNaFila } from '../services/filaService.js';
+import { calcularUrgencia, detectarPalavrasCriticas, marcarAguardando, limparAguardando, getPosicaoNaFila, getTotalNaFila, filasDoAgente, contarAtivas, transferirParaFila, assumirConversa } from '../services/filaService.js';
+import { conversaVisivel, podeAssumir } from '../services/filasHelpers.js';
 import { processarMensagemCliente, analisarConversaEncerrada } from '../services/supervisoraIA.js';
 import { evolutionEnviarTexto } from '../services/integrations.js';
 import { tgEnviarTexto } from '../services/telegram.js';
+import { auditar, ipDe } from '../services/auditoria.js';
 
 export const chatRouter = Router();
 chatRouter.use(authMiddleware);
@@ -115,11 +117,22 @@ chatRouter.post('/conversas/:id/mensagens', asyncHandler(async (req, res) => {
 
 // ── AÇÕES NA CONVERSA ─────────────────────────────────────────────
 chatRouter.post('/conversas/:id/assumir', asyncHandler(async (req, res) => {
-  const db = getDb();
-  const [conv] = await db('conversas').where({ id: req.params.id })
-    .update({ status: 'ativa', agente_id: req.agente.id, aguardando_desde: null, assumido_em: db.fn.now(), atualizado: db.fn.now() })
-    .returning('*');
-  if (!conv) throw new HttpError(404, 'Conversa não encontrada');
+  const db  = getDb();
+  const ehAdmin = req.agente.role === 'admin';
+
+  const agente = await db('agentes').select('capacidade', 'nome').where({ id: req.agente.id }).first();
+  if (!podeAssumir(agente?.capacidade, await contarAtivas(req.agente.id))) {
+    throw new HttpError(409, `Capacidade cheia (${agente.capacidade} conversas simultâneas)`);
+  }
+
+  // A corrida entre dois cliques e a regra de quem pode tomar conversa alheia
+  // moram em `filaService.assumirConversa` — testadas contra Postgres.
+  const { conv, erro, donoId } = await assumirConversa(req.params.id, { agenteId: req.agente.id, ehAdmin });
+  if (erro === 'nao_encontrada') throw new HttpError(404, 'Conversa não encontrada');
+  if (erro === 'ocupada') {
+    const dono = await db('agentes').select('nome').where({ id: donoId }).first();
+    throw new HttpError(409, `Conversa já está com ${dono?.nome || 'outro agente'}`);
+  }
 
   await limparAguardando(req.params.id);
   auditar({ actorType: 'human', actorId: req.agente.id, action: 'conversa_assumida', conversaId: conv.id, ip: ipDe(req) });
@@ -171,24 +184,53 @@ chatRouter.post('/conversas/:id/transferir', asyncHandler(async (req, res) => {
   res.json(conv);
 }));
 
+chatRouter.post('/conversas/:id/transferir-fila', asyncHandler(async (req, res) => {
+  const { fila_id } = req.body || {};
+  if (!fila_id) throw new HttpError(400, 'fila_id obrigatório');
+
+  const db   = getDb();
+  const fila = await db('filas').where({ id: fila_id }).first();
+  if (!fila) throw new HttpError(404, 'Fila não encontrada');
+  if (!fila.ativa) throw new HttpError(409, 'Fila inativa');
+
+  const conv = await transferirParaFila(req.params.id, fila.id);
+  if (!conv) throw new HttpError(404, 'Conversa não encontrada');
+
+  auditar({ actorType: 'human', actorId: req.agente.id, action: 'conversa_transferida_fila', conversaId: conv.id, after: { fila: fila.slug }, ip: ipDe(req) });
+  await mensagemRepo.criar({ conversa_id: conv.id, origem: 'sistema', tipo: 'texto', texto: `🔄 Transferida para a fila ${fila.nome}` });
+
+  // Volta para a fila de espera: quem estava atendendo perde a conversa, e o
+  // broadcast é para TODO mundo justamente porque agora ela é da fila, não de
+  // um agente. `sendToAgente` aqui deixaria a conversa invisível até o F5.
+  broadcast('conversa_atualizada', { ...conv, fila_nome: fila.nome, urgencia: calcularUrgencia(conv.aguardando_desde, conv.prioridade, fila && { atencao_min: fila.sla_atencao_min, critico_min: fila.sla_critico_min }) });
+  res.json(conv);
+}));
+
 // ── FILA ──────────────────────────────────────────────────────────
 chatRouter.get('/fila', asyncHandler(async (req, res) => {
   const db = getDb();
   const fila = await db('conversas')
     .leftJoin('agentes', 'conversas.agente_id', 'agentes.id')
+    .leftJoin('filas', 'filas.id', 'conversas.fila_id')
     .where({ 'conversas.status': 'aguardando' })
     .whereNotNull('conversas.aguardando_desde')
     .orderByRaw('conversas.prioridade DESC, conversas.aguardando_desde ASC')
-    .select(['conversas.*', 'agentes.nome as agente_nome']);
+    .select(['conversas.*', 'agentes.nome as agente_nome', 'filas.nome as fila_nome',
+      'filas.cor as fila_cor', 'filas.sla_atencao_min as atencao_min', 'filas.sla_critico_min as critico_min']);
 
-  const total = fila.length;
-  const enriched = fila.map((c, i) => ({
+  // FASE 5: a posição na fila é calculada ANTES do filtro de visibilidade. O
+  // cliente é o 7º da fila real, não o 3º da fatia que este agente enxerga —
+  // dizer "3º" para quem vai esperar 7 é pior que não dizer nada.
+  const comPos = fila.map((c, i) => ({
     ...c,
     pos_na_fila: i + 1,
-    urgencia: calcularUrgencia(c.aguardando_desde, c.prioridade),
+    urgencia: calcularUrgencia(c.aguardando_desde, c.prioridade, c),
   }));
 
-  res.json({ fila: enriched, total });
+  const agente   = { role: req.agente.role, filaIds: await filasDoAgente(req.agente.id) };
+  const visiveis = comPos.filter(c => conversaVisivel(c, agente));
+
+  res.json({ fila: visiveis, total: visiveis.length, total_geral: comPos.length });
 }));
 
 // ── NOTAS INTERNAS ────────────────────────────────────────────────

@@ -207,3 +207,13 @@
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
+
+/* ── FASE 5: transferência para fila ── */
+.filaWrap { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.filaLabel { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-tertiary); }
+.filaSelect {
+  height: 30px; padding: 0 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); background: var(--bg-elevated);
+  color: var(--text-primary); font-size: var(--text-xs); cursor: pointer; width: 100%;
+}
+.filaAtual { font-size: 11px; color: var(--text-tertiary); margin: 2px 0 0; }

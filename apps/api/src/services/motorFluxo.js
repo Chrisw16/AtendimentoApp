@@ -18,6 +18,7 @@ import {
   // `canais/evolution.js`, que as recebe por injeção.
 } from './integrations.js';
 import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, camposIaResponde, TOOLS_PADRAO, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
+import { dentroDoHorario } from './filasHelpers.js';
 import { criarFilaPorChave } from './filaPorChave.js';
 import { estadoStore, ehUuid } from './estadoStore.js';
 
@@ -629,14 +630,17 @@ async function processarNo(no, ctx) {
 
     // ── AÇÕES ─────────────────────────────────────────────────────
     case 'transferir_agente': {
-      const horario = await verificarHorario(ctx.db);
+      // No sandbox não se toca no banco de filas: `cfg.fila` só é resolvida
+      // para saber o horário, e mesmo isso é leitura (permitida em sandbox).
+      const fila    = await resolverFila(ctx.db, cfg.fila);
+      const horario = await verificarHorario(ctx.db, fila);
       if (!horario.dentro) {
         const msg = cfg.msg_fora || 'Fora do horário de atendimento.';
         ctx.respostas.push({ tipo: 'texto', texto: msg });
         return avancar('fora_horario');
       }
       if (!ctx.sandbox) {
-        await conversaRepo.atualizar(ctx.conversa.id, { status: 'aguardando', aguardando_desde: new Date().toISOString(), agente_id: null });
+        await conversaRepo.atualizar(ctx.conversa.id, { status: 'aguardando', aguardando_desde: new Date().toISOString(), agente_id: null, fila_id: fila?.id || null });
         broadcast('conversa_atualizada', await conversaRepo.porId(ctx.conversa.id));
       }
       // Ponto de retorno para quando o agente devolver a conversa à automação
@@ -1282,15 +1286,28 @@ async function obterHistorico(conversaId, db, limit = 8) {
     .then(rows => rows.reverse()).catch(() => []);
 }
 
-async function verificarHorario(db) {
+/**
+ * FASE 5: o horário da FILA manda; sem fila — ou fila sem horário próprio — vale
+ * o global do `sistema_kv`. `?? ` e não `||` de propósito: `{ativo:false}` é uma
+ * escolha ("esta fila não fecha"), não ausência de configuração.
+ *
+ * A regra em si mora em `filasHelpers.dentroDoHorario`, que é puro e testado —
+ * aqui sobrou só a leitura do banco.
+ */
+async function verificarHorario(db, fila = null) {
+  if (fila?.horario != null) return { dentro: dentroDoHorario(fila.horario) };
   const kv = await db('sistema_kv').where({ chave: 'horario' }).first().catch(() => null);
-  if (!kv?.valor) return { dentro: true };
-  const h = typeof kv.valor === 'string' ? JSON.parse(kv.valor) : kv.valor;
-  if (!h?.ativo) return { dentro: true };
-  const now = new Date();
-  const dia = now.getDay();
-  const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  const dentro = (h.dias || []).includes(dia) && hhmm >= (h.inicio || '08:00') && hhmm <= (h.fim || '18:00');
-  return { dentro };
+  return { dentro: dentroDoHorario(kv?.valor) };
+}
+
+/** `cfg.fila` guarda o SLUG da fila (é o que a tela grava); aceita id por via das dúvidas. */
+async function resolverFila(db, ref) {
+  if (!ref) return null;
+  const col  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref) ? 'id' : 'slug';
+  const fila = await db('filas').where({ [col]: ref }).first().catch(() => null);
+  // Fila apagada/renomeada não pode engolir a transferência: degrada para "sem
+  // fila", que é visível para todos os agentes.
+  if (!fila) console.warn(`[Motor] fila "${ref}" não existe — transferindo sem fila`);
+  return fila || null;
 }
 

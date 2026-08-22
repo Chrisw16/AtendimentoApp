@@ -8,6 +8,10 @@ import { estadoStore } from '../services/estadoStore.js';
 const CONVERSA_FIELDS = [
   'conversas.*',
   'agentes.nome as agente_nome',
+  // FASE 5: sem isto a tela só saberia o `fila_id` (um uuid) e teria de buscar
+  // o nome de novo. Quem usar CONVERSA_FIELDS precisa dos DOIS leftJoin.
+  'filas.nome as fila_nome',
+  'filas.cor as fila_cor',
 ];
 
 export const conversaRepo = {
@@ -16,6 +20,7 @@ export const conversaRepo = {
     const db = getDb();
     let q = db('conversas')
       .leftJoin('agentes', 'conversas.agente_id', 'agentes.id')
+      .leftJoin('filas',   'conversas.fila_id',   'filas.id')
       .select(CONVERSA_FIELDS)
       .orderBy('conversas.atualizado', 'desc')
       .limit(limit)
@@ -32,6 +37,7 @@ export const conversaRepo = {
   async porId(id) {
     return getDb()('conversas')
       .leftJoin('agentes', 'conversas.agente_id', 'agentes.id')
+      .leftJoin('filas',   'conversas.fila_id',   'filas.id')
       .select(CONVERSA_FIELDS)
       .where('conversas.id', id)
       .first();

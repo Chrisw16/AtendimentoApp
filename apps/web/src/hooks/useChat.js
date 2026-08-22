@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { chatApi, createSSE } from '../lib/api';
+import { chatApi, filasApi, createSSE } from '../lib/api';
 import { useChatStore } from '../store/chat';
 import { useStore } from '../store';
 
@@ -138,6 +138,32 @@ export function useChat() {
     }
   }, [store.conversaAtiva]);
 
+  // FASE 5: pega a próxima da fila. 204 = fila vazia, e o hook devolve null
+  // em vez de estourar — "não há ninguém esperando" não é erro.
+  const assumirProximo = useCallback(async (filaId = null) => {
+    try {
+      const conv = await filasApi.assumirProximo(filaId);
+      if (!conv?.id) { toast('Nenhuma conversa esperando', 'info'); return null; }
+      store.upsertConversa(conv);
+      store.setConversaAtiva(conv.id);
+      return conv;
+    } catch (err) {
+      toast(err.message, 'error');
+      return null;
+    }
+  }, []);
+
+  const transferirFila = useCallback(async (conversaId, filaId) => {
+    try {
+      const conv = await chatApi.transferirFila(conversaId, { fila_id: filaId });
+      store.upsertConversa(conv);
+      if (store.conversaAtiva === conversaId) store.setConversaAtiva(null);
+      toast('Conversa devolvida para a fila', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }, [store.conversaAtiva]);
+
   const transferir = useCallback(async (conversaId, agenteId) => {
     try {
       const conv = await chatApi.transferir(conversaId, { agente_id: agenteId });
@@ -153,6 +179,8 @@ export function useChat() {
     selecionarConversa,
     enviarMensagem,
     assumir,
+    assumirProximo,
+    transferirFila,
     devolverIA,
     encerrar,
     transferir,

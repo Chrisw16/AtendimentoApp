@@ -33,6 +33,24 @@
 
 .headerActions { display: flex; gap: 4px; }
 
+/* FASE 5 — "Assumir próxima da fila". Mesma métrica do .modeBtn ao lado. */
+.proximaBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-border, var(--border-strong));
+  background: var(--bg-elevated);
+  color: var(--accent, var(--text-secondary));
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+.proximaBtn:disabled { opacity: .45; cursor: default; border-color: var(--border-strong); color: var(--text-tertiary); }
+
 .modeBtn {
   display: flex;
   align-items: center;

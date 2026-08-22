@@ -6,7 +6,7 @@ last_updated: 2026-08-22
 status: active
 priority: p1
 knowledge_refs: ["systems/maxxi/overview"]
-related: ["[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
+related: ["[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 aliases: ["status do plano", "onde estamos", "roadmap V1.0", "progresso das fases"]
 tags: [work, task, plano-evolucao, status, roadmap]
 ---
@@ -19,7 +19,7 @@ detalhe; aqui fica só o quadro.
 
 ## Placar
 
-**5 de 13 fases entregues.** As 4 primeiras mergeadas no `main`; a FASE 4 fechada em 2026-08-22.
+**6 de 13 fases entregues.** As 5 primeiras mergeadas no `main`; a FASE 5 fechada em 2026-08-22.
 
 | Fase | Título | Estado | Página |
 |:---:|---|---|---|
@@ -28,7 +28,7 @@ detalhe; aqui fica só o quadro.
 | 2 | Registry Foundation | ✅ | [[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]] |
 | 3 | Segurança e governança base | ✅ | [[FASE 3 — Segurança e governança base]] |
 | 4 | Inbox, Outbox e Jobs | ✅ | [[FASE 4 — Inbox, Outbox e Jobs]] |
-| 5 | Equipes, Filas e Human Handoff | ⬜ | — |
+| 5 | Equipes, Filas e Human Handoff | ✅ | [[FASE 5 — Equipes, Filas e Human Handoff]] |
 | 6 | Cliente 360 | ⬜ | — |
 | 7 | Knowledge Hub | ⬜ | — |
 | 8 | Playbook Engine | ⬜ | — |
@@ -38,8 +38,9 @@ detalhe; aqui fica só o quadro.
 | 12 | Conversation Events + Analytics | ⬜ | — |
 | 13 | Observabilidade e hardening | ⬜ | — |
 
-Suítes ao fechar a FASE 4: **249 testes puros · 82 de integração**.
-Migrations: **16** (014 `flow_executions`, 015 `audit_log`, 016 `inbox`/`outbox`/`jobs`).
+Suítes ao fechar a FASE 5: **273 testes puros · 109 de integração**.
+Migrations: **16 arquivos, até a 017** (014 `flow_executions`, 015 `audit_log`,
+016 `inbox`/`outbox`/`jobs`, 017 `filas`/`agentes_filas`).
 
 ## ✅ O placar e a produção voltaram a bater (2026-08-22 04:26 UTC)
 
@@ -67,7 +68,10 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | FASE 1 | Dreno de 8 s pode cortar turno longo de IA | subir junto com `stop_grace_period` |
 | FASE 2 | Portas divergentes entre catálogo e motor (`enviar_email`) — **documentadas**, não renomeadas | exige mapa de migração |
 | FASE 2 | Tool Registry **mínimo**: só `allowed_in_sandbox` | campos de risco/permissão na FASE 5+ |
-| FASE 3 | Permissões granulares + Supervisor | **FASE 5** (sem equipes não há o que supervisionar) |
+| ~~FASE 3~~ | ~~Permissões granulares + Supervisor~~ | ✅ FASE 5 (`agentes_filas.supervisor` toma conversa alheia da própria fila) |
+| FASE 5 | Capacidade checada **fora** de transação: dois cliques do mesmo agente estouram o teto em 1 | `SELECT ... FOR UPDATE` no agente, se doer |
+| FASE 5 | SSE não é filtrado por fila — o evento vai para todos | filtro por assinatura de fila no `sseManager` |
+| FASE 5 | Sem distribuição automática (round-robin/push): o agente **puxa** | roteamento ativo, se o volume exigir |
 | FASE 3 | Mascarar CPF/telefone na UI | **FASE 6** (Cliente 360 redesenha as telas) |
 | FASE 3 | Access/refresh token — encurtar TTL hoje desloga todo mundo | sessão dedicada a auth |
 | FASE 3 | Cripto: chave mestra vive no env do **mesmo** container | protege contra dump de banco, não contra shell |
@@ -97,6 +101,24 @@ Tetos que ficam: reclaim de escrita vai para DLQ em vez de retentar (falta
 idempotência de tool, §23); reprocessar entrada da Meta em lote re-executa turno
 de mensagem já respondida; `aguardar_tempo → ia_responde` não é suportado (é AI
 Runtime, FASE 9); `inbox.payload` guarda PII com purga de 7 dias.
+
+## FASE 5 — entregue (2026-08-22)
+
+Detalhe em [[FASE 5 — Equipes, Filas e Human Handoff]]. **"Equipe" e "fila"
+viraram a mesma tabela**: o plano pedia as duas mais a associação
+agente→equipe→fila, e a indireção não respondia nenhuma pergunta do produto
+num provedor de 6 agentes. `equipe_id` em `filas` continua possível depois.
+
+O que fechou: SLA e horário **por fila**, capacidade simultânea por agente,
+"assumir próximo" com claim atômico (`SKIP LOCKED`), transferência entre filas
+preservando a Flow Execution, e o nó `transferir_agente` finalmente **lendo**
+`cfg.fila` — era campo de texto livre que o motor nunca leu.
+
+De brinde, um **P0 em produção**: `routes/chat.js` chamava `auditar`/`ipDe` sem
+importar desde a FASE 3, então `assumir`, `devolver-ia` e `encerrar` devolviam
+500 — o handoff humano inteiro. Em ESM isso não aparece no boot nem no
+`node --check`. Ficou a guarda `tests/imports-de-rota.test.js`, verificada
+reintroduzindo o defeito.
 
 ## See Also
 

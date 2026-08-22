@@ -117,12 +117,27 @@ export const chatApi = {
   devolverIA:      (id)          => api.post(`/chat/conversas/${id}/devolver-ia`),
   encerrar:        (id, body)    => api.post(`/chat/conversas/${id}/encerrar`, body),
   transferir:      (id, body)    => api.post(`/chat/conversas/${id}/transferir`, body),
+  transferirFila:  (id, body)    => api.post(`/chat/conversas/${id}/transferir-fila`, body),
+  fila:            ()            => api.get('/chat/fila'),
   nota:            (id, body)    => api.post(`/chat/conversas/${id}/notas`, body),
   reagir:          (msgId, body) => api.post(`/chat/mensagens/${msgId}/reacao`, body),
   apagar:          (msgId)       => api.delete(`/chat/mensagens/${msgId}`),
   respostasRapidas: ()           => api.get('/chat/respostas-rapidas'),
   agendarRetorno:  (id, body)    => api.post(`/chat/conversas/${id}/agendamento`, body),
   cancelarRetorno: (id)          => api.delete(`/chat/conversas/${id}/agendamento`),
+};
+
+// ── ENDPOINTS — FILAS DE ATENDIMENTO (FASE 5) ─────────────────────
+// `/atendimento`, não `/filas`: aquela é a de inbox/outbox/jobs (FASE 4).
+export const filasApi = {
+  list:          ()             => api.get('/atendimento/filas'),
+  criar:         (body)         => api.post('/atendimento/filas', body),
+  atualizar:     (id, body)     => api.put(`/atendimento/filas/${id}`, body),
+  remover:       (id)           => api.delete(`/atendimento/filas/${id}`),
+  agentes:       (id)           => api.get(`/atendimento/filas/${id}/agentes`),
+  definirAgentes:(id, agentes)  => api.put(`/atendimento/filas/${id}/agentes`, { agentes }),
+  minhas:        ()             => api.get('/atendimento/minhas-filas'),
+  assumirProximo:(fila_id)      => api.post('/atendimento/assumir-proximo', fila_id ? { fila_id } : {}),
 };
 
 // ── ENDPOINTS — AGENTES ───────────────────────────────────────────
