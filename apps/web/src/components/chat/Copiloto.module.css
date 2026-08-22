@@ -1,0 +1,59 @@
+/* Copiloto.module.css — assistente do atendente (FASE 10). */
+.root {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 12px; border-top: 1px solid var(--border); background: var(--bg-elevated);
+}
+
+.proxima {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--text-secondary);
+}
+.proxima[data-destaque="1"] { color: #991b1b; font-weight: 600; }
+.proximaMotivo { flex: 1; min-width: 180px; }
+
+.tools { display: flex; gap: 4px; flex-wrap: wrap; }
+.toolBtn {
+  display: inline-flex; align-items: center; gap: 3px;
+  border: 1px solid var(--border-strong); background: var(--bg-surface, #fff);
+  border-radius: 999px; padding: 2px 8px; font-size: 10.5px;
+  color: var(--text-secondary); cursor: pointer;
+}
+.toolBtn:hover { border-color: var(--accent); color: var(--accent); }
+
+.playbook { font-size: 11px; color: var(--text-secondary); }
+.playbook summary { cursor: pointer; display: flex; align-items: center; gap: 5px; }
+.playbook ul { margin: 5px 0 0; padding-left: 18px; }
+.playbook li { padding: 1px 0; }
+.feita { color: var(--text-tertiary); text-decoration: line-through; }
+
+.gerar {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  border: 1px solid var(--accent-border, var(--border-strong)); background: var(--bg-surface, #fff);
+  border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+  color: var(--accent, var(--text-secondary)); cursor: pointer;
+}
+.gerar:disabled { opacity: .6; cursor: default; }
+
+.sugestao {
+  border: 1px solid var(--accent-border, var(--border-strong)); border-radius: 8px;
+  padding: 9px 11px; background: var(--bg-surface, #fff);
+}
+.sugestaoTexto { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-primary); white-space: pre-wrap; }
+.editor {
+  width: 100%; font-size: 13px; line-height: 1.55; font-family: inherit; resize: vertical;
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+  background: var(--bg-elevated); color: var(--text-primary);
+}
+.fontes { font-size: 10.5px; color: var(--text-tertiary); margin: 5px 0 0; }
+
+.acoes { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+.btnPrimario, .btn, .btnGhost {
+  display: inline-flex; align-items: center; gap: 4px;
+  border-radius: 6px; padding: 4px 10px; font-size: 11.5px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: none; color: var(--text-secondary);
+}
+.btnPrimario { background: var(--accent, #2050B8); border-color: transparent; color: #fff; font-weight: 600; }
+.btnGhost { border: none; color: var(--text-tertiary); }
+.feedback { margin-left: auto; display: flex; gap: 2px; }
+.feedback button { border: none; background: none; cursor: pointer; color: var(--text-tertiary); padding: 2px; }
+.feedback button:hover { color: var(--accent); }

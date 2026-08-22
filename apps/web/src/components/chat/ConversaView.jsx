@@ -4,6 +4,7 @@ import {
   CheckCheck, Check, Clock, AlertCircle, ChevronDown,
 } from 'lucide-react';
 import Button from '../ui/Button';
+import Copiloto from './Copiloto';
 import styles from './ConversaView.module.css';
 
 /* ── HELPERS ─────────────────────────────────────────────────── */
@@ -73,9 +74,18 @@ function DataSep({ data }) {
 }
 
 /* ── INPUT DE MENSAGEM ───────────────────────────────────────── */
-function MessageInput({ onEnviar, disabled }) {
+function MessageInput({ onEnviar, disabled, textoExterno, onConsumirExterno }) {
   const [texto, setTexto] = useState('');
   const textRef = useRef(null);
+
+  // "Inserir no campo" (§78): o copiloto entrega o texto, o atendente decide o
+  // que fazer com ele. Não envia nada sozinho.
+  useEffect(() => {
+    if (!textoExterno) return;
+    setTexto(textoExterno);
+    textRef.current?.focus();
+    onConsumirExterno?.();
+  }, [textoExterno]);
 
   const enviar = useCallback(() => {
     const t = texto.trim();
@@ -126,6 +136,7 @@ function MessageInput({ onEnviar, disabled }) {
 /* ── CONVERSA VIEW ───────────────────────────────────────────── */
 export default function ConversaView({ chat, conversa }) {
   const { mensagens, conversaAtiva, enviarMensagem, assumir, devolverIA } = chat;
+  const [textoCopiloto, setTextoCopiloto] = useState('');
   const listRef    = useRef(null);
   const atBottom   = useRef(true);
   const [showScroll, setShowScroll] = useState(false);
@@ -218,11 +229,22 @@ export default function ConversaView({ chat, conversa }) {
         </button>
       )}
 
+      {/* ── COPILOTO (FASE 10) ── */}
+      {!encerrada && conversa.status === 'ativa' && (
+        <Copiloto
+          conversa={conversa}
+          onInserir={setTextoCopiloto}
+          onEnviar={(t) => enviarMensagem(conversa.id, t)}
+        />
+      )}
+
       {/* ── INPUT ── */}
       {!encerrada ? (
         <MessageInput
           onEnviar={(texto) => enviarMensagem(conversa.id, texto)}
           disabled={false}
+          textoExterno={textoCopiloto}
+          onConsumirExterno={() => setTextoCopiloto('')}
         />
       ) : (
         <div className={styles.encerrada}>Conversa encerrada</div>
