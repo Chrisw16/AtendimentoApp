@@ -144,3 +144,35 @@ test('simularConversa: pausa sem turno seguinte fica aguardando (esperando o cli
   const r = await simularConversa(fluxo, { turnos: ['oi'] });
   assert.equal(r.status, 'aguardando');
 });
+
+// ── consultar_cliente: o simulador tem de espelhar o MOTOR, não melhorá-lo ──
+//
+// Divergência da pauta de 2026-08-21: o simulador lia `cfg.mensagem` com default
+// 'Informe seu CPF:', o motor lê `cfg.pergunta` sem default — sem ela, o nó fica
+// em SILÊNCIO esperando. A aba Simulação mostrava uma pergunta que a produção
+// nunca enviaria: falso positivo de confiança justo no nó de entrada de dado.
+test('simularConversa: consultar_cliente com cfg.pergunta envia a pergunta', async () => {
+  const fluxo = mkFluxo(
+    [
+      { id: 'i', tipo: 'inicio' },
+      { id: 'c', tipo: 'consultar_cliente', config: { pergunta: 'Qual o seu CPF?' } },
+    ],
+    [{ from: 'i', to: 'c', port: 'saida' }],
+  );
+  const r = await simularConversa(fluxo, { turnos: ['oi'] });
+  assert.ok(r.transcript.some(m => m.texto === 'Qual o seu CPF?'),
+    'a pergunta configurada não foi enviada');
+});
+
+test('simularConversa: consultar_cliente SEM pergunta fica em silêncio, como o motor', async () => {
+  const fluxo = mkFluxo(
+    [
+      { id: 'i', tipo: 'inicio' },
+      { id: 'c', tipo: 'consultar_cliente', config: {} },
+    ],
+    [{ from: 'i', to: 'c', port: 'saida' }],
+  );
+  const r = await simularConversa(fluxo, { turnos: ['oi'] });
+  assert.ok(!r.transcript.some(m => /CPF/i.test(m.texto || '')),
+    'o simulador inventou uma pergunta que o motor real nunca enviaria');
+});

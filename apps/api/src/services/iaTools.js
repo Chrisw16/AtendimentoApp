@@ -198,9 +198,15 @@ export const IA_TOOLS = [
   },
 ];
 
-// ── EXECUTOR DE FERRAMENTAS ────────────────────────────────────────────────
-// Tools que GRAVAM/agem no mundo real — simuladas em modo sandbox (teste de fluxo).
-const TOOLS_ESCRITA = new Set(['criar_chamado', 'promessa_pagamento', 'precadastrar_cliente', 'reiniciar_onu_acs']);
+// ── METADADOS DE RISCO (FASE 2 / §22) ──────────────────────────────────────
+// Tools que GRAVAM/agem no mundo real: bloqueadas no sandbox (simuladas) e
+// marcadas SENSÍVEL na tela. A lista mora na DEFINIÇÃO da tool
+// (`allowed_in_sandbox: false`), não num Set solto — era o começo da mesma
+// divergência de catálogo que a FASE 2 matou nos nós.
+for (const t of IA_TOOLS) {
+  t.is_write = ['criar_chamado', 'promessa_pagamento', 'precadastrar_cliente', 'reiniciar_onu_acs'].includes(t.name);
+  t.allowed_in_sandbox = !t.is_write;
+}
 
 export async function executarTool(name, input, ctx) {
   // input.contrato tem prioridade — IA pode selecionar contrato específico para clientes multi-contrato
@@ -209,7 +215,8 @@ export async function executarTool(name, input, ctx) {
   const cpfcnpj  = ctx?.cliente?.cpf || ctx?.cliente?.cpfcnpj || input.cpfcnpj;
 
   // Sandbox (simulação de teste): não executa ações que gravam/alteram dados reais.
-  if (ctx?.sandbox && TOOLS_ESCRITA.has(name)) {
+  const def = IA_TOOLS.find(t => t.name === name);
+  if (ctx?.sandbox && def && !def.allowed_in_sandbox) {
     return `🧪 [sandbox] A ação "${name}" foi simulada — em produção, executaria de verdade.`;
   }
 
@@ -276,7 +283,12 @@ export async function executarTool(name, input, ctx) {
     }
 
     case 'reiniciar_onu_acs': {
-      const r = await reiniciarOnuAcs(input.serial || '').catch(e => ({ sucesso: false, mensagem: e.message }));
+      // O schema declara `contrato` (a IA nunca soube o serial — o código antigo
+      // lia `input.serial`, que não existia no schema, e reiniciava serial '').
+      // O serial sai do mesmo lugar que o diagnóstico: o banco read-only do SGP.
+      const row = await diagnosticoOnu(contrato).catch(() => null);
+      if (!row?.serial) return 'Não encontrei a ONU deste contrato para reiniciar.';
+      const r = await reiniciarOnuAcs(row.serial).catch(e => ({ sucesso: false, mensagem: e.message }));
       return r.mensagem;
     }
 

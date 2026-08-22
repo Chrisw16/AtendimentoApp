@@ -8,7 +8,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../store';
-import { NODE_TYPES, NODE_GROUPS, PORTA_META } from '../lib/nodeTypes';
+import { NODE_TYPES, NODE_GROUPS, PORTA_META, IA_TOOLS_LIST, IA_TOOLS_DEFAULT } from '../lib/nodeTypes';
 import { api } from '../lib/api';
 
 // ── CSS OVERRIDE — apenas ajustes visuais que NÃO interferem na detecção
@@ -85,28 +85,6 @@ const VARS = [
 ];
 
 // ── TOOLS DISPONÍVEIS PARA O NÓ IA RESPONDE ──────────────────────
-// Lista exibida como checkbox no painel de propriedades do nó ia_responde.
-// Default (quando cfg.tools_ativas não estiver definido): tudo menos
-// `precadastrar_cliente` (sensível: cria cliente real no SGP).
-const IA_TOOLS_LIST = [
-  { id: 'verificar_conexao',     label: '📡 Verificar conexão',       cat: 'Diagnóstico' },
-  { id: 'consultar_manutencao',  label: '🔧 Consultar manutenção',    cat: 'Diagnóstico' },
-  { id: 'status_rede',           label: '🌐 Status da rede',          cat: 'Diagnóstico' },
-  { id: 'consultar_radius',      label: '🔌 Consultar Radius',        cat: 'Diagnóstico' },
-  { id: 'consultar_onu_acs',     label: '📶 Consultar ONU (ACS)',     cat: 'Diagnóstico' },
-  { id: 'reiniciar_onu_acs',     label: '🔄 Reiniciar ONU (ACS)',     cat: 'Diagnóstico' },
-  { id: 'criar_chamado',         label: '🎫 Criar chamado',           cat: 'Atendimento' },
-  { id: 'historico_ocorrencias', label: '📋 Histórico de ocorrências',cat: 'Atendimento' },
-  { id: 'segunda_via_boleto',    label: '💳 2ª via de boleto',        cat: 'Financeiro' },
-  { id: 'promessa_pagamento',    label: '🤝 Promessa de pagamento',   cat: 'Financeiro' },
-  { id: 'listar_planos_ativos',  label: '📋 Listar planos ativos',    cat: 'Comercial'   },
-  { id: 'listar_vencimentos',    label: '📅 Listar vencimentos',      cat: 'Comercial'   },
-  { id: 'precadastrar_cliente',  label: '📝 Pré-cadastro de cliente', cat: 'Comercial'   },
-  { id: 'transferir_para_humano',label: '👤 Transferir para humano',  cat: 'Controle'    },
-  { id: 'encerrar_atendimento',  label: '✅ Encerrar atendimento',    cat: 'Controle'    },
-];
-const IA_TOOLS_DEFAULT = IA_TOOLS_LIST.map(t => t.id).filter(id => id !== 'precadastrar_cliente');
-
 // ── ESTILOS BASE ──────────────────────────────────────────────────
 const IS  = { width:'100%', background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:6, padding:'6px 9px', color:'#fff', fontSize:12, outline:'none', fontFamily:'DM Sans,sans-serif', boxSizing:'border-box' };
 const TA  = { ...IS, resize:'vertical', fontFamily:'JetBrains Mono,monospace', lineHeight:1.5 };
@@ -402,7 +380,7 @@ function PropsPanel({ node, onChange, onDelete }) {
                 </select>
               </Fld>
               <Fld label="Instruções extras (opcional)" hint="Somado por cima do prompt do contexto. Vazio = usa só o prompt da aba Prompts.">
-                <textarea value={cfg.prompt||''} onChange={e=>set('prompt',e.target.value)} rows={4} placeholder="Ex.: Neste nó, foque só em queda total de conexão." style={TA}/>
+                <textarea value={cfg.instrucao ?? cfg.prompt ?? ''} onChange={e=>set('instrucao',e.target.value)} rows={4} placeholder="Ex.: Neste nó, foque só em queda total de conexão." style={TA}/>
               </Fld>
               <Fld label="Modelo">
                 <select value={cfg.modelo||'haiku'} onChange={e=>set('modelo',e.target.value)} style={{...IS,cursor:'pointer'}}>
@@ -410,8 +388,8 @@ function PropsPanel({ node, onChange, onDelete }) {
                   <option value="sonnet">🧠 Claude Sonnet — capaz</option>
                 </select>
               </Fld>
-              <Fld label="Máx. turnos" hint="Após este número → porta max_turnos">
-                <input type="number" value={cfg.max_turns||5} onChange={e=>set('max_turns',parseInt(e.target.value)||5)} style={{...IS,width:80}}/>
+              <Fld label="Máx. turnos" hint="Cada troca cliente↔IA conta. Cadastro comercial precisa de ~25. Após este número → porta max_turnos.">
+                <input type="number" value={cfg.max_turnos ?? cfg.max_turns ?? 6} onChange={e=>set('max_turnos',parseInt(e.target.value)||6)} style={{...IS,width:80}}/>
               </Fld>
               <Fld label="Tools ativas" hint="Marque quais ferramentas a IA pode usar neste nó">
                 <div style={{display:'flex',flexDirection:'column',gap:4,padding:'6px',background:'rgba(255,255,255,.03)',borderRadius:6,border:'1px solid rgba(255,255,255,.06)'}}>
@@ -451,7 +429,7 @@ function PropsPanel({ node, onChange, onDelete }) {
 
         {node.data.tipo==='enviar_email'&&<><Fld label="Para"><input value={cfg.para||''} onChange={e=>set('para',e.target.value)} placeholder="{{cliente.email}}" style={IS}/></Fld><Fld label="Assunto"><input value={cfg.assunto||''} onChange={e=>set('assunto',e.target.value)} placeholder="Sua solicitação" style={IS}/></Fld><Fld label="Corpo"><textarea value={cfg.corpo||''} onChange={e=>set('corpo',e.target.value)} rows={4} placeholder="Olá {{cliente.nome}},..." style={TA}/></Fld></>}
 
-        {node.data.tipo==='nps_inline'&&<Fld label="Pergunta"><textarea value={cfg.pergunta||''} onChange={e=>set('pergunta',e.target.value)} rows={2} placeholder="De 1 a 10, qual nota você dá ao nosso atendimento? ⭐" style={TA}/></Fld>}
+        {node.data.tipo==='nps_inline'&&<><Fld label="Pergunta"><textarea value={cfg.pergunta||''} onChange={e=>set('pergunta',e.target.value)} rows={2} placeholder="De 1 a 10, qual nota você dá ao nosso atendimento? ⭐" style={TA}/></Fld><Fld label="Escala" hint="Define as faixas promotor/neutro/detrator E é gravada junto da resposta — sem ela o relatório assume 0-10."><select value={String(cfg.escala||'10')} onChange={e=>set('escala',e.target.value)} style={{...IS,cursor:'pointer'}}><option value="10">0 a 10 (NPS clássico) — 9-10 promotor, 7-8 neutro</option><option value="5">1 a 5 — 4-5 promotor, 3 neutro</option></select></Fld></>}
 
         {node.data.tipo==='solicitar_localizacao'&&<><Fld label="Mensagem de solicitação"><textarea value={cfg.mensagem||''} onChange={e=>set('mensagem',e.target.value)} rows={4} placeholder={'📍 Para verificar a cobertura:\n1️⃣ Envie sua localização GPS\n2️⃣ Ou informe seu CEP'} style={TA}/></Fld><Fld label="Salvar endereço em"><input value={cfg.variavel||''} onChange={e=>set('variavel',e.target.value)} placeholder="endereco_cliente" style={IS}/></Fld></>}
 
