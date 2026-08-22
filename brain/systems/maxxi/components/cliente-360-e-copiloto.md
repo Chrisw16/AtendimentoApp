@@ -35,6 +35,15 @@ Compõe identidade, contratos, financeiro, diagnóstico, histórico de relaciona
 - **Diagnóstico é opt-in** (`?diagnostico=1`): são 2 chamadas ao SGP e o painel precisa
   abrir rápido.
 
+⚠️ **A identificação precisa estar na LINHA da conversa** (`conversas.cpf` /
+`contrato_id`), não só no blob de `flow_executions`. O `consultar_cliente`
+gravava apenas no estado do fluxo — que é **apagado** quando a conversa vai para
+um humano sem a porta `transferido` ligada. Em produção isso significava: a IA
+identifica o assinante, a conversa entra na fila, e o painel abre **sem
+contrato** enquanto a 2ª via responde *"CPF/CNPJ inválido"* — o painel falhando
+exatamente no momento para o qual foi feito. Corrigido em 2026-08-22; as colunas
+existiam desde a migration 001 e nunca eram escritas.
+
 ⚠️ **IDOR fechado na revisão**: `POST /acao` repassava o corpo inteiro para
 `executarTool`, que prefere `input.contrato` ao contexto — dava para puxar o boleto de
 **outro assinante** pela conversa deste. Hoje cada ação declara uma allowlist de campos e

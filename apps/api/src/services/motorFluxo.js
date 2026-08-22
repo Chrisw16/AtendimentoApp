@@ -416,6 +416,24 @@ async function processarNo(no, ctx) {
           ctx.estado.contexto._cpf_tentativas = 0;
           ctx.estado.contexto._contratos_sgp = data.contratos;
 
+          // A identificação precisa sobreviver ao FIM da execução do fluxo.
+          // Ela vivia só no blob de `flow_executions`, que é APAGADO quando a
+          // conversa vai para um humano sem a porta `transferido` ligada — ou
+          // seja, o CPF sumia exatamente no momento em que o Cliente 360 e as
+          // ações rápidas passam a existir. O sintoma era o painel abrir sem
+          // contrato e a 2ª via responder "CPF/CNPJ inválido" numa conversa
+          // em que a IA tinha acabado de identificar o assinante.
+          //
+          // As colunas existem desde a migration 001 e nunca eram escritas.
+          if (!ctx.sandbox) {
+            await conversaRepo.atualizar(ctx.conversa.id, {
+              cpf: data.cpfcnpj,
+              contrato_id: String(ct.id),
+              nome: ctx.conversa.nome || data.nome,
+              cidade: ctx.conversa.cidade || ct.cidade || null,
+            }).catch(err => console.error('[Motor] não persistiu identificação:', err.message));
+          }
+
           if (data.contratos.length > 1) return avancar('multiplos_contratos');
           return avancar('encontrado');
         } catch (err) {

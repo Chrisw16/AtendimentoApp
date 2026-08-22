@@ -56,6 +56,22 @@ describe('FASE 6 — Cliente 360', { skip: motivoSkip() }, () => {
       assert.equal(await cliente360.identificar(c), '11122233344');
     });
 
+    test('CRITÉRIO: a identificação SOBREVIVE ao fim da execução do fluxo', async () => {
+      // O caso real que quebrou em produção: a IA identifica o cliente, a
+      // conversa vai para a fila, o `flow_executions` é apagado — e o painel
+      // abria sem contrato enquanto a 2ª via respondia "CPF/CNPJ inválido".
+      // Por isso a identificação tem que estar na LINHA da conversa, não só
+      // no blob do fluxo.
+      const c = await criarConversa(db, { cpf: '12345678901', contrato_id: '29783' });
+      await db('flow_executions').where({ conversa_id: c.id }).del();
+
+      assert.equal(await cliente360.identificar(c), '12345678901',
+        'sem a coluna, o CPF vai embora junto com a execução do fluxo');
+      const r = await cliente360.contratosPermitidos(c);
+      assert.deepEqual(r.contratos, ['29783']);
+      assert.equal(r.principal, '29783', 'a ação rápida tem contrato para agir');
+    });
+
     test('sem CPF em lugar nenhum devolve null, não estoura', async () => {
       assert.equal(await cliente360.identificar(await criarConversa(db, {})), null);
     });

@@ -477,3 +477,18 @@ por agentes especialistas contra o plano antes de codar.
 
 Suítes finais: **472 puros · 267 de integração**. Brain atualizado: 3 páginas de
 fase novas, runbook de backup/restore, overview e `_index`.
+
+## [2026-08-22] FIX | Dois defeitos achados usando o sistema
+
+Achados com o produto na tela, não por teste — o tipo que só aparece operando:
+
+- **A identificação sumia ao transferir.** `consultar_cliente` gravava o cliente
+  só no blob de `flow_executions`, que é apagado quando a conversa vai para um
+  humano. O painel abria sem contrato e a 2ª via dizia "CPF/CNPJ inválido" numa
+  conversa em que a IA acabara de identificar o assinante. Agora grava em
+  `conversas.cpf`/`contrato_id` — colunas da migration 001 que nunca eram usadas.
+- **O texto do campo de instruções do nó de IA mentia.** "Vazio = usa só o prompt
+  da aba Prompts" é falso desde a FASE 8. E o fluxo de produção tinha um bloco
+  `## IDENTIDADE / Você é a Natália…` ali, enquanto o prompt base `suporte` JÁ
+  abre com a mesma frase — duas identidades, a segunda chegando rotulada como
+  adendo. Campo renomeado para "Ajuste deste nó", com aviso quando detecta persona.
