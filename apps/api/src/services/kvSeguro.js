@@ -65,3 +65,45 @@ export function decifrar(valor, segredo = process.env.KV_SECRET) {
     throw new Error('Falha ao decifrar credencial do sistema_kv — KV_SECRET mudou ou o valor foi adulterado. Re-salve a credencial pela tela.');
   }
 }
+
+// ── LEITURA ÚNICA + MÁSCARA ──────────────────────────────────────
+
+/**
+ * Interpreta um valor cru vindo do `sistema_kv`/`canais.config`.
+ *
+ * A ordem IMPORTA e é o motivo deste helper existir: os 4 leitores faziam
+ * `try { JSON.parse } catch { valor cru }` — um `enc:v1:...` não é JSON, caía
+ * no catch e o CIPHERTEXT virava "o valor", indo como token para o SGP num 403
+ * opaco. Aqui: decifra PRIMEIRO (se cifrado), parseia depois.
+ *
+ * `chave` entra só para a mensagem de erro dizer O QUE re-salvar.
+ */
+export function lerValorKV(raw, chave = '?') {
+  if (raw == null) return null;
+  let texto = raw;
+  if (estaCifrado(texto)) {
+    try { texto = decifrar(texto); }
+    catch (err) { throw new Error(`[${chave}] ${err.message}`); }
+  }
+  if (typeof texto !== 'string') return texto;   // jsonb já veio objeto
+  try { return JSON.parse(texto); } catch { return texto; }
+}
+
+/**
+ * Máscara de credencial (§117: o frontend nunca recebe o segredo de volta).
+ * Sempre contém `•`, que é o que o PUT usa para reconhecer e ignorar.
+ */
+export function mascarar(valor) {
+  const s = String(valor ?? '');
+  if (!s) return '';
+  return s.length > 8 ? `••••••••${s.slice(-4)}` : '••••••••';
+}
+
+/**
+ * true = o cliente devolveu a máscara (campo intocado na tela) e o valor real
+ * NÃO deve ser sobrescrito. Checa por conteúdo, não igualdade: máscara editada
+ * pela metade (colar no meio de `••••1234`) também não pode virar credencial.
+ */
+export function ehMascara(valor) {
+  return typeof valor === 'string' && valor.includes('•');
+}

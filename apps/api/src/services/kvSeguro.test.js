@@ -43,3 +43,40 @@ test('unicode e JSON sobrevivem ao roundtrip', () => {
   const v = JSON.stringify({ senha: 'çãé🔑', nested: { a: 1 } });
   assert.equal(decifrar(cifrar(v, SEGREDO), SEGREDO), v);
 });
+
+// ── lerValorKV / mascarar / ehMascara ────────────────────────────────────────
+import { lerValorKV, mascarar, ehMascara } from './kvSeguro.js';
+
+test('lerValorKV: decifra ANTES de parsear — ciphertext nunca vira "o valor"', () => {
+  process.env.KV_SECRET = SEGREDO;
+  try {
+    const noBanco = cifrar(JSON.stringify('token-sgp-real'), SEGREDO);
+    assert.equal(lerValorKV(noBanco, 'sgp_token'), 'token-sgp-real');
+  } finally { delete process.env.KV_SECRET; }
+});
+
+test('lerValorKV: texto plano antigo (JSON e cru) segue legível', () => {
+  assert.equal(lerValorKV('"valor-json"'), 'valor-json');
+  assert.equal(lerValorKV('cru-sem-aspas'), 'cru-sem-aspas');
+  assert.deepEqual(lerValorKV('{"a":1}'), { a: 1 });
+  assert.deepEqual(lerValorKV({ ja: 'objeto' }), { ja: 'objeto' });   // jsonb
+});
+
+test('lerValorKV: cifrado sem KV_SECRET lança nomeando a chave', () => {
+  const noBanco = cifrar(JSON.stringify('x'), SEGREDO);
+  assert.throws(() => lerValorKV(noBanco, 'anthropic_api_key'), /anthropic_api_key/);
+});
+
+test('mascarar: nunca devolve o valor, sempre contém •', () => {
+  assert.equal(mascarar('sk-ant-1234567890abcdef'), '••••••••cdef');
+  assert.equal(mascarar('curto'), '••••••••');
+  assert.equal(mascarar(''), '');
+  assert.ok(ehMascara(mascarar('qualquer-segredo')));
+});
+
+test('ehMascara: pega máscara intacta E editada pela metade', () => {
+  assert.ok(ehMascara('••••••••1234'));
+  assert.ok(ehMascara('••••colou-no-meio••1234'));
+  assert.ok(!ehMascara('sk-ant-nova-chave-real'));
+  assert.ok(!ehMascara(''));
+});

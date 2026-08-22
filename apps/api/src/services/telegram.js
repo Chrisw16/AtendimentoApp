@@ -69,7 +69,13 @@ export async function tgEnviarImagem(chatId, url, legenda) {
 }
 
 export async function tgSetWebhook(url) {
-  return tgPost('setWebhook', { url });
+  // Com a env setada, o Telegram passa a mandar o secret no header
+  // `X-Telegram-Bot-Api-Secret-Token` e a rota do webhook o valida (§122).
+  // Sem registrar o secret AQUI, setar a env derrubaria o canal: o header
+  // nunca chegaria e todo update seria recusado.
+  const params = { url };
+  if (process.env.TELEGRAM_WEBHOOK_SECRET) params.secret_token = process.env.TELEGRAM_WEBHOOK_SECRET;
+  return tgPost('setWebhook', params);
 }
 
 export async function tgGetMe() {
