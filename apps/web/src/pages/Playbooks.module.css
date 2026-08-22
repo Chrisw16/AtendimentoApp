@@ -1,0 +1,78 @@
+/* Playbooks.module.css — procedimentos oficiais (FASE 8). */
+.root { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.subtitulo { font-size: 12px; color: var(--text-secondary); margin: 0; max-width: 560px; }
+.novoWrap { display: flex; gap: 6px; }
+.novoInput {
+  height: 30px; padding: 0 10px; width: 240px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--bg-elevated); color: var(--text-primary);
+}
+
+.lista { display: flex; flex-direction: column; gap: 8px; }
+.skel { height: 78px; border-radius: 9px; }
+.vazio { color: var(--text-tertiary); font-size: 13px; padding: 28px; text-align: center; }
+
+.item { border: 1px solid var(--border); border-radius: 9px; padding: 12px 14px; background: var(--bg-elevated); }
+.itemTop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.itemTitulo { background: none; border: none; padding: 0; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.itemTitulo:hover { color: var(--accent); }
+.itemObjetivo { font-size: 12px; color: var(--text-secondary); margin: 5px 0 0; }
+.itemAcoes { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 9px; }
+.etapasCount { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-tertiary); margin-left: auto; }
+
+.dominio, .status {
+  font-size: 10px; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em;
+  background: var(--bg-subtle, #f1f5f9); color: var(--text-tertiary);
+}
+.status[data-status="publicado"] { background: #dcfce7; color: #166534; }
+.status[data-status="teste"]     { background: #dbeafe; color: #1e40af; }
+.status[data-status="arquivado"] { background: #e5e7eb; color: #6b7280; }
+
+.acao, .acaoPerigo {
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border);
+  background: none; border-radius: 999px; padding: 3px 9px; font-size: 11px; color: var(--text-secondary); cursor: pointer;
+}
+.acao:hover { border-color: var(--accent); color: var(--accent); }
+.acaoPerigo { margin-left: auto; color: #dc2626; }
+
+/* ── Editor ── */
+.overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 60; }
+.modal { background: var(--bg-surface, #fff); border: 1px solid var(--border); border-radius: 12px; width: min(880px, 100%); max-height: 92vh; overflow: auto; }
+.modalHeader { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-surface, #fff); }
+.modalTitle { font-size: 15px; font-weight: 600; margin: 0; }
+.modalForm { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.modalActions { display: flex; justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; background: var(--bg-surface, #fff); padding-top: 8px; }
+.formRow { display: flex; gap: 12px; flex-wrap: wrap; }
+.formRow > * { flex: 1; min-width: 200px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+.select, .textarea {
+  border: 1px solid var(--border); border-radius: 7px; background: var(--bg-elevated);
+  color: var(--text-primary); font-size: 13px; padding: 7px 9px; font-family: inherit;
+}
+.textarea { resize: vertical; line-height: 1.5; }
+.aviso { font-size: 12px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 7px; padding: 8px 10px; margin: 0; }
+.nota { font-size: 12px; color: var(--text-tertiary); margin: 0; }
+
+.etapasHead { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+.addEtapa {
+  display: inline-flex; align-items: center; gap: 4px; border: 1px dashed var(--border-strong);
+  background: none; border-radius: 7px; padding: 4px 10px; font-size: 11px; color: var(--accent); cursor: pointer;
+}
+.etapa { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+.etapaTop { display: flex; align-items: center; gap: 6px; }
+.etapaNum { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; color: var(--text-tertiary); min-width: 30px; }
+.etapaTitulo { flex: 1; height: 28px; padding: 0 8px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated); color: var(--text-primary); }
+.etapaObrig { height: 28px; font-size: 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated); color: var(--text-secondary); }
+.etapaCond { height: 26px; padding: 0 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated); color: var(--text-primary); }
+.miniBtn, .miniBtnPerigo { border: 1px solid var(--border); background: none; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; color: var(--text-tertiary); font-size: 11px; }
+.miniBtnPerigo { color: #dc2626; }
+
+.tools { display: flex; flex-direction: column; gap: 4px; }
+.toolsLabel { font-size: 10.5px; color: var(--text-tertiary); }
+.toolsGrid { display: flex; flex-wrap: wrap; gap: 4px; }
+.toolChip {
+  border: 1px solid var(--border); background: none; border-radius: 999px;
+  padding: 2px 8px; font-size: 10.5px; color: var(--text-tertiary); cursor: pointer;
+}
+.toolChipOn { border-color: var(--accent); color: var(--accent); font-weight: 600; }

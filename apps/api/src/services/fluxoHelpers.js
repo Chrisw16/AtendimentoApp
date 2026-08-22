@@ -33,12 +33,15 @@ export function avaliarNps(notaRaw, escala) {
 
 // ia_responde: o editor salva a instrução extra em cfg.instrucao (o motor lia cfg.prompt).
 // Compõe o system prompt na ordem: base + instrução específica + dados do cliente + ficha + regras de tool.
-export function montarSystemPrompt({ systemBase, instrucao, ctxCliente, ficha, regrasTools } = {}) {
+export function montarSystemPrompt({ systemBase, instrucao, ctxCliente, ficha, playbook, regrasTools } = {}) {
   return [
     systemBase || instrucao,
     instrucao && systemBase ? `\nInstrução específica: ${instrucao}` : '',
     ctxCliente ? `\n📋 Dados do cliente identificado:\n${ctxCliente}` : '',
     ficha ? `\n${ficha}` : '',
+    // FASE 8: o procedimento vem DEPOIS da ficha e ANTES das regras de tool —
+    // ele diz o que fazer, e as regras dizem como operar as ferramentas.
+    playbook ? `\n${playbook}` : '',
     regrasTools || '',
   ].filter(Boolean).join('\n');
 }
@@ -67,6 +70,9 @@ export const TOOLS_PADRAO = [
   // FASE 7: entra no padrão porque o custo de NÃO consultar a base é a IA
   // inventar procedimento — que é o pior defeito possível num atendimento.
   'buscar_conhecimento',
+  // FASE 8: sem ela, as etapas conversacionais do procedimento nunca são
+  // marcadas e o playbook comercial fica eternamente na etapa 1.
+  'concluir_etapa_playbook',
   'verificar_conexao', 'consultar_manutencao', 'status_rede',
   'consultar_onu_acs', 'reiniciar_onu_acs', 'consultar_radius',
   'criar_chamado', 'segunda_via_boleto',

@@ -308,6 +308,9 @@ function PropsPanel({ node, onChange, onDelete }) {
   // Era campo de texto livre e o motor NUNCA leu — digitar "Suporte" não
   // mandava para lugar nenhum. Agora grava o SLUG, que é o que o motor resolve.
   const { data: filas = [] } = useQuery({ queryKey: ['filas'], queryFn: () => api.get('/atendimento/filas'), staleTime: 60000 });
+  // FASE 8: procedimentos oficiais. Só os PUBLICADOS orientam atendimento real
+  // — a lista aqui mostra todos para o admin saber que existem, mas marca.
+  const { data: playbooks = [] } = useQuery({ queryKey: ['playbooks'], queryFn: () => api.get('/playbooks'), staleTime: 60000 });
   if (!node) return null;
   const def = NODE_TYPES[node.data.tipo] || {};
   const cfg = node.data.config || {};
@@ -384,6 +387,15 @@ function PropsPanel({ node, onChange, onDelete }) {
                   {contextos.map(p => <option key={p.slug} value={p.slug}>{p.nome} ({p.slug})</option>)}
                   {cfg.contexto && !contextos.some(p=>p.slug===cfg.contexto) && (
                     <option value={cfg.contexto}>⚠ atual (não é um prompt válido): {cfg.contexto}</option>
+                  )}
+                </select>
+              </Fld>
+              <Fld label="Procedimento (playbook)" hint="Injeta o roteiro oficial no prompt a cada turno, com as etapas já cumpridas marcadas. Só playbooks PUBLICADOS valem em produção.">
+                <select value={cfg.playbook||''} onChange={e=>set('playbook',e.target.value)} style={{...IS,cursor:'pointer'}}>
+                  <option value="">— sem procedimento —</option>
+                  {playbooks.map(p => <option key={p.id} value={p.slug}>{p.nome}{p.status!=='publicado'?` (${p.status})`:''}</option>)}
+                  {cfg.playbook && !playbooks.some(p=>p.slug===cfg.playbook) && (
+                    <option value={cfg.playbook}>⚠ atual (não existe mais): {cfg.playbook}</option>
                   )}
                 </select>
               </Fld>

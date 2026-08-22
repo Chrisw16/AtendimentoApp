@@ -4,7 +4,7 @@ import {
   MessageSquare, LayoutDashboard, Users, GitBranch,
   BarChart2, Clock, Star, Bell, Settings, Bot,
   ChevronLeft, Zap, Network, Map,
-  Building, ChevronDown, Wrench, Inbox, BookOpen,
+  Building, ChevronDown, Wrench, Inbox, BookOpen, ListChecks,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import styles from './Sidebar.module.css';
@@ -26,6 +26,7 @@ const NAV = [
       { to: '/agentes',    icon: Users,           label: 'Agentes',    adminOnly: true },
       { to: '/filas',      icon: Inbox,           label: 'Filas',      adminOnly: true },
       { to: '/fluxos',     icon: GitBranch,       label: 'Fluxos',     adminOnly: true },
+      { to: '/playbooks',  icon: ListChecks,      label: 'Procedimentos', adminOnly: true },
       { to: '/canais',     icon: Zap,             label: 'Canais',     adminOnly: true },
       { to: '/analytics',  icon: BarChart2,       label: 'Analytics',  adminOnly: true },
       { to: '/prompts-ia',   icon: Bot,              label: 'Prompts IA',    adminOnly: true },

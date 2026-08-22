@@ -167,6 +167,18 @@ export const knowledgeApi = {
   atualizarGap: (id, body)  => api.put(`/knowledge/gaps/${id}`, body),
 };
 
+// ── ENDPOINTS — PLAYBOOKS (FASE 8) ────────────────────────────────
+export const playbooksApi = {
+  list:      (params = {}) => api.get('/playbooks?' + new URLSearchParams(params)),
+  get:       (id)          => api.get(`/playbooks/${id}`),
+  criar:     (body)        => api.post('/playbooks', body),
+  atualizar: (id, body)    => api.put(`/playbooks/${id}`, body),
+  etapas:    (id, etapas)  => api.put(`/playbooks/${id}/etapas`, { etapas }),
+  status:    (id, status)  => api.post(`/playbooks/${id}/status`, { status }),
+  remover:   (id)          => api.delete(`/playbooks/${id}`),
+  execucao:  (conversaId)  => api.get(`/playbooks/execucao/${conversaId}`),
+};
+
 // ── ENDPOINTS — AGENTES ───────────────────────────────────────────
 export const promptsApi = {
   list:      ()           => api.get('/prompts'),

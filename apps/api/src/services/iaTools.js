@@ -174,6 +174,18 @@ export const IA_TOOLS = [
     allowed_in_sandbox: true,
   },
   {
+    name: 'concluir_etapa_playbook',
+    description: 'Marca como concluída uma etapa CONVERSACIONAL do procedimento oficial (as que não têm ferramenta própria, como "entender a necessidade" ou "tratar objeções"). Use assim que cumprir a etapa, e só depois de realmente cumpri-la. Etapas que têm ferramenta são marcadas sozinhas.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        etapa: { type: 'string', description: 'O número ou o título da etapa concluída' },
+      },
+      required: ['etapa'],
+    },
+    allowed_in_sandbox: true,
+  },
+  {
     name: 'salvar_dado',
     description: 'Salva dados que o cliente informou, como variáveis persistentes da conversa. Sempre que o cliente fornecer um dado (nome, cpf, data de nascimento, email, celular, logradouro, numero, bairro, cidade, cep, plano, vencimento, etc.), salve TODOS os dados novos desta mensagem numa ÚNICA chamada. NUNCA pergunte de novo um dado já salvo. Use nomes de campo curtos e sem acento (ex.: cidade, plano, data_nasc).',
     input_schema: {
@@ -240,6 +252,11 @@ export async function executarTool(name, input, ctx) {
   }
 
   switch (name) {
+    // Tratada DENTRO do motor (precisa da execução do playbook do turno), como
+    // o `salvar_dado`. Aqui só existe para o caso de alguém chamar por fora.
+    case 'concluir_etapa_playbook':
+      return 'Esta ferramenta só funciona dentro de um atendimento com procedimento ativo.';
+
     case 'buscar_conhecimento': {
       // Lê a base publicada, registra QUAL artigo sustentou a resposta (§55) e,
       // quando não acha nada, registra a lacuna (§56). O "não achei" é uma
