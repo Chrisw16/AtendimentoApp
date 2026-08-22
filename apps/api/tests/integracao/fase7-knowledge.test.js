@@ -93,6 +93,29 @@ describe('FASE 7 — Knowledge Hub', { skip: motivoSkip() }, () => {
       }
     });
 
+    test('CRITÉRIO: pergunta longa do cliente não morre por UMA palavra fora', async () => {
+      // `websearch_to_tsquery` faz E entre os termos. A IA passa a fala do
+      // cliente inteira, e uma palavra que não está em artigo nenhum ("disse")
+      // derrubava a busca toda — com o artigo certo bem ali. Achado com a
+      // carga inicial de conhecimento (migration 024).
+      await criar({ titulo: 'Objeção: está caro', conteudo: 'Não ofereça desconto imediatamente.' });
+
+      assert.equal((await kb.buscar('caro')).length, 1, 'controle: o termo isolado acha');
+      assert.equal((await kb.buscar('o cliente disse que achou muito caro')).length, 1,
+        'a pergunta como o cliente escreveu tem que achar');
+    });
+
+    test('o modo preciso (E) tem precedência sobre o abrangente (OU)', async () => {
+      await criar({ titulo: 'Boleto vencido', conteudo: 'Sobre boleto em atraso.' });
+      await criar({ titulo: 'Instalação', conteudo: 'Prazo de instalação e boleto da adesão.' });
+
+      // "boleto vencido" casa os dois no modo OU; no modo E só o primeiro —
+      // e é o primeiro que deve vir.
+      const r = await kb.buscar('boleto vencido');
+      assert.equal(r.length, 1, 'o E resolveu, o OU não precisou entrar');
+      assert.match(r[0].titulo, /Boleto vencido/);
+    });
+
     test('busca vazia devolve vazio sem ir ao banco', async () => {
       assert.deepEqual(await kb.buscar(''), []);
       assert.deepEqual(await kb.buscar(null), []);
