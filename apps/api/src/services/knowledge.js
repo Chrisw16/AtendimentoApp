@@ -32,13 +32,36 @@ export async function buscar(pergunta, opts = {}) {
   const termo = String(pergunta || '').trim();
   if (!termo) return [];
 
+  // Duas passadas, e a segunda existe por um defeito que só apareceu com
+  // conteúdo real: `websearch_to_tsquery` faz **E** entre todos os termos, e a
+  // IA passa a pergunta do cliente inteira. "cliente disse que tá caro" vira
+  // 'client & diss & ta & car' — a palavra "disse" não está em artigo nenhum e
+  // derruba a busca toda, mesmo com o artigo certo bem ali.
+  //
+  // Então: primeiro o E (preciso, ordena bem); se voltar VAZIO, o OU sobre os
+  // mesmos radicais, deixando o `ts_rank_cd` escolher. Precisão quando dá,
+  // recall quando precisa — e a segunda consulta só roda quando a primeira
+  // não achou nada.
+  const exatos = await consultar(termo, { modo: 'e', categoria, tipo, limite, incluirNaoPublicados });
+  if (exatos.length) return exatos;
+  return consultar(termo, { modo: 'ou', categoria, tipo, limite, incluirNaoPublicados });
+}
+
+async function consultar(termo, { modo, categoria, tipo, limite, incluirNaoPublicados }) {
   const db = getDb();
   // `websearch_to_tsquery` aceita a pergunta do jeito que o cliente escreveu —
   // aspas, OR, sinal de menos — sem NUNCA lançar por sintaxe, que é o que
   // `to_tsquery` faz com um simples "?" e derrubaria a resposta da IA.
+  // No modo OU, os radicais viram uma tsquery `a | b | c`. `tsvector_to_array`
+  // já devolve os lexemas do MESMO pipeline do índice — não há um segundo
+  // analisador para divergir.
+  const expressaoTsq = modo === 'ou'
+    ? `to_tsquery('portuguese', array_to_string(tsvector_to_array(to_tsvector('portuguese', knowledge_norm(?))), ' | '))`
+    : `websearch_to_tsquery('portuguese', knowledge_norm(?))`;
+
   const { rows } = await db.raw(
     `WITH q AS (
-       SELECT websearch_to_tsquery('portuguese', knowledge_norm(?)) AS tsq,
+       SELECT ${expressaoTsq} AS tsq,
               knowledge_norm(?) AS txt
      )
      SELECT a.id, a.titulo, a.slug, a.tipo, a.resumo, a.conteudo, a.status, a.versao,
