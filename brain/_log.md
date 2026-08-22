@@ -579,3 +579,23 @@ Medido: o build sobe a ~620 MB de RSS numa máquina folgada, mas **completa com 
 `NODE_OPTIONS=--max-old-space-size=512` no stage do frontend.
 
 Achado de lado: `apps/web/package-lock.json` **não está versionado**.
+
+## [2026-08-22] FIX | O Financeiro do painel contradizia a si mesmo
+
+*"16 títulos em aberto · R$ 795,18"* e, uma linha abaixo, *"nenhum boleto em aberto
+para este contrato"*. As duas frases estavam certas — e mediam universos diferentes.
+
+O total soma os títulos de **todos** os contratos do CPF; a lista pedia boleto só do
+contrato selecionado (#29783), que não tem nenhum. Os 16 títulos estavam em três
+outros contratos do mesmo cliente. Achado pelo operador comparando com o SGP.
+
+- `GET /:id/faturas` sem `?contrato=` agora cobre todos os contratos com título em
+  aberto, em paralelo, e cada boleto sai marcado com o contrato dele.
+- Teto de 6 contratos, com `limitado: true` no corpo — corte silencioso lê como
+  "é tudo".
+- **`mesclarFaturas` separa falha de ausência** (puro, 5 testes). Contrato quitado
+  responde `sem_boleto`; SGP fora responde erro. Igualar os dois é como "não sei"
+  vira "não tem" — a assinatura de defeito desta casa.
+- Título em aberto ≠ boleto emitido: quando o SGP conta N e não devolve boleto
+  nenhum, o painel diz isso, em vez de exibir "nenhum boleto" ao lado de um
+  contador diferente de zero.

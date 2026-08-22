@@ -45,13 +45,14 @@ async function contextoDa(req, contratoPedido = null) {
   const conversa = await conversaRepo.porId(req.params.conversaId);
   if (!conversa) throw new HttpError(404, 'Conversa não encontrada');
 
-  const { cpf, contratos, principal } = await contratosPermitidos(conversa);
+  const { cpf, contratos, principal, detalhes } = await contratosPermitidos(conversa);
   if (contratoPedido && !contratos.includes(String(contratoPedido))) {
     throw new HttpError(403, 'Contrato não pertence ao cliente desta conversa');
   }
 
   return {
     conversa,
+    detalhes: detalhes || [],
     // Mesmo formato que o motor monta para as tools — `executarTool` lê daqui
     // o contrato e o CPF, então o painel e a IA falam a MESMA linguagem.
     ctx: {
@@ -161,20 +162,37 @@ cliente360Router.get('/:conversaId/tecnico', asyncHandler(async (req, res) => {
  * quando o agente quer MANDAR o boleto — aquela passa por `executarTool` e é
  * auditada como tool. Esta é LEITURA para a tela, sobre a mesma integração.
  */
+/** Teto de contratos consultados numa tacada. Explícito: o `limitado` no corpo
+ *  conta ao agente que a lista foi cortada — corte silencioso lê como "é tudo". */
+const MAX_CONTRATOS_FATURA = 6;
+
 cliente360Router.get('/:conversaId/faturas', asyncHandler(async (req, res) => {
   if (!pode(req.agente, 'financeiro')) throw new HttpError(403, 'Sem permissão para o financeiro');
-  const { conversa, ctx } = await contextoDa(req, req.query.contrato || null);
-  if (!ctx.cliente.cpf || !ctx.cliente.contrato) return res.json({ boletos: [], mensagem: 'Cliente não identificado nesta conversa.' });
+  const { conversa, ctx, detalhes } = await contextoDa(req, req.query.contrato || null);
+  if (!ctx.cliente.cpf) return res.json({ boletos: [], mensagem: 'Cliente não identificado nesta conversa.', falhas: [] });
+
+  // SEM `?contrato=`, consulta TODOS os contratos com título em aberto.
+  //
+  // O resumo do Financeiro soma os títulos do cliente inteiro; pedir boleto só
+  // do contrato selecionado produzia "16 títulos em aberto" seguido de "nenhum
+  // boleto em aberto" — os 16 estavam em OUTROS contratos do mesmo CPF.
+  const comDivida = detalhes.filter(c => Number(c.titulos_abertos) > 0).map(c => String(c.id));
+  const universo  = req.query.contrato ? [String(req.query.contrato)]
+                  : (comDivida.length ? comDivida : [ctx.cliente.contrato].filter(Boolean));
+  const alvo = universo.slice(0, MAX_CONTRATOS_FATURA);
+
+  if (!alvo.length) return res.json({ boletos: [], mensagem: 'Nenhum contrato com título em aberto.', falhas: [] });
 
   auditar({
     actorType: 'human', actorId: req.agente.id, action: 'cliente360_faturas',
-    conversaId: conversa.id, ip: ipDe(req),
+    conversaId: conversa.id, after: { contratos: alvo.length }, ip: ipDe(req),
   });
 
   try {
-    res.json(await faturasEmAberto(ctx.cliente.cpf, ctx.cliente.contrato));
+    const r = await faturasEmAberto(ctx.cliente.cpf, alvo);
+    res.json({ ...r, contratos_consultados: alvo, limitado: universo.length > alvo.length });
   } catch (err) {
     // O painel nunca derruba o atendimento: SGP fora vira aviso, não 500.
-    res.json({ boletos: [], mensagem: `Não foi possível consultar as faturas: ${err.message}` });
+    res.json({ boletos: [], mensagem: `Não foi possível consultar as faturas: ${err.message}`, falhas: alvo });
   }
 }));

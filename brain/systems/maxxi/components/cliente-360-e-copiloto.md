@@ -120,3 +120,25 @@ abre o `PainelSGP` — um drawer de 560px com o operacional inteiro:
   cliente está na rede, e só o banco do SGP sabe o Rx/Tx que a OLT mediu.
 - **O caro fica atrás do clique.** Fibra e faturas na ficha custariam 2 idas ao SGP a
   cada conversa aberta — a maioria sem ninguém olhar.
+
+### O financeiro é do CLIENTE, não do contrato (2026-08-22)
+
+Defeito visto em produção: *"16 títulos em aberto · R$ 795,18"* e, na linha seguinte,
+*"nenhum boleto em aberto para este contrato"*. As duas frases estavam certas e
+mediam coisas diferentes — o total somava os títulos de **todos** os contratos do CPF,
+e a lista pedia boleto do contrato **selecionado**, que não tinha nenhum. Os 16 títulos
+estavam em três outros contratos do mesmo cliente (30951, 30987, 26219).
+
+O que ficou:
+
+- `GET /:id/faturas` **sem `?contrato=`** consulta todos os contratos com título em
+  aberto, em paralelo, e devolve os boletos **marcados com o contrato de cada um**.
+- Teto de 6 contratos por consulta, com `limitado: true` no corpo — corte silencioso
+  lê como "é tudo".
+- `mesclarFaturas` (puro, 5 testes) separa **falha** de **ausência**: contrato quitado
+  responde `sem_boleto`, SGP fora responde erro. Igualar os dois faz "não sei" virar
+  "não tem" — e as falhas viram aviso visível.
+- Quando o SGP conta N títulos e não devolve boleto para nenhum, o painel **diz isso**
+  em vez de exibir "nenhum boleto" ao lado de um contador diferente de zero.
+
+A lição repete a da FASE 6: o painel pode não saber, mas não pode mentir.

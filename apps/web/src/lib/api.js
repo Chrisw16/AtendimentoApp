@@ -152,6 +152,8 @@ export const cliente360Api = {
   // As duas consultas caras do painel completo — fora da ficha de propósito,
   // para a lateral do chat continuar abrindo rápido.
   tecnico:     (convId, contrato) => api.get(`/cliente360/${convId}/tecnico${contrato ? `?contrato=${contrato}` : ''}`),
+  // Sem `contrato`, a rota cobre TODOS os contratos com título em aberto — que
+  // é o mesmo universo do total mostrado no painel.
   faturas:     (convId, contrato) => api.get(`/cliente360/${convId}/faturas${contrato ? `?contrato=${contrato}` : ''}`),
 };
 

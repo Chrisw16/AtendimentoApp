@@ -26,7 +26,7 @@ import {
   consultarOnuFttx, segundaViaBoleto,
 } from './integrations.js';
 import { diagnosticoOnu }  from './sgpDb.js';
-import { classificarSinal } from './sgpHelpers.js';
+import { classificarSinal, mesclarFaturas } from './sgpHelpers.js';
 import { mascararPII } from './mascarar.js';
 import { gerarCards }  from './contextCards.js';
 import { pode }        from './permissoes.js';
@@ -175,14 +175,17 @@ export async function contratosPermitidos(conversa) {
   if (!cpf) return { cpf: null, contratos: [], principal: conversa.contrato_id || null };
 
   const sgp = await consultarClientes(cpf).catch(() => null);
-  const ids = (sgp && !sgp.erro ? sgp.contratos : []).map(c => String(c.id));
+  const detalhes = (sgp && !sgp.erro ? sgp.contratos : []);
+  const ids = detalhes.map(c => String(c.id));
   const doBanco = conversa.contrato_id ? String(conversa.contrato_id) : null;
 
   // O contrato gravado na conversa entra na lista mesmo que o SGP não responda:
   // integração fora do ar não pode virar bloqueio de atendimento.
   const contratos = [...new Set([...(doBanco ? [doBanco] : []), ...ids])];
   const principal = (doBanco && contratos.includes(doBanco)) ? doBanco : (contratos[0] || null);
-  return { cpf, contratos, principal };
+  // `detalhes` é o que permite perguntar "quais contratos têm título em aberto?"
+  // sem uma segunda ida ao SGP.
+  return { cpf, contratos, principal, detalhes };
 }
 
 /** Tools de LEITURA que o "Diagnóstico completo" dispara juntas (§29). */
@@ -254,11 +257,21 @@ export async function dadosTecnicos(contrato) {
  * paralela; o que muda é o formato: a tool devolve texto pronto para o cliente
  * ler, e o painel precisa dos campos separados para virar botão de copiar PIX,
  * copiar linha digitável e abrir o PDF.
+ *
+ * **Aceita LISTA porque o resumo do Financeiro é do CLIENTE.** Somávamos os
+ * títulos de todos os contratos e pedíamos boleto de um só: o painel dizia
+ * "16 títulos em aberto" e, na linha seguinte, "nenhum boleto em aberto".
+ * O número e a lista têm que falar do mesmo universo.
  */
-export async function faturasEmAberto(cpf, contrato) {
-  const r = await segundaViaBoleto(cpf, contrato);
-  if (!r || r.erro)                    return { boletos: [], mensagem: r?.mensagem || r?.erro || 'Não foi possível consultar as faturas.' };
-  if (r.status === 'sem_boleto')       return { boletos: [], mensagem: r.mensagem };
-  if (r.status === 'multiplos_boletos')return { boletos: r.lista, mensagem: null };
-  return { boletos: [r], mensagem: null };
+export async function faturasEmAberto(cpf, contratos) {
+  const lista = (Array.isArray(contratos) ? contratos : [contratos]).filter(Boolean).map(String);
+  if (!lista.length) return { boletos: [], mensagem: 'Nenhum contrato para consultar.', falhas: [] };
+
+  const resultados = await Promise.all(lista.map(async contrato => ({
+    contrato,
+    // Cada contrato cai sozinho: um erro não pode esconder o boleto dos outros.
+    r: await segundaViaBoleto(cpf, contrato).catch(e => ({ erro: true, mensagem: e.message })),
+  })));
+
+  return mesclarFaturas(resultados);
 }

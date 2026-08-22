@@ -130,10 +130,13 @@ export default function ConversaInfo({ conversa, chat }) {
 
   const temDebito = (ficha?.financeiro?.titulos_abertos || 0) > 0;
   const { data: faturas, isFetching: buscandoFaturas } = useQuery({
+    // SEM contrato: a lista cobre TODOS os contratos com título em aberto, que
+    // é o mesmo universo do total exibido acima. Pedir só o contrato
+    // selecionado produzia "16 títulos" seguido de "nenhum boleto".
     // Mesma queryKey do painel completo: abrir o drawer depois não busca de novo.
-    queryKey: ['c360-faturas', conversa.id, ctrId],
-    queryFn:  () => cliente360Api.faturas(conversa.id, ctrId),
-    enabled:  finAberto && temDebito && !!ctrId && !!caps?.capacidades?.financeiro,
+    queryKey: ['c360-faturas', conversa.id],
+    queryFn:  () => cliente360Api.faturas(conversa.id),
+    enabled:  finAberto && temDebito && !!caps?.capacidades?.financeiro,
     staleTime: 60_000, retry: false,
   });
 
@@ -298,7 +301,9 @@ export default function ConversaInfo({ conversa, chat }) {
           >
             <div className={styles.finResumo} data-tom={temDebito ? 'danger' : 'ok'}>
               <div>
-                <span className={styles.finLabel}>Total em aberto</span>
+                <span className={styles.finLabel}>
+                  Total do cliente{ficha.contratos?.length > 1 ? ` · ${ficha.contratos.filter(c => Number(c.titulos_abertos) > 0).length} contrato(s)` : ''}
+                </span>
                 <strong className={styles.finValor}>{brl(ficha.financeiro.valor_aberto)}</strong>
               </div>
               <div>
@@ -311,14 +316,28 @@ export default function ConversaInfo({ conversa, chat }) {
             {temDebito && (
               <div className={styles.faturas}>
                 {buscandoFaturas && <div className={`skeleton ${styles.skelFatura}`} />}
-                {!buscandoFaturas && faturas?.mensagem && <p className={styles.nota}>{faturas.mensagem}</p>}
+                {/* "Não sei" nunca pode sair com cara de "não tem". */}
+                {faturas?.falhas?.length > 0 && (
+                  <p className={styles.faturaAlerta}>
+                    O SGP não respondeu por {faturas.falhas.length} contrato(s) — a lista abaixo está incompleta.
+                  </p>
+                )}
+                {!buscandoFaturas && !faturas?.boletos?.length && !faturas?.falhas?.length && (
+                  <p className={styles.faturaAlerta}>
+                    O SGP contabiliza {ficha.financeiro.titulos_abertos} título(s) em aberto, mas não devolveu
+                    boleto para nenhum deles — provavelmente são títulos sem boleto gerado. Confira no SGP.
+                  </p>
+                )}
                 {faturas?.boletos?.map((b, i) => (
                   <div key={b.fatura_id || i} className={styles.fatura} data-vencido={b.vencido ? '1' : '0'}>
                     <div className={styles.faturaTop}>
                       <span>{b.vencimento_atual || b.vencimento_original || 'sem vencimento'}</span>
                       <strong>{brl(b.valor_cobrado ?? b.valor_original)}</strong>
                     </div>
-                    {b.vencido && <span className={styles.faturaTag}>vencido</span>}
+                    <div className={styles.faturaMeta}>
+                      {b.contrato && <span className={styles.faturaContrato}>contrato #{b.contrato}</span>}
+                      {b.vencido && <span className={styles.faturaTag}>vencido</span>}
+                    </div>
                     <div className={styles.faturaAcoes}>
                       {(b.link_boleto || b.link_cobranca) && (
                         <a className={styles.faturaBtn} href={b.link_cobranca || b.link_boleto} target="_blank" rel="noreferrer" title="Abrir o boleto">
@@ -338,6 +357,9 @@ export default function ConversaInfo({ conversa, chat }) {
                     </div>
                   </div>
                 ))}
+                {faturas?.limitado && (
+                  <p className={styles.nota}>Mostrando os primeiros contratos — há mais no SGP.</p>
+                )}
                 {faturas?.boletos?.length > 0 && (
                   <p className={styles.nota}>Enviar publica a mensagem na conversa do cliente.</p>
                 )}

@@ -386,3 +386,13 @@
 .faturaBtnPix:hover { background: var(--accent); color: var(--text-inverse); border-color: var(--accent); }
 
 .skelFatura { height: 56px; border-radius: var(--radius-md); }
+
+/* Aviso da lista de faturas — é onde "não sei" se separa de "não tem". */
+.faturaAlerta {
+  font-size: 11px; color: var(--warning); margin: 6px 0 0;
+  background: var(--warning-bg); border-radius: var(--radius-sm); padding: 7px 8px;
+}
+.faturaMeta { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.faturaContrato {
+  font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono);
+}

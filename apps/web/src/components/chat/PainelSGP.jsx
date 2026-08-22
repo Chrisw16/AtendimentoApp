@@ -118,9 +118,10 @@ export default function PainelSGP({ conversa, ficha, contrato, contratos, onTroc
     staleTime: 60_000, retry: false,
   });
 
+  // Sem contrato: o financeiro é do CLIENTE. Mesma queryKey da lateral.
   const { data: faturas, isLoading: carregandoFaturas } = useQuery({
-    queryKey: ['c360-faturas', conversa.id, ctr?.id],
-    queryFn:  () => cliente360Api.faturas(conversa.id, ctr?.id),
+    queryKey: ['c360-faturas', conversa.id],
+    queryFn:  () => cliente360Api.faturas(conversa.id),
     enabled:  !!ctr?.id && !!caps?.capacidades?.financeiro,
     staleTime: 60_000, retry: false,
   });
@@ -322,16 +323,22 @@ export default function PainelSGP({ conversa, ficha, contrato, contratos, onTroc
 
           {/* ── FINANCEIRO ── */}
           {caps?.capacidades?.financeiro && (
-            <Bloco icon={Landmark} titulo="Financeiro (em aberto)">
+            <Bloco icon={Landmark} titulo="Financeiro — todos os contratos">
               {carregandoFaturas && <div className={`skeleton ${s.pgSgpSkel}`} />}
               {!carregandoFaturas && faturas?.mensagem && <p className={s.pgSgpNota}>{faturas.mensagem}</p>}
+              {faturas?.falhas?.length > 0 && (
+                <p className={s.pgSgpAviso}>O SGP não respondeu por {faturas.falhas.length} contrato(s) — lista incompleta.</p>
+              )}
               {faturas?.boletos?.map((b, i) => (
                 <div key={b.fatura_id || i} className={s.pgSgpBoleto} data-vencido={b.vencido ? '1' : '0'}>
                   <div className={s.pgSgpBoletoTop}>
                     <span>Venc: {dataBR(b.vencimento_atual || b.vencimento_original)}</span>
                     <strong>{brl(b.valor_cobrado ?? b.valor_original)}</strong>
                   </div>
-                  {b.vencido && <span className={s.pgSgpBoletoTag}>vencido</span>}
+                  <div className={s.pgSgpBoletoMeta}>
+                    {b.contrato && <span className={s.pgSgpBoletoContrato}>contrato #{b.contrato}</span>}
+                    {b.vencido && <span className={s.pgSgpBoletoTag}>vencido</span>}
+                  </div>
                   <div className={s.pgSgpBoletoAcoes}>
                     {b.pix_copia_cola && (
                       <button className={s.pgSgpBoletoBtn} onClick={async () => {

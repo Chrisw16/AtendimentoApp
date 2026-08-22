@@ -273,3 +273,50 @@ export function mapearOnuFttx(rows) {
     login:   limpo(r.service_login),
   };
 }
+
+/**
+ * Junta o resultado de `fatura2via` de VÁRIOS contratos numa lista só.
+ *
+ * Existe por causa de um defeito real (22/08/2026): o resumo do Financeiro
+ * somava os títulos de **todos** os contratos do cliente (16, R$ 795,18) e a
+ * lista pedia boleto só do contrato **selecionado** — que não tinha nenhum. O
+ * painel exibia "16 títulos em aberto" e, uma linha abaixo, "nenhum boleto em
+ * aberto". Número e lista precisam falar do mesmo universo.
+ *
+ * @param {Array<{contrato: string, r: object}>} resultados
+ * @returns {{boletos: object[], mensagem: string|null, falhas: string[]}}
+ */
+export function mesclarFaturas(resultados = []) {
+  const boletos = [];
+  const falhas  = [];
+  const vistos  = new Set();
+  let mensagem  = null;
+
+  for (const { contrato, r } of resultados) {
+    // Ausência ≠ falha. Um contrato quitado devolve `sem_boleto`; o SGP fora do
+    // ar devolve erro. Tratar os dois igual faz "não sei" virar "não tem".
+    if (!r || r.erro) { falhas.push(String(contrato)); continue; }
+    if (r.status === 'sem_boleto') { mensagem = mensagem || r.mensagem || null; continue; }
+
+    const lista = r.status === 'multiplos_boletos' ? (r.lista || []) : [r];
+    for (const b of lista) {
+      const chave = `${contrato}:${b.fatura_id ?? b.indice ?? JSON.stringify(b)}`;
+      if (vistos.has(chave)) continue;
+      vistos.add(chave);
+      boletos.push({ ...b, contrato: String(b.contrato ?? contrato) });
+    }
+  }
+
+  // Mais antigo primeiro: é o que vence a conversa. Sem data vai para o fim —
+  // ordenar `null` como zero jogaria boleto sem vencimento para o topo.
+  boletos.sort((a, b) => {
+    const da = a.vencimento_atual || a.vencimento_original;
+    const db = b.vencimento_atual || b.vencimento_original;
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return String(da).localeCompare(String(db));
+  });
+
+  return { boletos, mensagem: boletos.length ? null : mensagem, falhas };
+}

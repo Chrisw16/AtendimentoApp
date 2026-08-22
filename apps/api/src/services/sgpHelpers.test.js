@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizarManutencoes, manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado, classificarSinal, formatarDiagnosticoOnu,
-  mapearRespostaCliente, mapearOnuFttx,
+  mapearRespostaCliente, mapearOnuFttx, mesclarFaturas,
 } from './sgpHelpers.js';
 
 const AGORA = new Date(2026, 6, 2, 12, 0, 0); // 2026-07-02 12:00 (local)
@@ -291,4 +291,52 @@ test('mapearOnuFttx omite CTO sem porta em vez de escrever "(Porta null)"', () =
   const o = mapearOnuFttx([{ ...RAW_ONU[0], ctoport: null }]);
   assert.equal(o.cto, 'NETGO-LMR 03');
   assert.equal(mapearOnuFttx([{ ...RAW_ONU[0], cto: null }]).cto, null);
+});
+
+// ── mesclarFaturas: o número e a lista têm que falar do MESMO universo ──
+test('mesclarFaturas junta boletos de vários contratos, marcando de quem é cada um', () => {
+  const r = mesclarFaturas([
+    { contrato: '30951', r: { status: 'multiplos_boletos', total: 2, lista: [
+      { fatura_id: 1, valor_cobrado: 89.8 }, { fatura_id: 2, valor_cobrado: 88.92 }] } },
+    { contrato: '30987', r: { status: 'boleto_encontrado', fatura_id: 9, valor_cobrado: 3.62 } },
+    { contrato: '29783', r: { status: 'sem_boleto', mensagem: 'Nenhum boleto em aberto.' } },
+  ]);
+  assert.equal(r.boletos.length, 3);
+  assert.deepEqual(r.boletos.map(b => b.contrato), ['30951', '30951', '30987']);
+  assert.equal(r.mensagem, null);
+});
+
+test('mesclarFaturas NÃO chama de erro o contrato que simplesmente não tem boleto', () => {
+  const r = mesclarFaturas([{ contrato: '1', r: { status: 'sem_boleto', mensagem: 'Nenhum boleto.' } }]);
+  assert.deepEqual(r.boletos, []);
+  assert.equal(r.mensagem, 'Nenhum boleto.');
+  assert.deepEqual(r.falhas, []);
+});
+
+test('mesclarFaturas separa FALHA de ausência — "não sei" não pode virar "não tem"', () => {
+  // O defeito de 22/08/2026 em outra roupa: SGP fora do ar dizendo "sem débito".
+  const r = mesclarFaturas([
+    { contrato: '1', r: { erro: true, mensagem: 'SGP 500' } },
+    { contrato: '2', r: { status: 'boleto_encontrado', fatura_id: 7 } },
+  ]);
+  assert.equal(r.boletos.length, 1);
+  assert.deepEqual(r.falhas, ['1']);
+});
+
+test('mesclarFaturas ordena por vencimento: o mais antigo primeiro', () => {
+  const r = mesclarFaturas([
+    { contrato: '1', r: { status: 'multiplos_boletos', lista: [
+      { fatura_id: 1, vencimento_atual: '2026-06-09' },
+      { fatura_id: 2, vencimento_atual: '2026-05-01' },
+      { fatura_id: 3, vencimento_atual: null },
+    ] } },
+  ]);
+  assert.deepEqual(r.boletos.map(b => b.fatura_id), [2, 1, 3]);  // sem data vai pro fim
+});
+
+test('mesclarFaturas dedup por (contrato, fatura) — contrato repetido não duplica boleto', () => {
+  const b = { fatura_id: 5, valor_cobrado: 10 };
+  const r = mesclarFaturas([{ contrato: '1', r: { ...b, status: 'boleto_encontrado' } },
+                            { contrato: '1', r: { ...b, status: 'boleto_encontrado' } }]);
+  assert.equal(r.boletos.length, 1);
 });
