@@ -133,6 +133,13 @@ chatRouter.post('/conversas/:id/devolver-ia', asyncHandler(async (req, res) => {
   if (!conv) throw new HttpError(404, 'Conversa não encontrada');
   await mensagemRepo.criar({ conversa_id: conv.id, origem: 'sistema', tipo: 'texto', texto: '🤖 Devolvido para atendimento da IA' });
   broadcast('conversa_atualizada', conv);
+
+  // §13 — a automação retoma de onde parou. A lógica mora no motor
+  // (`retomarAutomacao`) e não aqui, para ser testável sem subir HTTP+auth.
+  const { retomarAutomacao } = await import('../services/motorFluxo.js');
+  retomarAutomacao(conv).catch(err =>
+    console.error('[Chat] Retomada do fluxo falhou:', err.message));
+
   res.json(conv);
 }));
 

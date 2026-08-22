@@ -42,8 +42,32 @@ app.use(rateLimit({ windowMs: 60000, max: 200, standardHeaders: true, legacyHead
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Health check — SEMPRE responde, independente do banco
+// Health check — SEMPRE responde, independente do banco (liveness)
 app.get('/health', (_req, res) => res.json({ status: 'ok', version: '2.0.0', ts: new Date().toISOString() }));
+
+// Readiness — 503 até as migrations terminarem, 503 PERMANENTE se falharem.
+// Antes, uma migration quebrada só imprimia no console e o app seguia
+// "saudável" servindo tráfego sobre schema pela metade.
+//
+// Precisa ficar aqui, ANTES do bloco de frontend estático: o catch-all
+// `app.get('*')` casa `/health/ready`, a condição `!path.startsWith('/health')`
+// é falsa e nenhuma resposta seria enviada — o healthcheck estouraria em
+// timeout em vez de receber 503.
+let prontidao = { pronto: false, motivo: 'migrations em andamento' };
+app.get('/health/ready', (_req, res) => {
+  if (prontidao.pronto) return res.json({ status: 'ready' });
+  res.status(503).json({ status: 'not_ready', motivo: prontidao.motivo });
+});
+
+// O readiness gate o healthcheck do container, mas o Express começa a aceitar
+// `/api/*` no segundo zero — e as migrations rodam em background. Na estreia da
+// 014, `flow_executions` e `protocolo_seq` ainda não existem: um webhook nessa
+// janela pega `42P01` e a mensagem do cliente se perde num 500. 503 é a resposta
+// certa — o provedor reentrega.
+app.use('/api', (_req, res, next) => {
+  if (prontidao.pronto) return next();
+  res.status(503).json({ error: 'Serviço iniciando', motivo: prontidao.motivo });
+});
 
 // Rotas públicas
 app.use('/api/auth',       authRouter);
@@ -72,7 +96,12 @@ app.use('/api/planos',      planosRouter);
 if (existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api') && !req.path.startsWith('/health')) {
+    // O `else` importa: sem ele, `/api/rota-inexistente` e `/health/qualquer`
+    // não recebiam resposta NENHUMA e a requisição pendurava até o timeout do
+    // cliente. Foi assim que `/health/ready` pendurou na produção antiga.
+    if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
+      res.status(404).json({ error: 'Rota não encontrada' });
+    } else {
       res.sendFile(join(frontendDist, 'index.html'));
     }
   });
@@ -104,14 +133,73 @@ if (process.env.DATABASE_URL) {
 
   import('./migrations/run.js')
     .then(({ runMigrations }) => runMigrations())
-    .then(() => console.log('✅ Migrations OK'))
-    .catch(err => console.error('❌ Migration FALHOU:', err.message))
+    .then(() => {
+      console.log('✅ Migrations OK');
+      prontidao = { pronto: true, motivo: null };
+    })
+    .catch(err => {
+      console.error('❌ Migration FALHOU:', err.message);
+      prontidao = { pronto: false, motivo: `migration falhou: ${err.message}` };
+    })
     // `finally`: os monitores sobem mesmo se a migration falhar. Antes eles
     // viviam no `.then` da migration — uma migration quebrada desligava SLA e
     // supervisora em silêncio, com o app parecendo saudável.
     .finally(iniciarMonitores);
 } else {
+  // NÃO marca pronto: sem banco toda rota que chama `getDb()` estoura. Um
+  // container "saudável" servindo 500 em tudo é exatamente o que o readiness
+  // existe para evitar.
   console.warn('⚠️  DATABASE_URL não definida');
+  prontidao = { pronto: false, motivo: 'DATABASE_URL não definida' };
 }
+
+// ── SHUTDOWN GRACIOSO ───────────────────────────────────────────
+// Sem isto o deploy corta a conversa no meio de um `await` de SGP/IA: o turno
+// morre depois do efeito colateral (chamado aberto no SGP) e antes de gravar
+// o estado ou responder ao cliente.
+const LIMITE_DRENO_MS = 8000;   // `docker stop` manda SIGKILL aos 10 s
+let encerrando = false;
+
+async function encerrar(sinal) {
+  if (encerrando) return;
+  encerrando = true;
+  prontidao = { pronto: false, motivo: 'encerrando' };   // tira do balanceador primeiro
+  console.log(`\n⏹  ${sinal} recebido — encerrando com calma`);
+
+  try {
+    const { fecharClientes } = await import('./services/sseManager.js');
+    // SSE é keep-alive com ping de 25 s: sem derrubar os clientes,
+    // `server.close()` nunca resolve e o dreno abaixo nem começa.
+    console.log(`   ${fecharClientes()} conexão(ões) SSE fechada(s)`);
+  } catch {}
+
+  server.close();
+
+  try {
+    const { filaConversa } = await import('./services/motorFluxo.js');
+    const ate = Date.now() + LIMITE_DRENO_MS;
+    while (filaConversa.tamanho() > 0 && Date.now() < ate) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    const restantes = filaConversa.tamanho();
+    console.log(restantes === 0
+      ? '   ✓ Nenhum turno de fluxo em voo'
+      : `   ⚠️  ${restantes} turno(s) ainda em voo ao estourar o limite de ${LIMITE_DRENO_MS} ms`);
+  } catch {}
+
+  try {
+    const { getDb } = await import('./config/db.js');
+    await getDb().destroy();
+  } catch {}
+
+  // ponytail: os dois monitores (SLA e supervisora) e o ping do SSE seguram o
+  // event loop com setInterval, então sair sozinho não acontece. Encerrar aqui
+  // é o corte limpo — o estado do fluxo já está no banco a esta altura.
+  console.log('   ✓ Encerrado');
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => encerrar('SIGTERM'));
+process.on('SIGINT',  () => encerrar('SIGINT'));
 
 export default app;

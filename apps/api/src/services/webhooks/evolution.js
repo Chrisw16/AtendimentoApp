@@ -36,17 +36,16 @@ async function processarMensagem(body) {
   const existe = await mensagemRepo.porExternalId(external_id);
   if (existe) return;
 
-  let conversa = await conversaRepo.porTelefoneCanal(telefone, 'whatsapp');
+  // `obterOuCriar` em vez de "checa → cria": duas mensagens simultâneas de um
+  // número novo passavam as duas pela checagem e nasciam DUAS conversas, cada
+  // uma com sua execução de fluxo. A unique parcial da migration 014 barra.
+  const { conversa, nova } = await conversaRepo.obterOuCriar(telefone, 'whatsapp', {
+    nome:            data?.pushName || null,
+    status:          'ia',
+    canal_instancia: instancia,   // salva instância para poder enviar de volta
+  });
 
-  if (!conversa) {
-    const nome = data?.pushName || null;
-    conversa   = await conversaRepo.criar({
-      canal: 'whatsapp',
-      telefone,
-      nome,
-      status: 'ia',
-      canal_instancia: instancia,  // salva instância para poder enviar de volta
-    });
+  if (nova) {
     broadcast('nova_conversa', conversa);
   } else if (instancia && !conversa.canal_instancia) {
     // Atualiza instância se ainda não tinha

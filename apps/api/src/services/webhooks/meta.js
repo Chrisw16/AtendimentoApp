@@ -36,23 +36,13 @@ async function processarMensagemMeta(msg, value) {
   const existe = await mensagemRepo.porExternalId(msg.id);
   if (existe) return;
 
-  // Encontra ou cria conversa
-  let conversa = await conversaRepo.porTelefoneCanal(telefone, canal);
-
-  if (!conversa) {
-    // Pega nome do contato se disponível
-    const contato = value?.contacts?.find(c => c.wa_id === telefone);
-    const nome    = contato?.profile?.name || null;
-
-    conversa = await conversaRepo.criar({
-      canal,
-      telefone,
-      nome,
-      status: 'ia',
-    });
-
-    broadcast('nova_conversa', conversa);
-  }
+  // Encontra ou cria conversa — atômico, ver `obterOuCriar` e a migration 014.
+  const contato = value?.contacts?.find(c => c.wa_id === telefone);
+  const { conversa, nova } = await conversaRepo.obterOuCriar(telefone, canal, {
+    nome:   contato?.profile?.name || null,
+    status: 'ia',
+  });
+  if (nova) broadcast('nova_conversa', conversa);
 
   // Extrai conteúdo da mensagem
   const { texto, tipo, url, mime } = extrairConteudo(msg);

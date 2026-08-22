@@ -10,6 +10,14 @@
  * o motor não faz (ele só pausa ou encerra). O control-flow e o roteamento de
  * porta (`encontrarProximo`) são cópias byte-a-byte do motor, então este loop
  * está PRONTO para religar no `processarConversa` e remover o código duplicado.
+ *
+ * ⚠️ DIVERGÊNCIA a partir da FASE 1 (2026-08-21): o laço real virou assíncrono
+ * na persistência do estado (`await estados.set/delete` num `finally`, grafo
+ * congelado em `estado._grafo`, `fim({manter})` para a transferência ao humano).
+ * NADA disso está aqui. Este arquivo — e o `motorSimulador.js` que roda em cima
+ * dele — espelham o laço PRÉ-FASE-1. Religar exige portar essas mudanças
+ * primeiro; até lá, "espelho byte-a-byte" vale só para a lógica de travessia
+ * (qual nó vem depois), não para o ciclo de vida da execução.
  * Esse religamento foi deixado como passo seguinte porque exige validação
  * rodando (o motor puxa knex/IA e não importa em teste neste ambiente).
  */

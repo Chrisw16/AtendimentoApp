@@ -78,6 +78,22 @@ export function removeClient(agenteId, res) {
   if (localClients.get(agenteId)?.size === 0) localClients.delete(agenteId);
 }
 
+/**
+ * Derruba todas as conexões SSE abertas. Existe para o shutdown gracioso:
+ * SSE é keep-alive com ping de 25 s, então `server.close()` NUNCA resolve
+ * enquanto houver um agente com a tela aberta — o processo penduraria até o
+ * SIGKILL, cortando conversa no meio de um `await` de SGP/IA.
+ */
+export function fecharClientes() {
+  let n = 0;
+  localClients.forEach(set => set.forEach(res => {
+    n++;
+    try { res.end(); } catch {}
+  }));
+  localClients.clear();
+  return n;
+}
+
 // ── ENTREGA LOCAL ─────────────────────────────────────────────────
 function _deliverLocal(event, data, target = null) {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;

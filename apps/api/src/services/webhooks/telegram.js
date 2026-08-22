@@ -54,11 +54,9 @@ async function processarMensagemTelegram(chatId, nome, texto, externalId, tipo =
   const existe = await mensagemRepo.porExternalId(externalId);
   if (existe) return;
 
-  let conversa = await conversaRepo.porTelefoneCanal(chatId, 'telegram');
-  if (!conversa) {
-    conversa = await conversaRepo.criar({ canal: 'telegram', telefone: chatId, nome, status: 'ia' });
-    broadcast('nova_conversa', conversa);
-  }
+  // Atômico, ver `obterOuCriar` e a migration 014.
+  const { conversa, nova } = await conversaRepo.obterOuCriar(chatId, 'telegram', { nome, status: 'ia' });
+  if (nova) broadcast('nova_conversa', conversa);
 
   const mensagem = await mensagemRepo.criar({
     conversa_id: conversa.id,
