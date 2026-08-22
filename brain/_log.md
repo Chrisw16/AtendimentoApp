@@ -560,3 +560,22 @@ Junto, o pedido do operador: a lateral estava "sem graça, difícil de entender 
   mensagem inteira.
 - Largura da lateral 280 → `--panel-width` (320px), que existia no tokens e não era
   usado; valor longo (plano, e-mail) deixou de ser cortado com reticências.
+
+## [2026-08-22] FIX | Deploy falhando: era OOM killer, não o código
+
+O build do frontend morreu no Coolify logo depois de `✓ 1859 modules transformed.`,
+**sem imprimir erro nenhum**.
+
+Descartadas três causas de código, com repro fiel do container (só os arquivos que o
+Dockerfile copia + `npm install` limpo): dependência, arquivo faltando e caixa de nome
+em import (macOS é case-insensitive, Alpine não). O build passa localmente.
+
+**O silêncio é o diagnóstico.** Quando o V8 estoura o próprio heap ele cospe um stack
+dump de 40 linhas — reproduzi com `--max-old-space-size=180`. Nada impresso é
+`SIGKILL` do cgroup: o kernel mata o processo sem dar chance de falar.
+
+Medido: o build sobe a ~620 MB de RSS numa máquina folgada, mas **completa com 256 MB**
+— o V8 estava crescendo porque tinha RAM, não porque precisava. `Dockerfile` ganhou
+`NODE_OPTIONS=--max-old-space-size=512` no stage do frontend.
+
+Achado de lado: `apps/web/package-lock.json` **não está versionado**.

@@ -10,6 +10,16 @@ COPY apps/web/index.html ./
 COPY apps/web/vite.config.js ./
 COPY apps/web/src ./src
 
+# Teto de heap do V8 no BUILD.
+#
+# Sem isto o V8 cresce até o que a máquina tiver (medido: ~620 MB de RSS numa
+# máquina folgada, embora 256 MB bastem para este bundle) e, num cgroup
+# apertado, o kernel manda SIGKILL. O sintoma é traiçoeiro: o log para logo
+# depois de "modules transformed" e **não imprime erro nenhum** — quando é o
+# próprio V8 que estoura, ele cospe um stack dump gigante; silêncio é o OOM
+# killer. Foi assim que o deploy de 22/08/2026 falhou.
+ENV NODE_OPTIONS=--max-old-space-size=512
+
 RUN npm run build
 
 # ── STAGE 2: Runtime da API ───────────────────────────────────────
