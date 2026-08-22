@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, agregarNps, normalizarNomeCampo, montarFichaColetada, CAMPOS_RESERVADOS, normalizarData } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, camposIaResponde, agregarNps, normalizarNomeCampo, montarFichaColetada, CAMPOS_RESERVADOS, normalizarData } from './fluxoHelpers.js';
 
 test('resolverTipoChamado mapeia tipo "tecnico" para 200 (Reparo)', () => {
   assert.equal(resolverTipoChamado({ tipo: 'tecnico' }), 200);
@@ -241,4 +241,37 @@ test('montarFichaColetada ignora chaves reservadas mesmo se escalares', () => {
   const bloco = montarFichaColetada({ cliente: 'Fulano', cidade: 'Natal' });
   assert.match(bloco, /cidade: Natal/);
   assert.doesNotMatch(bloco, /cliente/);
+});
+
+// ── ia_responde: os dois campos com alias que resolviam em direções contrárias ──
+//
+// Bug vivo até 2026-08-21: a tela gravava `prompt` e `max_turns`, o motor lia
+// `instrucao ?? prompt` (o ANTIGO vencia — editar a instrução não tinha efeito)
+// e `max_turns || max_turnos` (o NOVO vencia — encostar no campo derrubava a
+// janela de 25 turnos do fluxo de cadastro para o default 5 da tela).
+test('camposIaResponde: o valor da TELA vence, sempre', () => {
+  const r = camposIaResponde({ instrucao: 'nova', prompt: 'antiga', max_turnos: 25, max_turns: 5 });
+  assert.equal(r.instrucao, 'nova', 'a instrução antiga venceu a que está na tela');
+  assert.equal(r.maxTurnos, 25, 'o max_turns legado derrubou o max_turnos configurado');
+});
+
+test('camposIaResponde: fluxo salvo só com os nomes antigos continua funcionando', () => {
+  const r = camposIaResponde({ prompt: 'só a antiga', max_turns: 12 });
+  assert.equal(r.instrucao, 'só a antiga');
+  assert.equal(r.maxTurnos, 12);
+});
+
+test('camposIaResponde: sem nada configurado, o default é 6 (o do motor, não o 5 da tela)', () => {
+  assert.equal(camposIaResponde({}).maxTurnos, 6);
+  assert.equal(camposIaResponde({}).instrucao, undefined);
+});
+
+test('camposIaResponde: instrução vazia na tela apaga a antiga (string vazia é escolha)', () => {
+  // `??` e não `||`: apagar o campo tem de valer, senão o texto antigo ressuscita.
+  assert.equal(camposIaResponde({ instrucao: '', prompt: 'antiga' }).instrucao, '');
+});
+
+test('camposIaResponde: max_turnos inválido cai no default em vez de virar NaN', () => {
+  assert.equal(camposIaResponde({ max_turnos: 'abc' }).maxTurnos, 6);
+  assert.equal(camposIaResponde({ max_turnos: 0 }).maxTurnos, 6);
 });

@@ -135,10 +135,42 @@ Duas fontes de verdade a menos sem escrever uma linha.
 - `transferir_para_humano`/`encerrar_atendimento` não são tools, são control-flow
   (retornam sentinelas `__TRANSFERIR__:`).
 
-## Critérios de aceite (§19)
+## Critérios de aceite (§19) — resultado (2026-08-22)
 
-- [ ] todo nó executável tem configuração visual ou é `internal_only`
-- [ ] editor e motor usam os mesmos nomes de configuração
-- [ ] portas válidas derivam da mesma definição
-- [ ] validador e simulador não duplicam metadados de nó
-- [ ] fluxos existentes não quebram
+- [x] **todo nó executável tem configuração visual ou é `internal_only`** — os 5
+  órfãos do motor foram **deletados** (resíduo do provedor de inspiração, zero
+  uso em seed/exemplos); os 2 tipos sem bloco no painel vivo não leem `cfg`.
+- [x] **editor e motor usam os mesmos nomes** — `camposIaResponde` é a fonte
+  única de `instrucao`/`max_turnos`; a tela grava os nomes do motor e lê os
+  antigos como fallback. Escala do NPS ganhou campo. 5 testes novos.
+- [x] **portas derivam da mesma definição** — paleta alinhada à verdade do motor
+  (`solicitar_localizacao`, `abrir_chamado`, `transferir_agente`, `enviar_email`);
+  `transferido` reconhecida como VIVA (retomada da FASE 1) no validador.
+- [x] **validador e simulador não duplicam metadados** — o simulador espelha o
+  motor no `consultar_cliente` (era o falso positivo da pauta); o **teste de
+  contrato** (`tests/contrato-catalogos.test.js`) compara os 3 catálogos e falha
+  quando divergem — o registry sem a camada.
+- [x] **fluxos existentes não quebram** — nomes antigos são fallback de leitura;
+  nenhuma porta usada por exemplo/produção foi renomeada (verificado por grep
+  nos `examples/*.json`).
+
+Extra: `allowed_in_sandbox`/`is_write` viraram metadado da tool (o `Set` solto
+morreu) — e o motor passou a enviar à API **só** `name/description/input_schema`,
+porque campo desconhecido na definição da tool derruba a chamada com 400. Bug de
+brinde corrigido: `reiniciar_onu_acs` lia `input.serial`, que o schema nunca
+declarou — reiniciava a ONU de serial `''` **sempre**; agora resolve o serial
+pelo contrato via `diagnosticoOnu`.
+
+Suíte: **199 puros + 48 integração**.
+
+## Fica aberto (registrado, fora do escopo)
+
+- `gatilho_keyword` inerte; `aguardar_resposta.timeout` (scheduler = FASE 4);
+  campos inertes da tela (`rodape`, `alias`, `ia_menu_ativo`, `motivo`/`fila`).
+- **nó `listar_planos` (SGP) vs tool `listar_planos_ativos` (tabela local)** —
+  mesma pergunta, duas respostas no mesmo atendimento. É o item 8 do plano
+  ("nós reutilizam Tools"), adiado com registro.
+- `salvar_dado` executa no motor (precisa mutar `ctx.estado`), não no
+  `executarTool`; `transferir_para_humano`/`encerrar_atendimento` são
+  control-flow com sentinela, não tools — qualquer registry futuro precisa de
+  um campo `kind`.

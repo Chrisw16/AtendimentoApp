@@ -92,7 +92,9 @@ export const NODE_TYPES = {
     label: 'Solicitar localização',
     group: 'mensagem',
     color: '#ff9f0a',
-    portas: ['localizacao_recebida', 'sem_localizacao', 'erro'],
+    // Só a porta que o motor emite de verdade — `sem_localizacao`/`erro` nunca
+    // existiram na execução: aresta ligada nelas nunca disparava.
+    portas: ['localizacao_recebida'],
     descricao: 'Pede ao cliente que compartilhe sua localização GPS',
   },
 
@@ -166,7 +168,9 @@ export const NODE_TYPES = {
     label: 'Abrir chamado',
     group: 'sgp',
     color: '#a78bfa',
-    portas: ['saida'],
+    // O motor emite sucesso/erro. A paleta dizia `saida`, que só funcionava por
+    // acidente (2º fallback do encontrarProximo) — e escondia o ramo de erro.
+    portas: ['sucesso', 'erro'],
     descricao: 'Abre um chamado técnico no SGP',
   },
   promessa_pagamento: {
@@ -212,14 +216,16 @@ export const NODE_TYPES = {
     label: 'Transferir para fila',
     group: 'acao',
     color: '#ff6b35',
-    portas: ['transferido', 'fora_horario', 'sem_agente'],
+    // `transferido` = por onde a automação RETOMA quando o agente devolve
+    // (FASE 1). `sem_agente` saiu: detectar fila sem agente livre é FASE 5.
+    portas: ['transferido', 'fora_horario'],
     descricao: 'Transfere para atendimento humano',
   },
   enviar_email: {
     label: 'Enviar e-mail',
     group: 'acao',
     color: '#fb923c',
-    portas: ['sucesso'],
+    portas: ['saida'],   // é o que o motor emite (o nó ainda é stub, só loga)
     descricao: 'Envia um e-mail',
   },
   nota_interna: {
@@ -290,3 +296,30 @@ export const PORTA_META = {
   sem_localizacao:     { color: '#f5c518',  label: 'sem localização' },
   concluido:           { color: '#00E5A0',  label: 'concluído' },
 };
+
+// Lista exibida como checkbox no painel de propriedades do nó ia_responde.
+//
+// O default TEM de bater com o de `motorFluxo.js` (`toolsAtivas`), senão o
+// checkbox mente: até 2026-08-21 a tela marcava `listar_planos_ativos` e
+// `listar_vencimentos` por default e o motor as deixava desligadas.
+// `tests/contrato-catalogos.test.js` trava os dois juntos.
+export const IA_TOOLS_LIST = [
+  { id: 'verificar_conexao',     label: '📡 Verificar conexão',       cat: 'Diagnóstico' },
+  { id: 'consultar_manutencao',  label: '🔧 Consultar manutenção',    cat: 'Diagnóstico' },
+  { id: 'status_rede',           label: '🌐 Status da rede',          cat: 'Diagnóstico' },
+  { id: 'consultar_radius',      label: '🔌 Consultar Radius',        cat: 'Diagnóstico' },
+  { id: 'consultar_onu_acs',     label: '📶 Consultar ONU (ACS)',     cat: 'Diagnóstico' },
+  { id: 'reiniciar_onu_acs',     label: '🔄 Reiniciar ONU (ACS)',     cat: 'Diagnóstico' },
+  { id: 'criar_chamado',         label: '🎫 Criar chamado',           cat: 'Atendimento' },
+  { id: 'historico_ocorrencias', label: '📋 Histórico de ocorrências',cat: 'Atendimento' },
+  { id: 'segunda_via_boleto',    label: '💳 2ª via de boleto',        cat: 'Financeiro' },
+  { id: 'promessa_pagamento',    label: '🤝 Promessa de pagamento',   cat: 'Financeiro' },
+  { id: 'listar_planos_ativos',  label: '📋 Listar planos ativos',    cat: 'Comercial'   },
+  { id: 'listar_vencimentos',    label: '📅 Listar vencimentos',      cat: 'Comercial'   },
+  { id: 'precadastrar_cliente',  label: '📝 Pré-cadastro de cliente', cat: 'Comercial'   },
+  { id: 'transferir_para_humano',label: '👤 Transferir para humano',  cat: 'Controle'    },
+  { id: 'encerrar_atendimento',  label: '✅ Encerrar atendimento',    cat: 'Controle'    },
+];
+// Default = só suporte. As comerciais (incluindo o pré-cadastro, que cria
+// cliente de verdade no SGP) exigem marcação explícita no ramo comercial.
+export const IA_TOOLS_DEFAULT = IA_TOOLS_LIST.filter(t => t.cat !== 'Comercial').map(t => t.id);

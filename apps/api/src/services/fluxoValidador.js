@@ -23,7 +23,7 @@ const slug = (s) => String(s).toLowerCase().replace(/\s+/g, '_');
  * - aguarda: o nó pode pausar esperando o cliente (quebra loop)
  * - termina: o nó pode encerrar a conversa (fim())
  */
-const NOS = {
+export const NOS = {
   // ── Gatilhos ──
   inicio:           { estaticas: ['saida'] },
   gatilho_keyword:  { estaticas: ['saida'] },
@@ -81,7 +81,10 @@ const NOS = {
   },
 
   // ── Ações ──
-  transferir_agente: { estaticas: ['fora_horario'], termina: true }, // sucesso = fim(); transferido/sem_agente são mortas
+  // `transferido` deixou de ser morta na FASE 1: é o destino da retomada quando
+  // o agente devolve a conversa (`_retomarNo`). Sem essa aresta, transferir
+  // encerra a execução como sempre encerrou — por isso ela é válida, não órfã.
+  transferir_agente: { estaticas: ['transferido', 'fora_horario'], termina: true },
   chamada_http:      { estaticas: ['sucesso', 'erro'] },
   nota_interna:      { estaticas: ['saida'] },
   enviar_email:      { estaticas: ['saida'] }, // nodeTypes diz "sucesso", motor emite "saida"
@@ -90,12 +93,6 @@ const NOS = {
   // ── Fim ──
   encerrar: { estaticas: [], termina: true },
 
-  // ── Stubs avançados (só enviam msg e avançam por "saida") ──
-  mudanca_endereco:          { estaticas: ['saida'] },
-  mudar_plano:               { estaticas: ['saida'] },
-  cadastrar_lead:            { estaticas: ['saida'] },
-  cadastrar_condominio:      { estaticas: ['saida'] },
-  registrar_ocorrencia_cond: { estaticas: ['saida'] },
 };
 
 function normalizarItens(itens) {

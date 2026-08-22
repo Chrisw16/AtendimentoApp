@@ -53,6 +53,54 @@ export function camposLista(cfg = {}) {
 }
 
 /**
+ * Tools ativas quando o nó `ia_responde` não declara `cfg.tools_ativas`: só
+ * suporte. As comerciais ficam de fora de propósito — `precadastrar_cliente`
+ * cria cliente de verdade no SGP.
+ *
+ * Mora aqui (módulo puro) e não no motor porque `motorFluxo.js` não é importável
+ * em teste (puxa Knex no topo), e esta lista precisa ser comparada com o
+ * `IA_TOOLS_DEFAULT` do editor — até 2026-08-21 elas divergiam, e o checkbox de
+ * `listar_planos_ativos`/`listar_vencimentos` aparecia marcado na tela com a
+ * tool desligada na execução. Travado por `tests/contrato-catalogos.test.js`.
+ */
+export const TOOLS_PADRAO = [
+  'verificar_conexao', 'consultar_manutencao', 'status_rede',
+  'consultar_onu_acs', 'reiniciar_onu_acs', 'consultar_radius',
+  'criar_chamado', 'segunda_via_boleto',
+  'promessa_pagamento', 'historico_ocorrencias',
+  'transferir_para_humano', 'encerrar_atendimento',
+];
+
+/**
+ * `ia_responde`: resolve os dois campos que tinham alias — e que resolviam em
+ * direções CONTRÁRIAS, o que é pior do que os dois estarem errados.
+ *
+ * Como era até 2026-08-21 (FASE 2):
+ * - a tela gravava `cfg.prompt`, o motor lia `cfg.instrucao ?? cfg.prompt` →
+ *   o valor **antigo vencia**. Num nó importado do `fluxo-netgo-v2.json` (que
+ *   grava `instrucao`), editar "Instruções extras" na tela **não tinha efeito**
+ *   e nada avisava.
+ * - a tela gravava `cfg.max_turns` com default 5, o motor lia
+ *   `cfg.max_turns || cfg.max_turnos` com default 6 → o valor **novo vencia**.
+ *   A tela mostrava 5 num nó configurado para 25, e bastava encostar no campo
+ *   para a janela de um cadastro comercial cair de 25 para 5 turnos e o
+ *   atendimento encerrar no meio.
+ *
+ * Regra única agora: **o nome que a tela grava hoje (`instrucao`/`max_turnos`)
+ * vence**; o nome antigo é só fallback de leitura, para fluxo já salvo.
+ *
+ * `??` e não `||` na instrução: apagar o campo na tela é uma escolha do
+ * operador, e com `||` o texto antigo ressuscitaria.
+ */
+export function camposIaResponde(cfg = {}) {
+  const maxTurnos = parseInt(cfg.max_turnos ?? cfg.max_turns, 10);
+  return {
+    instrucao: cfg.instrucao ?? cfg.prompt,
+    maxTurnos: Number.isFinite(maxTurnos) && maxTurnos > 0 ? maxTurnos : 6,
+  };
+}
+
+/**
  * Agrega respostas de NPS em promotores/neutros/detratores + score.
  *
  * Fonte ÚNICA das faixas: delega a classificação a `avaliarNps`, que conhece a

@@ -120,8 +120,10 @@ test('portasEmitidas: ia_responde emite resolvido/transferir/max_turnos', () => 
   assert.deepEqual(portasEmitidas({ tipo: 'ia_responde' }).sort(), ['max_turnos', 'resolvido', 'transferir']);
 });
 
-test('portasEmitidas: transferir_agente só emite "fora_horario" (transferido/sem_agente são mortas)', () => {
-  assert.deepEqual(portasEmitidas({ tipo: 'transferir_agente' }), ['fora_horario']);
+test('portasEmitidas: transferir_agente emite transferido (retomada, FASE 1) e fora_horario', () => {
+  // `transferido` deixou de ser morta na FASE 1: é o destino de `_retomarNo`
+  // quando o agente devolve a conversa. `sem_agente` segue não existindo (FASE 5).
+  assert.deepEqual(portasEmitidas({ tipo: 'transferir_agente' }).sort(), ['fora_horario', 'transferido']);
 });
 
 test('portasEmitidas: abrir_chamado emite sucesso/erro (não "saida")', () => {
@@ -246,13 +248,14 @@ test('validarFluxo: nó solto → aviso no_inalcancavel (e não vira beco)', () 
 });
 
 test('validarFluxo: aresta saindo de porta que o motor nunca emite → aviso aresta_orfa', () => {
+  // `sem_agente` é o exemplo de porta morta agora (transferido virou viva na FASE 1).
   const res = validarFluxo(mk(
     [{ id: 'i', tipo: 'inicio' }, { id: 'tr', tipo: 'transferir_agente' }, { id: 'e', tipo: 'encerrar' }],
-    [{ from: 'i', to: 'tr', port: 'saida' }, { from: 'tr', to: 'e', port: 'transferido' }],
+    [{ from: 'i', to: 'tr', port: 'saida' }, { from: 'tr', to: 'e', port: 'sem_agente' }],
   ));
   const p = acharProblema(res, 'aresta_orfa', 'tr');
   assert.ok(p, 'esperava aresta_orfa no nó tr');
-  assert.equal(p.porta, 'transferido');
+  assert.equal(p.porta, 'sem_agente');
 });
 
 test('validarFluxo: ciclo de nós instantâneos → aviso loop_sem_espera (trava)', () => {

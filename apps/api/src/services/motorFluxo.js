@@ -17,7 +17,7 @@ import {
   // As funções evolutionEnviar* saíram daqui: o envio por canal mora em
   // `canais/evolution.js`, que as recebe por injeção.
 } from './integrations.js';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, camposIaResponde, TOOLS_PADRAO, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
 import { criarFilaPorChave } from './filaPorChave.js';
 import { estadoStore }      from './estadoStore.js';
 
@@ -546,15 +546,6 @@ async function processarNo(no, ctx) {
       }
     }
 
-    // ── NÓS DO SISTEMA DE INSPIRAÇÃO (stubs seguros) ─────────────
-    case 'mudanca_endereco':
-    case 'mudar_plano':
-    case 'cadastrar_lead':
-    case 'cadastrar_condominio':
-    case 'registrar_ocorrencia_cond':
-      // Nós avançados — agendam via texto e transferem para agente
-      if (cfg.mensagem) ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem, ctx) });
-      return avancar('saida');
 
     case 'consultar_historico': {
       const contrato = getCtxVal(ctx, 'cliente.contrato');
@@ -686,7 +677,8 @@ async function processarIAResponde(no, ctx) {
   if (ctx.mensagem?.tipo === 'sistema') return aguardar();
 
   const slug      = cfg.contexto || 'outros';
-  const maxTurnos = parseInt(cfg.max_turns || cfg.max_turnos) || 6;
+  // Fonte única dos dois campos com alias — ver `camposIaResponde`.
+  const { instrucao, maxTurnos } = camposIaResponde(cfg);
   const turnosKey = `_ia_turnos_${no.id}`;
   const histKey   = `_ia_hist_${no.id}`;
 
@@ -712,8 +704,6 @@ async function processarIAResponde(no, ctx) {
   // Ficha de dados já coletados (reinjetada todo turno para a IA não re-perguntar).
   const ficha = montarFichaColetada(ctx.estado.contexto);
 
-  // O editor salva a instrução extra em cfg.instrucao; mantém cfg.prompt por compatibilidade.
-  const instrucao = cfg.instrucao ?? cfg.prompt;
   const system = montarSystemPrompt({
     systemBase,
     instrucao,
@@ -756,15 +746,14 @@ async function processarIAResponde(no, ctx) {
   // Lista padrão (suporte/atendimento). Tools sensíveis como `precadastrar_cliente`
   // ficam fora do default — devem ser ativadas explicitamente em cfg.tools_ativas
   // (ex.: no nó IA Responde do fluxo comercial).
-  const toolsAtivas = cfg.tools_ativas || [
-    'verificar_conexao', 'consultar_manutencao', 'status_rede',
-    'consultar_onu_acs', 'reiniciar_onu_acs', 'consultar_radius',
-    'criar_chamado', 'segunda_via_boleto',
-    'promessa_pagamento', 'historico_ocorrencias',
-    'transferir_para_humano', 'encerrar_atendimento',
-  ];
+  const toolsAtivas = cfg.tools_ativas || TOOLS_PADRAO;
   // salvar_dado sempre disponível — memória não pode ser desligada por config de nó.
-  const tools = IA_TOOLS.filter(t => toolsAtivas.includes(t.name) || t.name === 'salvar_dado');
+  // Só os campos que a API da Anthropic aceita — os metadados de risco da FASE 2
+  // (`is_write`, `allowed_in_sandbox`) são nossos e um campo desconhecido na
+  // definição da tool derruba a chamada com 400.
+  const tools = IA_TOOLS
+    .filter(t => toolsAtivas.includes(t.name) || t.name === 'salvar_dado')
+    .map(({ name, description, input_schema }) => ({ name, description, input_schema }));
 
   try {
     const ai = await getAnthropicClient();

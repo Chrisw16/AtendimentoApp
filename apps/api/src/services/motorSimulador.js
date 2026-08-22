@@ -85,7 +85,10 @@ function empilharPrompt(no, ctx) {
     case 'enviar_botoes': ctx.respostas.push({ tipo: 'botoes', corpo: cfg.corpo || '', botoes: cfg.botoes || [] }); break;
     case 'enviar_lista':  ctx.respostas.push({ tipo: 'lista', corpo: cfg.corpo || '', itens: normalizarItens(cfg.itens) }); break;
     case 'nps_inline':    ctx.respostas.push({ tipo: 'texto', texto: cfg.pergunta || 'Qual sua nota?' }); break;
-    case 'consultar_cliente': ctx.respostas.push({ tipo: 'texto', texto: cfg.mensagem || 'Informe seu CPF:' }); break;
+    // Espelha o motor: `cfg.pergunta`, SEM default — sem ela o nó fica em
+    // silêncio esperando (o falso positivo da pauta de 2026-08-21 era o
+    // simulador inventar 'Informe seu CPF:' aqui e a produção não enviar nada).
+    case 'consultar_cliente': if (cfg.pergunta) ctx.respostas.push({ tipo: 'texto', texto: cfg.pergunta }); break;
     case 'aguardar_resposta':
     case 'solicitar_localizacao':
       if (cfg.mensagem) ctx.respostas.push({ tipo: 'texto', texto: cfg.mensagem });
