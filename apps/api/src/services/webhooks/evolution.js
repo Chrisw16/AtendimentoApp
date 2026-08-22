@@ -6,13 +6,21 @@ import { conversaRepo } from '../../repositories/conversaRepository.js';
 import { mensagemRepo } from '../../repositories/mensagemRepository.js';
 import { broadcast }    from '../sseManager.js';
 
-export async function handleEvolution(body) {
+/**
+ * @param {object} body  payload cru do provedor
+ * @param {object} opts  `{reprocessando}` — só o worker de inbox (§132) passa
+ *   true, e só quando um humano mandou reprocessar uma entrada da DLQ. Sem
+ *   isso, a segunda passada seria NO-OP: a mensagem já está gravada e todo
+ *   caminho de dedup aborta antes do motor — exatamente o turno que se quer
+ *   recuperar.
+ */
+export async function handleEvolution(body, opts = {}) {
   const event = body?.event;
   if (!event) return;
 
   switch (event) {
     case 'messages.upsert':
-      return processarMensagem(body);
+      return processarMensagem(body, opts);
     case 'messages.update':
       return atualizarMensagem(body);
     case 'connection.update':
@@ -20,7 +28,7 @@ export async function handleEvolution(body) {
   }
 }
 
-async function processarMensagem(body) {
+async function processarMensagem(body, { reprocessando = false } = {}) {
   const data      = body?.data;
   const msg       = data?.message;
   if (!msg || msg?.key?.fromMe) return;  // ignora mensagens próprias
@@ -33,8 +41,8 @@ async function processarMensagem(body) {
 
   const external_id = msg.key?.id;
 
-  const existe = await mensagemRepo.porExternalId(external_id);
-  if (existe) return;
+  const jaExistia = await mensagemRepo.porExternalId(external_id);
+  if (jaExistia && !reprocessando) return;
 
   // `obterOuCriar` em vez de "checa → cria": duas mensagens simultâneas de um
   // número novo passavam as duas pela checagem e nasciam DUAS conversas, cada
@@ -56,23 +64,30 @@ async function processarMensagem(body) {
 
   const { texto, tipo, url, mime } = extrairConteudoEvolution(msg);
 
-  const mensagem = await mensagemRepo.criar({
-    conversa_id: conversa.id,
-    origem:      'cliente',
-    tipo,
-    texto,
-    url,
-    mime,
-    external_id,
-  });
+  let mensagem = jaExistia;
+  if (!mensagem) {
+    mensagem = await mensagemRepo.criar({
+      conversa_id: conversa.id,
+      origem:      'cliente',
+      tipo,
+      texto,
+      url,
+      mime,
+      external_id,
+    });
 
-  // Reentrega concorrente: a unique de external_id barrou o insert duplicado.
-  // Sem isto o motor rodaria 2x e a IA responderia (e cobraria) em dobro.
-  if (!mensagem) return;
-
-  await conversaRepo.incrementarNaoLidas(conversa.id);
-  broadcast('mensagem', { ...mensagem, conversa_id: conversa.id });
-  broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));
+    if (mensagem) {
+      await conversaRepo.incrementarNaoLidas(conversa.id);
+      broadcast('mensagem', { ...mensagem, conversa_id: conversa.id });
+      broadcast('conversa_atualizada', await conversaRepo.porId(conversa.id));
+    } else {
+      // Reentrega concorrente: a unique de external_id barrou o insert.
+      // Sem isto o motor rodaria 2x e a IA responderia (e cobraria) em dobro.
+      if (!reprocessando) return;
+      mensagem = await mensagemRepo.porExternalId(external_id);
+      if (!mensagem) return;
+    }
+  }
 
   // Supervisora IA — analisa sentimento em tempo real se há agente na conversa
   if (conversa.status === 'ativa' && conversa.agente_id && texto) {
@@ -81,10 +96,11 @@ async function processarMensagem(body) {
   }
 
   if (conversa.status === 'ia') {
+    // `await` (FASE 4): a rota não espera mais por isto — quem chama é o worker
+    // de inbox, e é o `await` que faz a linha só virar `ok` DEPOIS do turno.
+    // Sem ele, morte no meio do turno deixaria a entrada marcada como sucesso.
     const { processarConversa } = await import('../motorFluxo.js');
-    processarConversa(conversa, mensagem).catch(err =>
-      console.error('[Webhook Evolution] Motor fluxo erro:', err.message)
-    );
+    await processarConversa(conversa, mensagem);
   }
 }
 

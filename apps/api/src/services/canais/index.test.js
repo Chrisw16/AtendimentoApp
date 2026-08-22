@@ -48,3 +48,35 @@ test('propaga erro do adapter para quem chamou tratar', async () => {
   const enviar = criarDispatcher({ whatsapp: quebrado });
   await assert.rejects(enviar('whatsapp', dest, { tipo: 'texto', texto: 'oi' }), /provedor fora/);
 });
+
+// ── FASE 4: o descarte silencioso passa a ter nome ────────────────
+test('sem adapter nenhum devolve {despachado:false}', async () => {
+  const enviar = criarDispatcher({});
+  assert.deepEqual(await enviar('whatsapp', dest, { tipo: 'texto', texto: 'oi' }),
+    { despachado: false, motivo: 'sem_adapter' });
+});
+
+test('tipo que o canal não implementa devolve o motivo (caso localizacao/Evolution)', async () => {
+  const evo = adapterFalso('whatsapp', ['texto']);
+  const enviar = criarDispatcher({ whatsapp: evo });
+  const r = await enviar('whatsapp', dest, { tipo: 'localizacao', lat: 1, lng: 2 });
+  assert.equal(r.despachado, false);
+  assert.match(r.motivo, /^tipo_nao_suportado:localizacao$/);
+  assert.deepEqual(evo.chamadas, []);   // continua NÃO enviando
+});
+
+test('envio ok devolve despachado + retorno do provedor (external_id, §126)', async () => {
+  const evo = { id: 'whatsapp', texto: async () => ({ key: { id: 'ABC123' } }) };
+  const enviar = criarDispatcher({ whatsapp: evo });
+  const r = await enviar('whatsapp', dest, { tipo: 'texto', texto: 'oi' });
+  assert.equal(r.despachado, true);
+  assert.equal(r.retorno.key.id, 'ABC123');
+});
+
+test('sentinela do adapter atravessa o dispatcher (sem_instancia)', async () => {
+  const { criarAdapterEvolution } = await import('./evolution.js');
+  const evo = criarAdapterEvolution({ evolutionEnviarTexto: async () => 'nao devia chamar' });
+  const enviar = criarDispatcher({ whatsapp: evo });
+  assert.deepEqual(await enviar('whatsapp', { numero: '55' }, { tipo: 'texto', texto: 'oi' }),
+    { despachado: false, motivo: 'sem_instancia' });
+});

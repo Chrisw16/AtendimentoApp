@@ -19,7 +19,7 @@ detalhe; aqui fica só o quadro.
 
 ## Placar
 
-**4 de 13 fases entregues.** Todas mergeadas no `main` e enviadas ao GitHub.
+**5 de 13 fases entregues.** As 4 primeiras mergeadas no `main`; a FASE 4 fechada em 2026-08-22.
 
 | Fase | Título | Estado | Página |
 |:---:|---|---|---|
@@ -27,7 +27,7 @@ detalhe; aqui fica só o quadro.
 | 1 | Fundação crítica / P0 | ✅ | [[FASE 1 — Fundação crítica / P0 (motor persistente)]] |
 | 2 | Registry Foundation | ✅ | [[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]] |
 | 3 | Segurança e governança base | ✅ | [[FASE 3 — Segurança e governança base]] |
-| 4 | Inbox, Outbox e Jobs | 🔵 desenhada (v2, revisada) | [[FASE 4 — Inbox, Outbox e Jobs]] |
+| 4 | Inbox, Outbox e Jobs | ✅ | [[FASE 4 — Inbox, Outbox e Jobs]] |
 | 5 | Equipes, Filas e Human Handoff | ⬜ | — |
 | 6 | Cliente 360 | ⬜ | — |
 | 7 | Knowledge Hub | ⬜ | — |
@@ -38,15 +38,15 @@ detalhe; aqui fica só o quadro.
 | 12 | Conversation Events + Analytics | ⬜ | — |
 | 13 | Observabilidade e hardening | ⬜ | — |
 
-Suítes ao fechar a FASE 3: **227 testes puros · 54 de integração**.
-Migrations: **15** (014 `flow_executions`, 015 `audit_log`).
+Suítes ao fechar a FASE 4: **252 testes puros · 76 de integração**.
+Migrations: **16** (014 `flow_executions`, 015 `audit_log`, 016 `inbox`/`outbox`/`jobs`).
 
 ## ⚠️ O placar mede o `main`, não a produção
 
 **O Coolify não deploya desde 21/08 20:06 UTC.** Houve pelo menos 4 pushes
 depois disso, todos com webhook devolvendo 200, e a produção não se moveu.
 
-Consequência direta: **nada das FASES 1, 2 e 3 está no ar.** A conversa em
+Consequência direta: **nada das FASES 1 a 4 está no ar.** A conversa em
 produção ainda morre no restart, a credencial ainda sai em texto plano no
 `GET /sysconfig` e o XSS do handshake da Meta segue aberto. O trabalho está
 feito e não está entregue — a distinção importa.
@@ -61,7 +61,7 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | Origem | Teto assumido | Fecha em |
 |---|---|---|
 | FASE 1 | Concorrência **entre processos** não resolvida (`filaPorChave` é intra-processo) | lock distribuído, quando houver multi-worker |
-| FASE 1 | Morte no meio do turno perde o **gatilho**: mensagem já deduplicada, motor nunca roda | **FASE 4** (Inbox, §125) |
+| ~~FASE 1~~ | ~~Morte no meio do turno perde o gatilho~~ | ✅ FASE 4 (`inbox`, §125) |
 | FASE 1 | Estado é durável, **envio não** — pode ficar "aguardando menu" com o cliente sem ter visto o menu | **FASE 4** (Outbox, §126) |
 | FASE 1 | `estado` carrega PII (CPF, contratos, PIX, 50 msgs) sem retenção | política de retenção, §116 |
 | FASE 1 | Dreno de 8 s pode cortar turno longo de IA | subir junto com `stop_grace_period` |
@@ -72,26 +72,28 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | FASE 3 | Access/refresh token — encurtar TTL hoje desloga todo mundo | sessão dedicada a auth |
 | FASE 3 | Cripto: chave mestra vive no env do **mesmo** container | protege contra dump de banco, não contra shell |
 
-## FASE 4 — desenhada e revisada, pronta para implementar
+## FASE 4 — entregue (2026-08-22)
 
-Design **v2** em [[FASE 4 — Inbox, Outbox e Jobs]] (spec: `docs/superpowers/specs/2026-08-22-fase-4-inbox-outbox-jobs-design.md`).
+Detalhe em [[FASE 4 — Inbox, Outbox e Jobs]]. Os 14 critérios de aceite viraram
+teste (`tests/integracao/fase4-filas.test.js`, 24 casos).
 
-Revisada por três agentes — um decisor, um contra o Plano Mestre, um contra o
-código. **A v1 mudou de forma**, e dois dos erros eram de raciocínio:
+O que fechou: **gatilho perdido** (`inbox` guarda o payload cru e o worker roda
+o `handle*` esperando o turno), **envio não durável** (`outbox` write-ahead, com
+ordem por conversa) e **`aguardar_tempo` simulado** (job `flow_resume`, campo
+`aguardandoTimer` e mensagem `tipo:'timer'`). De quebra, `aguardar_resposta`
+ganhou `timeout`/`max_tentativas` e o descarte silencioso do dispatcher virou
+`nao_suportada` visível.
 
-- "Outbox só na falha" **não fechava o próprio sintoma** que a spec abria —
-  morte de processo não lança exceção. Virou **write-ahead**.
-- A justificativa do Inbox estava **factualmente errada** ("webhook lento por
-  causa do turno de IA"): os handlers já são fire-and-forget. O ganho é
-  durabilidade.
+Duas revisões adversariais entraram no resultado: a do PLANO, antes de
+codificar (derrubou o Inbox que não fechava o próprio sintoma, o
+`jobs.chave` sem `merge` que dispararia o timer uma vez só, e as portas novas
+como estáticas, que acusariam erro em todo fluxo existente), e a do CÓDIGO,
+depois.
 
-A decisão que estava aberta foi tomada: **`_parkedAte` com teto de 72 h**, para
-que execução parada em timer não morra no TTL de 2 h — que existe para pegar
-abandono, categoria oposta.
-
-**14 critérios de aceite** definidos. Ordem de implementação sugerida: migration
-016 → módulo puro de retry/expiração → inbox → outbox → jobs → nós do motor →
-worker → shutdown.
+Tetos que ficam: reclaim de escrita vai para DLQ em vez de retentar (falta
+idempotência de tool, §23); reprocessar entrada da Meta em lote re-executa turno
+de mensagem já respondida; `aguardar_tempo → ia_responde` não é suportado (é AI
+Runtime, FASE 9); `inbox.payload` guarda PII com purga de 7 dias.
 
 ## See Also
 

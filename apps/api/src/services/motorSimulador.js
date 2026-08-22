@@ -162,6 +162,12 @@ export async function simularNo(no, ctx) {
 
   // lineares restantes (aguardar_tempo, listar_planos, consultar_historico,
   // nota_interna, enviar_email, stubs, tipo desconhecido)
+  //
+  // `aguardar_tempo` continua linear DE PROPÓSITO e sem divergir do motor: na
+  // FASE 4 o nó passou a parar de verdade (job `flow_resume`), mas só fora do
+  // sandbox — `motorFluxo.js` avança na hora quando `ctx.sandbox`, e o
+  // simulador É um sandbox (não tem relógio para esperar). Espelha o mesmo
+  // ramo, não o comportamento de produção.
   return avancar('saida');
 }
 

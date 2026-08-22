@@ -28,9 +28,9 @@ apps/api/src/
   server.js              entrypoint (monta rotas /api/*, serve o frontend, inicia migrations+monitores)
   config/db.js           pool Knex (singleton via getDb()/db proxy)
   middlewares/           auth.js (JWT, adminMiddleware), errorHandler.js (asyncHandler, HttpError)
-  migrations/versions/   001..007 — modelo de dados (rode em ordem; NUNCA ALTER TABLE solto)
+  migrations/versions/   001..016 — modelo de dados (rode em ordem; NUNCA ALTER TABLE solto)
   repositories/          conversaRepository.js, mensagemRepository.js (toda query de conversa/msg)
-  routes/                auth, chat, webhooks (públicas) + agentes, fluxos, prompts, dashboard, ... (autenticadas)
+  routes/                auth, chat, webhooks (públicas) + agentes, fluxos, prompts, dashboard, filas, ... (autenticadas)
   services/
     motorFluxo.js        ★ motor de execução do fluxo (1032 LOC) — o coração
     fluxoHelpers.js      funções puras do motor (normaliza campos editor↔motor, escala NPS) + testes
@@ -39,6 +39,10 @@ apps/api/src/
     promptService.js     resolverPrompt(slug) — compõe system prompt do banco
     supervisoraIA.js     sentimento + SLA do agente + sugestões
     filaService.js       fila/SLA (monitor 60s)
+    inbox.js outbox.js jobs.js  ★ filas da FASE 4 (entrada durável, envio write-ahead, relógio)
+    filaDb.js            reivindicação com SKIP LOCKED + lease (as 3 filas usam)
+    politicaRetry.js     ★ puro: TTL/_parkedAte, backoff, expiração, destino de lease + testes
+    workerFilas.js       tick de 5s: reclaim → inbox → outbox → jobs → purga
     sseManager.js        broadcast/sendToAgente
     telegram.js          envio Telegram
     canais/              ★ adapters de ENVIO por canal (evolution.js, telegram.js) + dispatcher
@@ -60,13 +64,14 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 
 **Dev (sem Docker):** precisa Postgres 16 + Redis 7 + Node 20. Em `apps/api`: `cp .env.example .env`, `npm install`, `npm run seed`, `npm run dev`. Em `apps/web`: `npm install`, `npm run dev`.
 
-**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps) — **185 testes puros**, rodam em qualquer máquina sem serviço nenhum. `motorFluxo.js` **não é importável em teste** (puxa `config/db.js` → Knex no topo e as deps não ficam instaladas localmente); por isso toda lógica testável vive em **módulos puros** ao lado dele — escreva o teste primeiro (TDD):
+**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps) — **252 testes puros**, rodam em qualquer máquina sem serviço nenhum. `motorFluxo.js` **não é importável em teste** (puxa `config/db.js` → Knex no topo e as deps não ficam instaladas localmente); por isso toda lógica testável vive em **módulos puros** ao lado dele — escreva o teste primeiro (TDD):
 - `fluxoHelpers.js` — resolução de campos editor↔motor + escala NPS.
+- `politicaRetry.js` — **as decisões de tempo da FASE 4** num lugar só (§130): `expirou()` (TTL de 2 h, `_parkedAte`, teto de 72 h), backoff, `expiraEm` por canal, e `destinoLease` — a regra "leitura retenta, escrita não" (§23) mora aqui.
 - `fluxoValidador.js` (+`.cli.js`) — **validador estático** do grafo do fluxo: pega beco sem saída (cliente perdido), porta não conectada, nó inalcançável, aresta órfã, loop sem espera (trava). `node src/services/fluxoValidador.cli.js examples/fluxo-exemplo.json`.
 - `motorLoop.js` — o loop do motor extraído como função pura (`executarLoop`). ⚠️ **Divergiu na FASE 1**: o laço real virou assíncrono na persistência (`await estados.set/delete` num `finally`, grafo congelado, `fim({manter})`). Este arquivo — e o `motorSimulador.js` que roda sobre ele — espelham o laço **pré-FASE-1**. "Espelho byte-a-byte" hoje vale só para a travessia (qual nó vem depois), não para o ciclo de vida da execução.
 - `motorSimulador.js` (+`.cli.js`) — **simulador** de conversa multi-turno sobre o `executarLoop` (passo a passo, detecta concluido/travado/perdido/aguardando). `node src/services/motorSimulador.cli.js <fluxo.json> [cenario.json]`.
 
-**Testes de integração** (`apps/api/tests/integracao/`, `npm run test:integracao`) — **44 testes**, provam o que só o banco/Redis provam: dedup por `external_id`, SSE cruzando instâncias, migrations replay-safe, e os **critérios de aceite do motor persistente** (§14). É o único lugar onde o `motorFluxo.js` roda de verdade num teste (`DATABASE_URL` está posta, então ele importa). **Não há Docker nesta máquina**; o Postgres é nativo (`brew install postgresql@16`). Eles se **pulam** sem as envs, então `npm test` segue verde em qualquer lugar:
+**Testes de integração** (`apps/api/tests/integracao/`, `npm run test:integracao`) — **76 testes**, provam o que só o banco/Redis provam: dedup por `external_id`, SSE cruzando instâncias, migrations replay-safe, os **critérios de aceite do motor persistente** (§14) e os **14 critérios da FASE 4** (`fase4-filas.test.js`: dedup por hash, ordem por conversa, lease vencido, espera com relógio). É o único lugar onde o `motorFluxo.js` roda de verdade num teste (`DATABASE_URL` está posta, então ele importa). **Não há Docker nesta máquina**; o Postgres é nativo (`brew install postgresql@16`). Eles se **pulam** sem as envs, então `npm test` segue verde em qualquer lugar:
 ```bash
 DATABASE_URL_TEST='postgres://maxxi:maxxi_dev_pass@127.0.0.1:5432/maxxi_v2_test' \
 REDIS_URL_TEST='redis://127.0.0.1:6380' npm run test:integracao
@@ -96,8 +101,19 @@ Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/max
   - `transferir_agente` **não apaga mais o estado**: grava `_retomarNo` (destino da porta `transferido`) e o `devolver-ia` retoma dali. Sem essa porta ligada no fluxo, encerra como sempre encerrou.
   - **TTL de 2 h aplicado na leitura.** Enquanto o estado era um `Map`, o restart era a expiração de fato. Sem TTL, cliente que abandona o menu e volta semanas depois tem o "bom dia" lido como resposta ao menu antigo, e cai no 3º fallback do `encontrarProximo` (primeira aresta qualquer).
   - Inspeção: `SELECT conversa_id, estado->>'noAtual' FROM flow_executions`.
-  - ⚠️ **Estado é durável, envio não.** O `finally` grava e só então envia; morte entre as duas coisas deixa o banco dizendo "aguardando o menu" com o cliente sem ter visto o menu — e agora isso **sobrevive** ao restart. A correção é o Outbox (FASE 4, §126), não um remendo no motor.
+  - ~~⚠️ Estado é durável, envio não~~ → **fechado na FASE 4**: `enviarResposta` grava a intenção no `outbox` antes de despachar, e o worker entrega o que ficou `pendente`.
   - ⚠️ **Teto:** concorrência **entre processos** não é resolvida. `filaPorChave` serializa dentro de um processo; multi-worker exige lock distribuído por conversa.
+- **Entrada, saída e relógio passam por FILA NO BANCO** (`inbox`/`outbox`/`jobs`, migration 016 — FASE 4). Regras não-óbvias:
+  - **O webhook só PERSISTE**: `routes/webhooks.js` grava o payload cru no `inbox` (após checar assinatura) e responde 200; o `handle*` roda no worker. A dedup é `sha256(canal:corpo_cru)`, **não** `external_id` — a Meta manda N mensagens num POST e `connection.update` não tem id. A dedup por `external_id` do `mensagemRepository` **continua**: uma impede reprocessar o payload, a outra impede gravar a mensagem.
+  - **Latência não mudou**: `inbox.receber` cutuca `processarPendentes()` sem `await`. O tick de 5 s do `workerFilas` é rede de segurança, não o caminho normal.
+  - **Os `handle*` agora esperam o motor** (`await processarConversa`) — é isso que faz a entrada só virar `ok` depois do turno. Eles aceitam `{reprocessando}`: sem essa flag o replay é **no-op**, porque todo caminho de dedup aborta antes do motor. Quem passa `true` é o worker quando `tentativas > 1`.
+  - **Outbox é write-ahead**: grava `pendente` → envia **inline** (mesma latência) → marca `enviada`. Nunca volte a "gravar só quando o envio falhar": morte de processo **não lança exceção**, que é o sintoma inteiro.
+  - **Ordem por conversa**: só sai inline quem é a saída viva mais antiga da conversa; havendo anterior em `pendente`/`processando`, a próxima espera o worker. Sem isso, uma resposta que falha seguida de outra que passa entrega **o menu antes da saudação**.
+  - **`tentativas` conta na REIVINDICAÇÃO**, não na falha (SIGKILL não passa pelo `catch`). Reclaim de lease (2 min) devolve outbox para `pendente` e inbox/jobs para **`falha`** — reprocessar turno é escrita, e escrita não retenta sozinha (§23).
+  - **`estado.aguardandoTimer` é separado de `estado.aguardando`.** `aguardando` é o único mecanismo de retomada do motor e não distingue quem acordou o fluxo. A mensagem sintética do timer tem `tipo:'timer'` (nem `'sistema'`, que faz o `ia_responde` pausar por outro motivo, nem `'texto'` vazio, que a Anthropic recusa). `limparEspera()` zera `_parkedAte` — sem isso o TTL de 2 h nunca volta a valer.
+  - **Só o motor passa pelo outbox.** `chat.js` (agente humano digitando) envia direto; a durabilidade e a ordem valem para o que a automação manda.
+  - **A purga (7 dias, no worker) nunca apaga `falha`** — isso é a DLQ, operável por `GET/POST /api/filas` (admin, auditado).
+  - Inspeção: `SELECT status, count(*) FROM inbox GROUP BY 1` (idem outbox/jobs), ou `GET /api/filas`.
 - **Catálogo de nós tem duas faces:** `apps/web/src/lib/nodeTypes.js` (visual, ~32 tipos) deve espelhar o `switch` de `processarNo` em `motorFluxo.js` (backend). Ao adicionar um nó, atualize os dois + o painel de propriedades **dentro de `FluxoEditor.jsx`** (`components/fluxo/PropsPanel.jsx` era arquivo morto e foi removido na FASE 2). Há **teste de contrato** entre `nodeTypes.js`, o `NOS` do validador e o `switch` do motor — ele falha quando a divergência cresce. **Cuidado com o nome dos campos:** o `PropsPanel` historicamente salvou campos com nomes que o motor não lia (`botao`/`secao`/`instrucao`/`tipo`), então a config era ignorada na execução. Hoje `fluxoHelpers.js` normaliza esses casos (lê o nome do editor com fallback pro antigo) — mas **a regra é manter os nomes iguais nas duas faces**; o helper é rede de segurança, não desculpa pra divergir.
 - **Envio por canal passa pelo registry `services/canais/`**, nunca por `if (canal === ...)`. Cada provedor é um adapter com **um método por tipo de mensagem** (`texto`, `botoes`, `lista`, `cta`, `imagem`, `audio`, `arquivo`); o dispatcher resolve por `conversas.canal`. Regras não-óbvias: **a degradação mora dentro do adapter** (o Telegram degrada `lista`→**botões** com ≤8 itens, não para texto); tipo não implementado usa o método **`padrao`**, que **só o Telegram tem** — a Evolution não tem de propósito, porque hoje ela descarta tipos desconhecidos (inclusive `localizacao`) em silêncio, e um fallback genérico mudaria isso. Os adapters recebem os transportes por **injeção** para serem testáveis sem rede.
 - **`enviarResposta` faz muito mais que enviar:** guarda de `resp.texto` vazio, persistência da mensagem, broadcast SSE e guarda de `chatId` acontecem **antes** do despacho. Ao mexer ali, só o trecho de despacho pertence ao registry. O `chat.js` ainda tem o `if/else` antigo (só texto) — migra quando precisar tratar `whatsapp_oficial`.
@@ -113,20 +129,22 @@ Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/max
 Fluxo de referência pronto e validado: [apps/api/examples/fluxo-netgo-v2.json](apps/api/examples/fluxo-netgo-v2.json) (híbrido menu+IA, 14 nós, validador 0/0). Importável pelo botão **📂 Importar** do editor — o importador aceita `{nome, nodes, edges}` com `posX`/`posY`; formato salvo: `{id, tipo, config, posX, posY}` + `{from, to, port}`.
 
 - **`max_turnos` do `ia_responde` conta cada troca cliente↔IA** (default **6**, campo `cfg.max_turnos`). Estourar avança pela porta `max_turnos` e **encerra o atendimento no meio**. Cadastro comercial precisa de **~25** (a janela de histórico é 50 msgs ≈ 25 trocas — configurar abaixo disso é incoerente); suporte com diagnóstico, ~12.
+- **`aguardar_tempo` PARA de verdade** (FASE 4): agenda um job e retoma pela porta `saida`. Dois cuidados: `aguardar_tempo → ia_responde` **não é suportado** (a IA pausa em `tipo:'timer'` — use `→ enviar_texto`), e no sandbox ("Testar fluxo") ele continua avançando na hora, senão a tela nunca responderia.
+- **`aguardar_resposta` só ganha timeout se você configurar `timeout` (segundos)**; aí aparecem as portas `timeout` e — se `max_tentativas > 0` — `max_tentativas`. Com `timeout: 0` (o default) ele espera para sempre, como sempre esperou.
 - **`transferir_agente` não manda mensagem nenhuma** ao transferir (`Respostas geradas: 0`). Sempre coloque um `enviar_texto` antes, senão a conversa morre na cara do cliente.
 - **Ligue SEMPRE a porta `saida` dos menus** (`enviar_botoes`/`enviar_lista`) — é o fallback de quando o cliente digita algo fora das opções. Solta, o motor cai no 3º fallback do `encontrarProximo` (**primeira aresta qualquer**) e manda o cliente para um ramo arbitrário, em silêncio.
 - **`cfg.tools_ativas` no `ia_responde`** define as tools por ramo. Sem ele vale uma lista padrão de suporte; `precadastrar_cliente` fica de fora de propósito e precisa ser ativada explicitamente (só no ramo comercial).
 - **Rode o validador antes de ativar**: alvo é 0 erros **e** 0 avisos.
 
-- **Os webhooks JÁ são fire-and-forget.** Os três handlers fazem `processarConversa(...).catch(...)` **sem `await`** — o 200 só espera os inserts, não o turno de IA. Não repita a afirmação de que "o turno de IA segura a resposta do webhook": ela é falsa e já contaminou uma spec. O ganho do Inbox da FASE 4 é **durabilidade**, não latência.
-- **`estado.aguardando` é o ÚNICO mecanismo de retomada do motor** (`motorFluxo.js:230/251/278`) e não distingue quem acordou o fluxo. Ao adicionar retomada por timer/job, use campo separado (`aguardandoTimer`) e um `tipo` de mensagem próprio: `'sistema'` faz o `ia_responde` pausar e `'texto'` vazio faz a Anthropic recusar — os dois já foram bugs.
-- **Todo efeito colateral novo do motor precisa do gate `if (!ctx.sandbox)`** (`motorFluxo.js:590/621/638/652`). O sandbox usa ids `sandbox:<uuid>`/`share:<uuid>`, que não são uuid — `estadoStore` tem guarda para isso, tabelas novas não terão.
+- **O 200 do webhook NUNCA esperou o turno de IA.** Antes da FASE 4 os handlers faziam `processarConversa(...).catch(...)` sem `await`; hoje a rota nem chama o handler — ela grava no `inbox` e responde. Não repita a afirmação de que "o turno de IA segura a resposta do webhook": é falsa e já contaminou uma spec. O ganho do Inbox foi **durabilidade**, não latência.
+- **`estado.aguardando` não distingue quem acordou o fluxo** — por isso a FASE 4 criou `aguardandoTimer` e o `tipo:'timer'`. Ao adicionar OUTRA forma de retomada (SLA, callback de provedor), repita o padrão: campo próprio + tipo próprio. `'sistema'` faz o `ia_responde` pausar e `'texto'` vazio faz a Anthropic recusar — os dois já foram bugs.
+- **Todo efeito colateral novo do motor precisa do gate `if (!ctx.sandbox)`**. O sandbox usa ids `sandbox:<uuid>`/`share:<uuid>`, que não são uuid — `estadoStore` tem guarda (`ehUuid`), `agendarTimer` e o outbox também; tabela nova não terá.
 
 ## Armadilhas conhecidas (bugs/dívidas — ver [brain/work/](brain/work/))
 
 - **Conversa duplicada e protocolo colidindo — corrigidos na FASE 1 (migration 014).** Os 3 webhooks faziam check-then-act (`porTelefoneCanal` → `criar`): duas mensagens simultâneas de um número novo criavam **duas conversas**. Agora todos passam por **`conversaRepo.obterOuCriar`** (devolve `{conversa, nova}` — só quem criou emite `nova_conversa` no SSE) sobre uma **unique parcial** `conversas(telefone, canal) WHERE status <> 'encerrada'`. O protocolo era `COUNT(*) do dia + 1`: retry na aplicação **não converge** (medido: 8 chamadas concorrentes ainda colidiam na 5ª tentativa); virou a tabela `protocolo_seq` com `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`, atômico por construção. ⚠️ Mesma armadilha da 008: o `down()` da 014 derruba índice usado por `onConflict` — **não rode em produção**.
 - **Os 4 críticos da auditoria foram corrigidos em 2026-08-21** (race de estado do fluxo → `filaPorChave.js`; `sgp_url` não salvava; Canais apagava config; dedup de webhook → migration 008 + `onConflict`). ✅ **Validados contra Postgres real em 2026-08-21** (FASE 0) — 6 testes, incluindo o caso concorrente. ⚠️ Descoberta: `onConflict('external_id')` é **incondicional**, então sem o índice único da 008 o Postgres recusa **todo** insert de mensagem, não só duplicatas — o `down()` da 008 derruba a ingestão inteira, **nunca rode em produção**. O lado bom: uma instância que armazena mensagens prova por comportamento que a 008 aplicou.
-- **Mismatches editor↔motor — maioria fechada na FASE 2 (2026-08-22)**, travada por `tests/contrato-catalogos.test.js` (importa `nodeTypes.js` direto do `apps/web` — JS puro — e compara com o `NOS` do validador e o `switch` do motor): dois bugs **ativos** no `ia_responde` corrigidos (tela gravava `prompt`/`max_turns`, motor preferia `instrucao`/`max_turnos` em direções **contrárias** — editar instrução não tinha efeito, e encostar em "máx. turnos" derrubava cadastro de 25→5; fonte única agora em `camposIaResponde` de `fluxoHelpers.js`); escala do NPS configurável; defaults de tools alinhados (`TOOLS_PADRAO` em `fluxoHelpers.js` = `IA_TOOLS_DEFAULT` em `nodeTypes.js`); portas mortas removidas da paleta (`sem_localizacao`/`erro`, `sem_agente`) e `abrir_chamado`/`enviar_email` alinhados ao que o motor emite; 5 stubs órfãos do provedor de inspiração deletados. **Ainda abertos:** `gatilho_keyword` (filtro inerte), `aguardar_resposta` (`timeout`/`max_tentativas` — falta scheduler, FASE 4), campos inertes da tela (`enviar_cta.rodape`, `alias`, `ia_menu_ativo`, `transferir_agente.motivo/fila` — fila é FASE 5), e o nó `listar_planos` (SGP) vs tool `listar_planos_ativos` (tabela local): **mesma pergunta, duas respostas**.
+- **Mismatches editor↔motor — maioria fechada na FASE 2 (2026-08-22)**, travada por `tests/contrato-catalogos.test.js` (importa `nodeTypes.js` direto do `apps/web` — JS puro — e compara com o `NOS` do validador e o `switch` do motor): dois bugs **ativos** no `ia_responde` corrigidos (tela gravava `prompt`/`max_turns`, motor preferia `instrucao`/`max_turnos` em direções **contrárias** — editar instrução não tinha efeito, e encostar em "máx. turnos" derrubava cadastro de 25→5; fonte única agora em `camposIaResponde` de `fluxoHelpers.js`); escala do NPS configurável; defaults de tools alinhados (`TOOLS_PADRAO` em `fluxoHelpers.js` = `IA_TOOLS_DEFAULT` em `nodeTypes.js`); portas mortas removidas da paleta (`sem_localizacao`/`erro`, `sem_agente`) e `abrir_chamado`/`enviar_email` alinhados ao que o motor emite; 5 stubs órfãos do provedor de inspiração deletados. **Ainda abertos:** `gatilho_keyword` (filtro inerte), campos inertes da tela (`enviar_cta.rodape`, `alias`, `ia_menu_ativo`, `transferir_agente.motivo/fila` — fila é FASE 5), e o nó `listar_planos` (SGP) vs tool `listar_planos_ativos` (tabela local): **mesma pergunta, duas respostas**.
 - ~~`sseManager.js` importa `redis` mas o pacote é `ioredis`~~ → **corrigido (2026-08-21)**: migrado para a API do `ioredis`. ✅ **Conexão real validada em 2026-08-21** (FASE 0): broadcast cruza instâncias, `sendToAgente` respeita o destinatário e `ehEcoProprio` impede a entrega dupla.
 - **⚠️ O deploy automático do Coolify é INTERMITENTE (revisto em 2026-08-21).** Não é que nunca deploye: das 3 entregas de 21/08 (19:20, 19:55, 22:54 UTC), **a #1 virou deploy** (`index.html` reconstruído às 20:06 UTC) e as outras duas **se perderam** — por isso a correção do XSS (`f8ed98f`, pushada às 19:55) segue fora do ar. Todas voltaram **200 OK**, e é aí que mora a armadilha: o webhook é do tipo **`manual`** do Coolify (`/webhooks/source/github/events/manual`), que **responde 200 mesmo quando recusa** e põe o motivo no *corpo*. Ler só o status engana.
   - **Config atual (`gh api repos/Chrisw16/AtendimentoApp/hooks`):** `http://72.60.53.164:8000/...` — **HTTP puro**, IP cru, `insecure_ssl=1`, **sem secret**. O payload do push trafega em claro.
@@ -158,14 +176,16 @@ que divergiu e os tetos assumidos.
 |---|---|
 | **0** — Reconciliação e linha de base | ✅ 2026-08-21 |
 | **1** — Fundação crítica / P0 (motor persistente) | ✅ 2026-08-21 |
-| 2 — Registry Foundation | ⏳ próxima |
-| 3–13 | abertas |
+| **2** — Registry Foundation | ✅ 2026-08-22 |
+| **3** — Segurança e governança base | ✅ 2026-08-22 |
+| **4** — Inbox, Outbox e Jobs | ✅ 2026-08-22 |
+| 5–13 | abertas |
 
 ## Estado do produto (2026-08-22)
 
 **Está EM PRODUÇÃO**, em VPS via Coolify: `https://gochat.netgo.net.br`. O SGP responde de verdade e a IA comercial roda com tool calling — pré-cadastro, `listar_planos_ativos` e `salvar_dado` exercitados em conversa real.
 
-### Plano de Evolução V1.0 — 4 de 13 fases entregues
+### Plano de Evolução V1.0 — 5 de 13 fases entregues
 
 | Fase | Estado |
 |---|---|
@@ -173,10 +193,10 @@ que divergiu e os tetos assumidos.
 | **1** — Flow Engine persistente (P0) | ✅ mergeada |
 | **2** — Registry Foundation | ✅ mergeada |
 | **3** — Segurança e governança base | ✅ mergeada |
-| **4** — Inbox, Outbox e Jobs | 🔵 desenhada, não implementada |
+| **4** — Inbox, Outbox e Jobs | ✅ implementada (2026-08-22) |
 | 5–13 | ⬜ não começadas |
 
-O que mudou de estrutural: **conversa sobrevive a restart e deploy** (`flow_executions`, versão do fluxo congelada por conversa), **credencial não sai mais em texto plano** e há cripto em repouso oportunista, **`/health/ready` bloqueia até as migrations terminarem**, e há **graceful shutdown**. Suítes: **227 testes puros + 54 de integração** contra Postgres e Redis reais.
+O que mudou de estrutural: **conversa sobrevive a restart e deploy** (`flow_executions`, versão do fluxo congelada por conversa), **credencial não sai mais em texto plano** e há cripto em repouso oportunista, **`/health/ready` bloqueia até as migrations terminarem**, há **graceful shutdown**, e agora **mensagem que entra é durável, envio é write-ahead e `aguardar_tempo` espera de verdade** (`inbox`/`outbox`/`jobs`). Suítes: **252 testes puros + 76 de integração** contra Postgres e Redis reais.
 
 Detalhe por fase em [brain/work/tasks/](brain/work/tasks/); plano completo em [docs/ers/](docs/ers/).
 

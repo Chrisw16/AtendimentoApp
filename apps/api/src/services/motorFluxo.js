@@ -19,7 +19,7 @@ import {
 } from './integrations.js';
 import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, camposIaResponde, TOOLS_PADRAO, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
 import { criarFilaPorChave } from './filaPorChave.js';
-import { estadoStore }      from './estadoStore.js';
+import { estadoStore, ehUuid } from './estadoStore.js';
 
 // Serializa o processamento por conversa. Sem isto, duas mensagens seguidas do
 // mesmo cliente intercalam nos `await` de SGP/IA e corrompem o estado
@@ -275,14 +275,33 @@ async function processarNo(no, ctx) {
 
     // ── LÓGICA ────────────────────────────────────────────────────
     case 'aguardar_resposta': {
+      const variavel = cfg.variavel || 'resposta';
       if (ctx.estado.aguardando === no.id) {
-        ctx.estado.aguardando = null;
-        const v = cfg.variavel || 'resposta';
-        ctx.estado.contexto[v] = ctx.mensagem.texto || '';
+        // FASE 4: o job de timeout entrega `tipo:'timer'`. Sem esta guarda ele
+        // cairia no ramo de baixo e gravaria `contexto[variavel] = ''` — a
+        // resposta VAZIA viraria a resposta do cliente. Corrupção, não no-op.
+        if (ctx.mensagem?.tipo === 'timer') {
+          const tentativas = (ctx.estado.contexto._espera_tentativas || 0) + 1;
+          const max = Number(cfg.max_tentativas) || 0;   // 0 = sem teto
+          limparEspera(ctx.estado);
+          if (max && tentativas >= max) {
+            ctx.estado.contexto._espera_tentativas = 0;
+            return avancar('max_tentativas');
+          }
+          ctx.estado.contexto._espera_tentativas = tentativas;
+          return avancar('timeout');
+        }
+        limparEspera(ctx.estado);
+        ctx.estado.contexto._espera_tentativas = 0;
+        ctx.estado.contexto[variavel] = ctx.mensagem.texto || '';
+        cancelarTimer(no, ctx);                        // o job vira desnecessário
         return avancar('saida');
       }
       if (cfg.mensagem) ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem, ctx) });
       ctx.estado.aguardando = no.id;
+      // `timeout` em segundos: sem ele o nó espera para sempre, como sempre fez.
+      const espera = Number(cfg.timeout) || 0;
+      if (espera > 0) await agendarTimer('wait_timeout', no, ctx, espera);
       return aguardar();
     }
 
@@ -314,10 +333,36 @@ async function processarNo(no, ctx) {
     }
 
     case 'aguardar_tempo': {
-      // Em produção usar fila/job scheduler; aqui avança imediatamente
-      const seg = cfg.segundos || 60;
-      console.log(`[Motor] aguardar_tempo: ${seg}s (simulado)`);
-      return avancar('saida');
+      const seg = Math.max(1, Number(cfg.segundos) || 60);
+
+      // Sandbox mantém o comportamento antigo: a tela "Testar fluxo" precisa de
+      // resultado imediato, não de espera real. (E o id `sandbox:<uuid>` não é
+      // uuid — a linha em `jobs` nem entraria.)
+      if (ctx.sandbox) {
+        console.log(`[Motor] aguardar_tempo: ${seg}s (sandbox: avança na hora)`);
+        return avancar('saida');
+      }
+
+      // Campo PRÓPRIO, nunca `aguardando`: este é o único mecanismo de retomada
+      // do motor e não distingue quem acordou o fluxo. Reusá-lo faria a
+      // mensagem do cliente ser consumida como se fosse o timer.
+      if (ctx.estado.aguardandoTimer === no.id) {
+        if (ctx.mensagem?.tipo === 'timer') {
+          limparEspera(ctx.estado);
+          return avancar('saida');
+        }
+        // Cliente escreveu durante a espera: segue parado e NÃO reagenda
+        // (senão cada mensagem dele criaria outro job).
+        return aguardar();
+      }
+
+      const agendou = await agendarTimer('flow_resume', no, ctx, seg);
+      // Agendamento falhou (tabela ausente, banco fora): avança na hora, que é
+      // o comportamento de antes desta fase. Cliente parado para sempre é pior.
+      if (!agendou) return avancar('saida');
+
+      ctx.estado.aguardandoTimer = no.id;
+      return aguardar();
     }
 
     // ── SGP / ERP ─────────────────────────────────────────────────
@@ -674,7 +719,11 @@ async function processarIAResponde(no, ctx) {
   // cliente sem `texto` nenhum (ver `extrairConteudoEvolution`) e precisam
   // continuar chamando a IA com o histórico que já existe — travar neles
   // deixaria o cliente no silêncio.
-  if (ctx.mensagem?.tipo === 'sistema') return aguardar();
+  // 'timer' entra aqui pelo mesmo motivo que 'sistema': não há fala do cliente.
+  // IA falar sozinha depois de um timer é geração proativa — feature do AI
+  // Runtime (FASE 9), não consequência de um job. Teto declarado da FASE 4:
+  // `aguardar_tempo → ia_responde` não é suportado; use `→ enviar_texto`.
+  if (ctx.mensagem?.tipo === 'sistema' || ctx.mensagem?.tipo === 'timer') return aguardar();
 
   const slug      = cfg.contexto || 'outros';
   // Fonte única dos dois campos com alias — ver `camposIaResponde`.
@@ -1018,15 +1067,117 @@ async function enviarResposta(conversa, resp, instancia) {
 
   const chatId = conversa.telefone;
   if (!chatId) return;
+  const destino = { numero: chatId, instancia };
+
+  // ── Write-ahead (FASE 4, §126) ────────────────────────────────
+  // Persiste a INTENÇÃO de envio antes de enviar. Morte de processo não lança
+  // exceção: sem esta linha, morrer entre gravar o estado e despachar deixava
+  // o banco dizendo "aguardando o menu" com o cliente sem ter visto o menu.
+  // O envio segue INLINE — a latência é a de sempre; o outbox é o log.
+  let registro = null;
+  if (ehUuid(conversa.id)) {
+    try {
+      const { registrar } = await import('./outbox.js');
+      registro = await registrar(conversa, resp, destino);
+    } catch (err) {
+      console.error('[Motor] outbox indisponível — envio direto:', err.message);
+    }
+  }
+
+  if (registro) {
+    // Ordem por conversa: `enviarResposta` engole o erro e o laço continua, então
+    // uma resposta que falha seguida de outra que passa entregaria o menu antes
+    // da saudação. Havendo saída anterior não entregue, esta espera a vez no worker.
+    if (registro.esperar) {
+      console.log(`[Motor] saída anterior pendente — ${resp.tipo} vai pelo outbox, em ordem`);
+      return;
+    }
+    const { entregar } = await import('./outbox.js');
+    await entregar(registro.linha);
+    return;
+  }
 
   try {
-    // O despacho por canal vive em `canais/` (um adapter por provedor).
-    // Aqui fica só o que NÃO é envio: persistência, broadcast e guards acima.
+    // Caminho sem outbox (id sintético ou tabela fora): o envio direto de antes.
     const { enviarPorCanal } = await import('./canais/index.js');
-    await enviarPorCanal(conversa.canal, { numero: chatId, instancia }, resp);
+    await enviarPorCanal(conversa.canal, destino, resp);
   } catch (err) {
     console.error(`[Motor] Envio ${conversa.canal} falhou:`, err.message);
   }
+}
+
+// ── ESPERA COM RELÓGIO (FASE 4) ───────────────────────────────────
+
+/** Margem entre a hora do job e a expiração do estado: o worker roda em tick. */
+const FOLGA_PARK_MS = 15 * 60_000;
+
+function limparEspera(estado) {
+  estado.aguardando      = null;
+  estado.aguardandoTimer = null;
+  // Sem limpar `_parkedAte`, o TTL normal de 2h nunca volta a valer para esta
+  // execução e a conversa fica viva até o teto de 72h.
+  estado._parkedAte      = null;
+}
+
+/**
+ * Agenda a retomada e segura o estado até lá (`_parkedAte`).
+ * @returns {Promise<boolean>} false se não deu para agendar — quem chama decide.
+ */
+async function agendarTimer(tipo, no, ctx, segundos) {
+  if (ctx.sandbox) return false;
+  try {
+    const { agendar } = await import('./jobs.js');
+    const executarEm = new Date(Date.now() + segundos * 1000);
+    await agendar({ tipo, conversaId: ctx.conversa.id, noId: no.id, executarEm });
+    ctx.estado._parkedAte = new Date(executarEm.getTime() + FOLGA_PARK_MS).toISOString();
+    return true;
+  } catch (err) {
+    console.error(`[Motor] não consegui agendar ${tipo} para o nó ${no.id}:`, err.message);
+    return false;
+  }
+}
+
+/** O cliente respondeu antes da hora: o job vira lixo. */
+function cancelarTimer(no, ctx) {
+  if (ctx.sandbox) return;
+  import('./jobs.js')
+    .then(({ cancelar }) => cancelar(ctx.conversa.id, no.id))
+    .catch(() => {});
+}
+
+/**
+ * Retomada por RELÓGIO — o worker de jobs entra por aqui (§127).
+ *
+ * Gêmea de `retomarAutomacao`, e pelos mesmos motivos: entra na `filaConversa`
+ * (dois ticks sobrepostos não podem processar a mesma conversa) e chama
+ * `processarConversaInterno`, nunca a versão externa — que enfileiraria atrás
+ * de si mesma e travaria.
+ *
+ * No-op silencioso é o caso NORMAL: cliente respondeu antes, estado expirou,
+ * a conversa foi encerrada ou um humano assumiu. Só não é no-op quando a
+ * execução ainda está parada exatamente naquele nó.
+ *
+ * @returns {Promise<boolean>} true se o fluxo foi de fato retomado.
+ */
+export async function retomarTimer(conversaId, noId, opts = {}) {
+  const conversa = await conversaRepo.porId(conversaId);
+  if (!conversa) return false;
+
+  // Humano assumiu no meio da espera: jogar a automação por cima seria a IA
+  // falando em cima do agente.
+  if (conversa.status !== 'ia') {
+    console.log(`[Motor] timer de ${conversaId} ignorado: conversa está '${conversa.status}'`);
+    return false;
+  }
+
+  return filaConversa(conversa.id, async () => {
+    const estado = await estadoStore.get(conversa.id);
+    if (!estado) return false;
+    if (estado.aguardandoTimer !== noId && estado.aguardando !== noId) return false;
+
+    await processarConversaInterno(conversa, { texto: '', tipo: 'timer' }, opts);
+    return true;
+  });
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────

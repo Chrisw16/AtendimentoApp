@@ -61,6 +61,25 @@ describe('contrato entre os catálogos de nó', () => {
     assert.deepEqual(semMeta, [], `portas sem meta (saem cinza e sem rótulo): ${semMeta.join(', ')}`);
   });
 
+  test('portas condicionais da paleta (portasSeTimeout) são emitidas quando configuradas', () => {
+    // FASE 4: `aguardar_resposta` só ganha `timeout`/`max_tentativas` quando
+    // `cfg.timeout > 0`. Se a paleta desenhar e o motor não emitir, a aresta
+    // ligada ali nunca dispara — que é o bug que este arquivo inteiro existe
+    // para pegar, só que na variante condicional.
+    const cfg = { timeout: 30, max_tentativas: 3 };
+    for (const [tipo, def] of Object.entries(NODE_TYPES)) {
+      for (const porta of def.portasSeTimeout || []) {
+        assert.ok(PORTA_META[porta], `porta ${porta} sem meta`);
+        const emitidas = new Set([
+          ...(NOS[tipo]?.estaticas || []),
+          ...(NOS[tipo]?.dinamicas?.(cfg) || []),
+        ]);
+        assert.ok(emitidas.has(porta),
+          `${tipo}: a paleta desenha "${porta}" com timeout configurado, o validador/motor não emite`);
+      }
+    }
+  });
+
   test('as portas ESTÁTICAS da paleta são realmente emitidas pelo motor', () => {
     // Só compara os nós de portas fixas: onde `NOS` tem `dinamicas`, as portas
     // vêm da config do nó (botões, ramos, rotas) e não cabem num catálogo.
