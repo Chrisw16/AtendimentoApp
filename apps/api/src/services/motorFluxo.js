@@ -730,7 +730,11 @@ async function processarIAResponde(no, ctx) {
               ctx.estado.contexto[chave] = String(valor ?? '');
               salvos.push(`${chave}=${ctx.estado.contexto[chave]}`);
             }
-            console.log(`[IA] salvar_dado →`, salvos.length ? salvos.join(', ') : '(nada salvo)', '| raw:', dados);
+            // Só os NOMES dos campos: os valores são os dados pessoais do
+            // assinante (CPF, nome, endereço) que a IA acabou de coletar.
+            // `salvos` segue com os valores porque o tool_result volta pra IA.
+            const nomes = salvos.map(s => s.split('=')[0]);
+            console.log(`[IA] salvar_dado →`, nomes.length ? nomes.join(', ') : '(nada salvo)');
             toolResults.push({
               type: 'tool_result',
               tool_use_id: tu.id,
@@ -738,7 +742,9 @@ async function processarIAResponde(no, ctx) {
             });
             continue;
           }
-          console.log(`[IA] Executando tool: ${tu.name}`, tu.input);
+          // Sem `tu.input`: consultar_cliente/precadastrar_cliente carregam CPF
+          // e ficha completa do assinante.
+          console.log(`[IA] Executando tool: ${tu.name} (${Object.keys(tu.input || {}).join(',') || 'sem args'})`);
           const result = await executarTool(tu.name, tu.input || {}, {
             cliente: ctx.estado.contexto.cliente || {},
             conversa: ctx.conversa,

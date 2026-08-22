@@ -276,3 +276,72 @@ A correção de segurança está no `origin/main` e **ainda não subiu**. Mitiga
 Separei os lotes: `main` fica só com a correção de segurança, e a Fase 1 espera na branch `feat/canais-registry`. Misturar os dois faria o rollback do refactor levar a correção de segurança junto.
 
 Suíte: 155 → **185 testes**.
+
+## [2026-08-21 · plano de evolução] WORK | FASE 0 — reconciliação e linha de base
+
+Entrou o **Plano Mestre de Evolução V1.0** (`docs/ers/`, 2579 linhas, 26 partes, 13 fases) somado à **ERS AS-IS** (1038 linhas). Os dois estavam só no disco; agora versionados. O plano manda executar **uma fase por vez** — começamos pela FASE 0.
+
+Antes de qualquer código, o merge de `feat/canais-registry` no `main` fechou o lote pendente da Fase 1 do WhatsApp Oficial. Trabalho em `chore/fase-0-baseline`.
+
+### O bloqueio real era o ambiente
+
+A documentação toda assume `docker-compose`. **Não há Docker nesta máquina** — nem Colima, nem Podman. É por isso que os itens de banco da ERS §8.2 seguiam como aposta havia meses: ninguém tinha como rodá-los. Resolvido com Postgres 16 nativo via Homebrew, mesmas credenciais do compose.
+
+### Duas apostas viraram fato
+
+- **Deduplicação de webhook** (migration 008 + `onConflict`) — 6 testes, incluindo o caso **concorrente**, que é o TOCTOU original. Verificado com dentes: derrubado o índice único, os 6 falham.
+- **Redis pub/sub** (`ioredis`) — 3 testes com duas instâncias reais do módulo (query-string no import ESM). Broadcast cruzando, destinatário respeitado, sem eco duplo. Com Redis morto, as travessias falham.
+
+Contrato do diretório novo: sem `DATABASE_URL_TEST`/`REDIS_URL_TEST` os testes se **pulam**. `npm test` segue 185/185 em qualquer máquina.
+
+### O que a fase descobriu
+
+**`001` e `002` não sobrevivem a replay.** Testadas uma a uma: 10 das 12 sobrevivem, essas duas não. Usam `createTableIfNotExists`, deprecado no knex, que emite o `CREATE TABLE IF NOT EXISTS` e depois dispara `ADD CONSTRAINT`/`CREATE INDEX` incondicionalmente. Contradiz o "escreva idempotente" do CLAUDE.md. Não é risco vivo — vira risco se alguém renomear os arquivos.
+
+**`onConflict` e a 008 são acoplados.** Sem o índice, o Postgres recusa *todo* insert de mensagem, não só duplicata. Isso responde à pauta por outro caminho: uma instância que armazena mensagens **prova por comportamento** que a 008 aplicou — não é mais preciso ler o log do Coolify. Em troca, fica o alerta de que o `down()` da 008 derruba a ingestão inteira.
+
+### Erro meu, registrado
+
+Montei o teste de replay por migration com `$PSQL` numa variável — **o zsh não faz word-splitting**, então todos os comandos de setup falharam em silêncio (eu tinha redirecionado para `/dev/null`) e a tabela saiu com 12 ✅ falsos. Só percebi porque o resultado contradizia um teste anterior meu. Refeito com função de shell. Lição: quando um resultado novo contradiz um resultado antigo, o suspeito é o instrumento, não o achado.
+
+### Segurança
+
+Os logs de PII eram **6**, não os 3 que o CLAUDE.md listava. O pior não estava na lista: `[SGP] consultacliente` imprimia o **CPF completo** a cada consulta — caminho quente, não debug esquecido. Em cada sítio saiu o dado e ficou o diagnóstico.
+
+Sondada a produção: o XSS do handshake da Meta corrigido em `f8ed98f` **continua vivo** — `text/html` refletindo o challenge. O Coolify segue sem deployar.
+
+Detalhe em [[FASE 0 — Reconciliação e linha de base]].
+
+## [2026-08-21 · pontos soltos] WORK | Migrations idempotentes + o diagnóstico do deploy revisto
+
+Fechamento dos dois itens que a FASE 0 deixou abertos.
+
+### `001` e `002` corrigidas
+
+Teste escrito primeiro (`migrations-replay.test.js`), reproduziu as duas falhas, e só então a correção: helper local `criarTabela()` com guarda `hasTable`, no lugar do `createTableIfNotExists` deprecado.
+
+O que dá confiança aqui não é o teste de replay passar — é a **segunda** verificação: criei um banco do zero com o código antigo e outro com o novo, e comparei `pg_dump -s`. **Idênticos**, 414 linhas. Numa mudança de migration, provar que o replay parou de estourar sem provar que o schema do zero não mudou seria meia verificação.
+
+Efeito colateral encontrado no caminho: dois arquivos de teste aplicando migrations no mesmo banco em paralelo fazem dois processos criarem `_migrations` ao mesmo tempo e o schema sai pela metade. Script passou a usar `--test-concurrency=1`.
+
+Integração: 9 → **22 testes**. Suíte pura: 185.
+
+### O diagnóstico do deploy estava errado
+
+Estava registrado que *"o Coolify recebe 200 e nunca deploya"*. Investigado com `gh` (autenticado como Chrisw16), a linha do tempo de hoje desmente:
+
+- 19:20 entrega #1 → **virou deploy** (`index.html` de produção reconstruído às 20:06 UTC)
+- 19:55 entrega #2, que levava a correção do XSS → **se perdeu**
+- 22:54 entrega #3 → se perdeu
+
+O deploy é **intermitente**, não morto. Pior que a tese anterior, porque parece funcionar.
+
+A razão de ninguém ter visto: o webhook é do tipo **`manual`** do Coolify, que **responde 200 mesmo quando recusa**, com o motivo no *corpo*. Todo mundo leu o status e ninguém leu o corpo. Fica a lição: **num webhook, 200 não é confirmação de nada** — é preciso ler a resposta ou sondar o efeito.
+
+Descoberto junto: o webhook é `http://` puro, IP cru, `insecure_ssl=1` e **sem secret**. O payload do push trafega em claro.
+
+Ficaram duas leituras que exigem acesso humano (corpo das entregas #2/#3 e o log da aba Deployments), mas três correções valem independente da causa: pôr secret + HTTPS no webhook, definir `META_VERIFY_TOKEN` (fecha o XSS **sem** depender de deploy) e um deploy manual para subir o `f8ed98f`.
+
+Registrada também a sonda certa: `/health` devolve `2.0.0` **fixo** e é inútil para saber o que está no ar. O carimbo é o **`last-modified` de `GET /`**.
+
+Detalhe em [[FASE 0 — Reconciliação e linha de base]].

@@ -3,9 +3,24 @@
  * Tabelas para: zonas de cobertura, equipamentos de rede, alertas
  */
 
+/**
+ * Substitui `db.schema.createTableIfNotExists`, que é deprecado no knex e
+ * ENGANOSO: ele emite o `CREATE TABLE IF NOT EXISTS`, mas dispara
+ * `ADD CONSTRAINT` e `CREATE INDEX` INCONDICIONALMENTE. Rodar a migration de
+ * novo sobre um schema já pronto estourava com "relation already exists".
+ *
+ * O runner rastreia por NOME DE ARQUIVO — renomear esta migration a faz rodar
+ * de novo, e migration que falha no boot pula os monitores de SLA e da
+ * supervisora. Aqui, se a tabela existe, nada é executado.
+ */
+async function criarTabela(db, nome, definicao) {
+  if (await db.schema.hasTable(nome)) return;
+  await db.schema.createTable(nome, definicao);
+}
+
 export async function up(db) {
   // ── ZONAS DE COBERTURA ────────────────────────────────────────
-  await db.schema.createTableIfNotExists('zonas_cobertura', t => {
+  await criarTabela(db, 'zonas_cobertura', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('nome').notNullable();
     t.string('tipo').defaultTo('cobertura'); // 'cobertura' | 'expansao' | 'sem_sinal'
@@ -19,7 +34,7 @@ export async function up(db) {
   });
 
   // ── EQUIPAMENTOS DE REDE ──────────────────────────────────────
-  await db.schema.createTableIfNotExists('equipamentos_rede', t => {
+  await criarTabela(db, 'equipamentos_rede', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('nome');
     t.string('ip').notNullable().unique();
@@ -35,7 +50,7 @@ export async function up(db) {
   });
 
   // ── ALERTAS DE REDE ───────────────────────────────────────────
-  await db.schema.createTableIfNotExists('alertas_rede', t => {
+  await criarTabela(db, 'alertas_rede', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('equipamento');
     t.string('tipo').defaultTo('warning');   // 'warning' | 'critical'
@@ -48,7 +63,7 @@ export async function up(db) {
   });
 
   // ── ORDENS DE SERVIÇO ─────────────────────────────────────────
-  await db.schema.createTableIfNotExists('ordens_servico', t => {
+  await criarTabela(db, 'ordens_servico', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.string('numero').unique();
     t.string('titulo').notNullable();
@@ -75,7 +90,7 @@ export async function up(db) {
   });
 
   // ── CONSULTAS DE COBERTURA (log) ──────────────────────────────
-  await db.schema.createTableIfNotExists('consultas_cobertura', t => {
+  await criarTabela(db, 'consultas_cobertura', t => {
     t.uuid('id').primary().defaultTo(db.raw('gen_random_uuid()'));
     t.decimal('latitude',  10, 8);
     t.decimal('longitude', 11, 8);
