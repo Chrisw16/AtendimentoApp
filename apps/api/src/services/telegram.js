@@ -3,6 +3,7 @@
  * Lê o token do banco (sistema_kv → telegram_bot_token)
  */
 import { getDb } from '../config/db.js';
+import { lerValorKV } from './kvSeguro.js';
 
 async function getBotToken() {
   const db = getDb();
@@ -18,9 +19,7 @@ async function getBotToken() {
 
   // Tenta 2: sistema_kv (salvo pela página Configurações → Integrações)
   const kv = await db('sistema_kv').where({ chave: 'telegram_bot_token' }).first();
-  if (kv?.valor) {
-    try { return JSON.parse(kv.valor); } catch { return kv.valor; }
-  }
+  if (kv?.valor) return lerValorKV(kv.valor, 'telegram_bot_token');
 
   throw new Error('Token do bot Telegram não configurado. Acesse Canais → Telegram → Bot Token.');
 }

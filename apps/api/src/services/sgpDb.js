@@ -5,6 +5,7 @@
  */
 import pg from 'pg';
 import { getDb } from '../config/db.js';
+import { lerValorKV } from './kvSeguro.js';
 
 let pool = null;
 let poolPromise = null;
@@ -14,7 +15,7 @@ async function getCreds() {
   const rows = await db('sistema_kv').whereIn('chave',
     ['sgpdb_host', 'sgpdb_port', 'sgpdb_name', 'sgpdb_user', 'sgpdb_password']);
   const kv = {};
-  rows.forEach(r => { try { kv[r.chave] = JSON.parse(r.valor); } catch { kv[r.chave] = r.valor; } });
+  rows.forEach(r => { kv[r.chave] = lerValorKV(r.valor, r.chave); });
   return kv;
 }
 

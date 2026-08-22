@@ -4,6 +4,7 @@
 import { conversaRepo } from '../../repositories/conversaRepository.js';
 import { mensagemRepo } from '../../repositories/mensagemRepository.js';
 import { broadcast }    from '../sseManager.js';
+import { lerValorKV }   from '../kvSeguro.js';
 
 export async function handleTelegram(body) {
   // Callback de botão inline — transforma em mensagem de texto
@@ -46,7 +47,7 @@ async function _getBotToken() {
   const t = canal?.config?.bot_token || (typeof canal?.config === 'string' ? JSON.parse(canal.config || '{}')?.bot_token : null);
   if (t) return t;
   const kv = await db('sistema_kv').where({ chave: 'telegram_bot_token' }).first();
-  if (kv?.valor) { try { return JSON.parse(kv.valor); } catch { return kv.valor; } }
+  if (kv?.valor) return lerValorKV(kv.valor, 'telegram_bot_token');
   throw new Error('Token Telegram não configurado');
 }
 

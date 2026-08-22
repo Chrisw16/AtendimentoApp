@@ -5,6 +5,7 @@ import { formatarDiagnosticoOnu } from '../services/sgpHelpers.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
 import { asyncHandler } from '../middlewares/errorHandler.js';
 import { auditar, ipDe } from '../services/auditoria.js';
+import { lerValorKV, mascararConfig, mascarar, ehSecreta, valorParaGravar } from '../services/kvSeguro.js';
 import { getDb } from '../config/db.js';
 
 export const sysconfigRouter = Router();
@@ -23,25 +24,42 @@ sysconfigRouter.get('/', asyncHandler(async (req, res) => {
   const rows = await db('sistema_kv').whereIn('chave', CHAVES_PUBLICAS);
   const config = {};
   rows.forEach(r => {
-    try { config[r.chave] = typeof r.valor === 'string' ? JSON.parse(r.valor) : r.valor; }
-    catch { config[r.chave] = r.valor; }
+    // Uma credencial ilegível (KV_SECRET ausente/trocada) não pode derrubar a
+    // tela inteira de Configurações: vira null, o log diz qual, o operador
+    // re-salva. Falhar tudo deixaria o admin sem como consertar pela interface.
+    try { config[r.chave] = lerValorKV(r.valor, r.chave); }
+    catch (err) { console.error('[sysconfig]', err.message); config[r.chave] = null; }
   });
-  res.json({ config });
+  // §117: o frontend nunca recebe o segredo de volta — só a máscara.
+  res.json({ config: mascararConfig(config) });
 }));
 
 sysconfigRouter.put('/', asyncHandler(async (req, res) => {
   const db = getDb();
   const updates = Object.entries(req.body).filter(([k]) => CHAVES_PUBLICAS.includes(k));
+  const gravadas = [];
+  let semSegredo = false;
   for (const [chave, valor] of updates) {
+    // A tela devolve a máscara nos campos que o operador não tocou. Gravá-la
+    // trocaria a credencial real por `••••1234` — e a tela continuaria
+    // mostrando uma máscara depois, então o estrago passaria despercebido até
+    // o SGP começar a dar 403.
+    const decisao = valorParaGravar(chave, valor);
+    if (!decisao.gravar) continue;
+    if (ehSecreta(chave) && !process.env.KV_SECRET) semSegredo = true;
     await db('sistema_kv')
-      .insert({ chave, valor: JSON.stringify(valor) })
+      .insert({ chave, valor: decisao.valor })
       .onConflict('chave').merge(['valor', 'atualizado']);
+    gravadas.push(chave);
+  }
+  if (semSegredo) {
+    console.warn('[sysconfig] KV_SECRET ausente — credenciais gravadas em texto plano. Defina a env e re-salve para cifrar em repouso.');
   }
   invalidateConfigCache();
   invalidateSgpDbPool();
   // Audita os NOMES das chaves alteradas — nunca os valores (são credenciais).
-  if (updates.length) {
-    auditar({ actorType: 'human', actorId: req.agente.id, action: 'sysconfig_alterado', after: { chaves: updates.map(([k]) => k) }, ip: ipDe(req) });
+  if (gravadas.length) {
+    auditar({ actorType: 'human', actorId: req.agente.id, action: 'sysconfig_alterado', after: { chaves: gravadas }, ip: ipDe(req) });
   }
   res.json({ ok: true });
 }));
@@ -56,8 +74,12 @@ sysconfigRouter.get('/:chave', asyncHandler(async (req, res) => {
   const db  = getDb();
   const row = await db('sistema_kv').where({ chave: req.params.chave }).first();
   if (!row) return res.json({ valor: null });
-  try { res.json({ valor: typeof row.valor === 'string' ? JSON.parse(row.valor) : row.valor }); }
-  catch { res.json({ valor: row.valor }); }
+  let valor;
+  try { valor = lerValorKV(row.valor, req.params.chave); }
+  catch (err) { console.error('[sysconfig]', err.message); return res.json({ valor: null }); }
+  // Mesma regra do GET agregado: credencial sai mascarada por esta rota também,
+  // senão bastaria pedir pelo nome para contornar o mascaramento.
+  res.json({ valor: ehSecreta(req.params.chave) && valor ? mascarar(valor) : valor });
 }));
 
 // ── ROTA DE TESTE DE TOOLS SGP ────────────────────────────────────────────

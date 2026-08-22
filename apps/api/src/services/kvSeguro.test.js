@@ -80,3 +80,66 @@ test('ehMascara: pega máscara intacta E editada pela metade', () => {
   assert.ok(!ehMascara('sk-ant-nova-chave-real'));
   assert.ok(!ehMascara(''));
 });
+
+// ── CHAVES SECRETAS, MÁSCARA NO GET E FORMATO DE GRAVAÇÃO ────────
+import { ehSecreta, mascararConfig, valorParaGravar } from './kvSeguro.js';
+
+test('ehSecreta separa credencial de configuração comum', () => {
+  assert.ok(ehSecreta('anthropic_api_key'));
+  assert.ok(ehSecreta('sgpdb_password'));
+  assert.ok(ehSecreta('telegram_bot_token'));
+  // URL/usuário/nome não são segredo — mascarar isso só atrapalharia o operador
+  assert.ok(!ehSecreta('sgp_url'));
+  assert.ok(!ehSecreta('sgpdb_user'));
+  assert.ok(!ehSecreta('nome_empresa'));
+});
+
+test('mascararConfig esconde só as credenciais e preserva o resto', () => {
+  const saida = mascararConfig({
+    sgp_url:           'https://sgp.netgo.net.br',
+    anthropic_api_key: 'sk-ant-abcdefghijk9876',
+    horario:           { inicio: '08:00' },
+  });
+  assert.equal(saida.sgp_url, 'https://sgp.netgo.net.br', 'config comum não pode ser mascarada');
+  assert.deepEqual(saida.horario, { inicio: '08:00' }, 'objeto não-secreto passa intacto');
+  assert.ok(!saida.anthropic_api_key.includes('abcdefghijk'), 'a chave vazou no GET');
+  assert.match(saida.anthropic_api_key, /9876$/, 'últimos 4 ajudam o operador a reconhecer qual chave é');
+});
+
+test('credencial vazia não vira máscara (senão a tela mostra segredo onde não há)', () => {
+  assert.equal(mascararConfig({ sgp_token: '' }).sgp_token, '');
+});
+
+test('PUT ignora a máscara devolvida pela tela — salvar não destrói o segredo', () => {
+  assert.equal(valorParaGravar('anthropic_api_key', '••••••••9876').gravar, false);
+});
+
+test('PUT com valor novo de verdade grava', () => {
+  assert.equal(valorParaGravar('anthropic_api_key', 'sk-ant-nova', undefined).gravar, true);
+});
+
+test('sem KV_SECRET a credencial grava como sempre foi (compat, sem migração)', () => {
+  const { valor } = valorParaGravar('sgp_token', 'tok-123', undefined);
+  assert.equal(valor, JSON.stringify('tok-123'));
+  assert.ok(!valor.includes('enc:v1:'));
+});
+
+test('com KV_SECRET a credencial grava CIFRADA — e volta inteira na leitura', () => {
+  const { valor } = valorParaGravar('sgp_token', 'tok-123', SEGREDO);
+  // jsonb: o que vai pro banco precisa ser JSON VÁLIDO. `enc:v1:...` cru não é.
+  const comoOPgDevolve = JSON.parse(valor);
+  assert.ok(estaCifrado(comoOPgDevolve), 'não cifrou');
+  assert.ok(!valor.includes('tok-123'), 'o segredo ficou legível no banco');
+  assert.equal(lerValorKV(comoOPgDevolve, 'sgp_token', SEGREDO), 'tok-123');
+});
+
+test('config comum NÃO é cifrada mesmo com KV_SECRET (o GET agregado precisa dela)', () => {
+  const { valor } = valorParaGravar('sgp_url', 'https://sgp.x', SEGREDO);
+  assert.equal(lerValorKV(JSON.parse(valor), 'sgp_url'), 'https://sgp.x');
+  assert.ok(!valor.includes('enc:v1:'));
+});
+
+test('objeto de configuração sobrevive ao roundtrip de gravação', () => {
+  const { valor } = valorParaGravar('horario', { inicio: '08:00', fim: '18:00' }, SEGREDO);
+  assert.deepEqual(lerValorKV(JSON.parse(valor), 'horario'), { inicio: '08:00', fim: '18:00' });
+});

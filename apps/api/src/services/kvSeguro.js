@@ -78,11 +78,11 @@ export function decifrar(valor, segredo = process.env.KV_SECRET) {
  *
  * `chave` entra só para a mensagem de erro dizer O QUE re-salvar.
  */
-export function lerValorKV(raw, chave = '?') {
+export function lerValorKV(raw, chave = '?', segredo = process.env.KV_SECRET) {
   if (raw == null) return null;
   let texto = raw;
   if (estaCifrado(texto)) {
-    try { texto = decifrar(texto); }
+    try { texto = decifrar(texto, segredo); }
     catch (err) { throw new Error(`[${chave}] ${err.message}`); }
   }
   if (typeof texto !== 'string') return texto;   // jsonb já veio objeto
@@ -106,4 +106,50 @@ export function mascarar(valor) {
  */
 export function ehMascara(valor) {
   return typeof valor === 'string' && valor.includes('•');
+}
+
+// ── QUAIS CHAVES SÃO CREDENCIAL ──────────────────────────────────
+
+/**
+ * As chaves do `sistema_kv` que são SEGREDO — mascaradas no GET e cifradas na
+ * escrita quando há `KV_SECRET`.
+ *
+ * Deliberadamente menor que `CHAVES_PUBLICAS`: URL, usuário e nome de empresa
+ * não são credencial, e mascarar isso só cegaria o operador na tela de
+ * Configurações sem proteger nada.
+ */
+export const CHAVES_SECRETAS = new Set([
+  'anthropic_api_key', 'openai_api_key', 'sgp_token',
+  'evolution_key', 'telegram_bot_token', 'sgpdb_password',
+]);
+
+export function ehSecreta(chave) {
+  return CHAVES_SECRETAS.has(chave);
+}
+
+/** Aplica máscara nas credenciais de um objeto de config (§117). */
+export function mascararConfig(config) {
+  const saida = {};
+  for (const [chave, valor] of Object.entries(config || {})) {
+    saida[chave] = ehSecreta(chave) && valor ? mascarar(valor) : valor;
+  }
+  return saida;
+}
+
+/**
+ * Decide o que o PUT deve gravar numa chave.
+ *
+ * `{ gravar: false }` = a tela devolveu a máscara (campo intocado); sobrescrever
+ * ali destruiria a credencial real — é o modo mais fácil de perder um segredo
+ * sem perceber, porque a tela continua mostrando `••••1234` depois.
+ *
+ * O `valor` devolvido já vai no formato da coluna, que é **jsonb**: por isso o
+ * ciphertext é serializado de novo (`enc:v1:...` cru NÃO é JSON válido e o
+ * Postgres recusaria). Sem `KV_SECRET`, grava exatamente como sempre gravou.
+ */
+export function valorParaGravar(chave, valor, segredo = process.env.KV_SECRET) {
+  if (ehSecreta(chave) && ehMascara(valor)) return { gravar: false };
+  const json = JSON.stringify(valor);
+  if (!ehSecreta(chave) || !segredo) return { gravar: true, valor: json };
+  return { gravar: true, valor: JSON.stringify(cifrar(json, segredo)) };
 }
