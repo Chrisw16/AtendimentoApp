@@ -13,3 +13,6 @@ brain/.obsidian/workspace.json
 brain/*.md
 !brain/_*.md
 brain/*.canvas
+
+# lock files: decisão de 82cea84 — não versionados por ora
+apps/*/package-lock.json
