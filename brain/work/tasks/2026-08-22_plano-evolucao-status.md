@@ -6,7 +6,7 @@ last_updated: 2026-08-22
 status: active
 priority: p1
 knowledge_refs: ["systems/maxxi/overview"]
-related: ["[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
+related: ["[[FASE 8 — Playbook Engine]]", "[[FASE 7 — Knowledge Hub]]", "[[FASE 6 — Cliente 360]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 4 — Inbox, Outbox e Jobs]]", "[[FASE 0 — Reconciliação e linha de base]]", "[[FASE 1 — Fundação crítica / P0 (motor persistente)]]", "[[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]]", "[[FASE 3 — Segurança e governança base]]", "[[Maxxi v2 / GoCHAT — Visão geral]]"]
 aliases: ["status do plano", "onde estamos", "roadmap V1.0", "progresso das fases"]
 tags: [work, task, plano-evolucao, status, roadmap]
 ---
@@ -19,7 +19,7 @@ detalhe; aqui fica só o quadro.
 
 ## Placar
 
-**8 de 13 fases entregues.** As 0–5 estão **em produção** (a FASE 5 confirmada
+**9 de 13 fases entregues.** As 0–5 estão **em produção** (a FASE 5 confirmada
 no ar em 2026-08-22 14:04 UTC — `GET /api/atendimento/filas` em 401 nas 12 de
 12 requisições, e `/health/ready` em 200, provando as migrations até a 017).
 A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
@@ -34,14 +34,14 @@ A FASE 6 foi fechada em 2026-08-22 e sobe no mesmo push.
 | 5 | Equipes, Filas e Human Handoff | ✅ | [[FASE 5 — Equipes, Filas e Human Handoff]] |
 | 6 | Cliente 360 | ✅ | [[FASE 6 — Cliente 360]] |
 | 7 | Knowledge Hub | ✅ | [[FASE 7 — Knowledge Hub]] |
-| 8 | Playbook Engine | ⬜ | — |
+| 8 | Playbook Engine | ✅ | [[FASE 8 — Playbook Engine]] |
 | 9 | AI Runtime V1 | ⬜ | — |
 | 10 | Copilot V1 | ⬜ | — |
 | 11 | Quality AI V1 | ⬜ | — |
 | 12 | Conversation Events + Analytics | ⬜ | — |
 | 13 | Observabilidade e hardening | ⬜ | — |
 
-Suítes ao fechar a FASE 7: **338 testes puros · 158 de integração**.
+Suítes ao fechar a FASE 8: **362 testes puros · 176 de integração**.
 Migrations: **16 arquivos, até a 017** (014 `flow_executions`, 015 `audit_log`,
 016 `inbox`/`outbox`/`jobs`, 017 `filas`/`agentes_filas`).
 
@@ -84,6 +84,9 @@ Não são esquecimentos — foram decisões registradas com o motivo.
 | ~~FASE 3~~ | ~~Mascarar CPF/telefone na UI~~ | ✅ FASE 6 — e mais forte: mascarado **no servidor**, não na tela |
 | FASE 6 | Cliente multi-contrato: a ação age sempre no contrato principal | falta a UI de escolha (o backend já valida) |
 | FASE 6 | Sem endereço, tags e tempo de relacionamento | o `/api/ura/consultacliente/` não devolve; falta mapear endpoint |
+| FASE 8 | Sem score de aderência ao playbook | é FASE 11 (Quality AI) — não se inventa métrica antes de quem a consome |
+| FASE 8 | Subplaybooks (§63) têm coluna, não têm UI nem execução aninhada | quando houver caso real |
+| FASE 8 | Gatilhos por intenção são guardados e não roteiam | escolher playbook por intenção é FASE 9 |
 | FASE 7 | Sem busca semântica: sinônimo sem raiz comum ("lerdo"/"lento") não casa | pgvector + embeddings, quando houver os dois |
 | FASE 7 | Sem importação de PDF/DOCX e sem geração de rascunho a partir de atendimentos | trabalho editorial segue humano |
 | FASE 6 | Timeline unificada é só local (sem pagamentos/troca de plano do ERP) | endpoint de histórico financeiro não mapeado |
@@ -170,6 +173,22 @@ resolvidos numa função IMMUTABLE usada pelo índice **e** pela consulta.
 
 A IA ganhou a tool `buscar_conhecimento` (no `TOOLS_PADRAO`): o "não achei" é
 uma resposta útil, porque é ela que impede a IA de inventar procedimento.
+
+## FASE 8 — entregue (2026-08-22)
+
+Detalhe em [[FASE 8 — Playbook Engine]]. A decisão que define a fase: **a etapa
+é provada pela tool que a evidencia, não pelo relato da IA**. Pedir para o
+modelo se auto-reportar não serve porque a Quality AI (FASE 11) não pode
+auditar um procedimento acreditando no que o próprio modelo disse ter feito.
+
+Etapas conversacionais — quase todo o playbook comercial — não têm tool que as
+prove e usam `concluir_etapa_playbook`. São dois mecanismos porque são dois
+tipos de etapa.
+
+Os dois playbooks nomeados pelo plano (§60 "Sem conexão" e §62 "Venda
+residencial") entraram no seed, em rascunho: são estrutura definida pelo próprio
+documento, não fato sobre o provedor — ao contrário dos artigos de conhecimento,
+que não se semeiam.
 
 ## See Also
 

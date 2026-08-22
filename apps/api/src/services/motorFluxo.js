@@ -760,11 +760,23 @@ async function processarIAResponde(no, ctx) {
   // Ficha de dados já coletados (reinjetada todo turno para a IA não re-perguntar).
   const ficha = montarFichaColetada(ctx.estado.contexto);
 
+  // FASE 8: o procedimento oficial entra no prompt TODO TURNO, com as etapas já
+  // cumpridas marcadas. Injetar só na primeira passagem faria a IA esquecer o
+  // roteiro no segundo turno, que é exatamente quando ela começa a improvisar.
+  const { prepararParaIA } = await import('./playbook.js');
+  const pb = cfg.playbook
+    ? await prepararParaIA(cfg.playbook, { conversaId: ctx.conversa.id, sandbox: ctx.sandbox }).catch(err => {
+        console.error('[Playbook] falhou, seguindo sem procedimento:', err.message);
+        return null;
+      })
+    : null;
+
   const system = montarSystemPrompt({
     systemBase,
     instrucao,
     ctxCliente,
     ficha,
+    playbook: pb?.bloco || '',
     regrasTools: `## REGRAS CRÍTICAS DE FERRAMENTAS
 - Você tem acesso a ferramentas reais (tool_use). Use-as diretamente — NUNCA escreva o nome delas no texto.
 - ERRADO: "Deixa eu verificar... verificar_conexao"
@@ -809,6 +821,11 @@ async function processarIAResponde(no, ctx) {
   // definição da tool derruba a chamada com 400.
   const tools = IA_TOOLS
     .filter(t => toolsAtivas.includes(t.name) || t.name === 'salvar_dado')
+    // FASE 8: sem procedimento ativo, `concluir_etapa_playbook` não tem o que
+    // concluir. Deixá-la na lista convida o modelo a chamá-la e gastar um turno
+    // para receber "nenhum procedimento ativo" — tool inútil na lista é ruído
+    // que compete com a tool certa.
+    .filter(t => t.name !== 'concluir_etapa_playbook' || !!pb)
     .map(({ name, description, input_schema }) => ({ name, description, input_schema }));
 
   try {
@@ -875,6 +892,25 @@ async function processarIAResponde(no, ctx) {
             });
             continue;
           }
+          // FASE 8: etapa conversacional não tem tool que a prove — a IA marca.
+          // Fica aqui (e não no `executarTool`) pelo mesmo motivo do
+          // `salvar_dado`: precisa da execução do playbook deste turno.
+          if (tu.name === 'concluir_etapa_playbook') {
+            // Sem `exec` (sandbox) a etapa não é registrada, mas a IA precisa
+            // receber uma confirmação — senão ela tenta de novo, e o teste de
+            // fluxo deixa de espelhar o comportamento real.
+            let conteudo = pb ? '✓ Etapa concluída (simulado — sem registro no sandbox).'
+                              : 'Nenhum procedimento ativo neste atendimento.';
+            if (pb?.exec) {
+              const { concluirEtapa } = await import('./playbook.js');
+              const r = await concluirEtapa(pb.exec, pb.etapas, tu.input?.etapa);
+              if (r.erro) conteudo = `Etapa "${tu.input?.etapa}" não existe neste procedimento.`;
+              else { pb.exec = r.exec; conteudo = `✓ Etapa concluída: ${r.etapa.titulo}`; }
+            }
+            toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: conteudo });
+            continue;
+          }
+
           // Sem `tu.input`: consultar_cliente/precadastrar_cliente carregam CPF
           // e ficha completa do assinante.
           console.log(`[IA] Executando tool: ${tu.name} (${Object.keys(tu.input || {}).join(',') || 'sem args'})`);
@@ -883,6 +919,13 @@ async function processarIAResponde(no, ctx) {
             conversa: ctx.conversa,
             sandbox: ctx.sandbox,
           }).catch(e => `Erro ao executar ${tu.name}: ${e.message}`);
+
+          // A etapa é dada por cumprida pela tool que a EVIDENCIA, não pelo que
+          // a IA diz ter feito — é o único sinal que a auditoria pode conferir.
+          if (pb?.exec) {
+            const { registrarTool } = await import('./playbook.js');
+            pb.exec = await registrarTool(pb.exec, pb.etapas, tu.name).catch(() => pb.exec);
+          }
 
           // Detecta ações especiais
           if (typeof result === 'string' && result.startsWith('__TRANSFERIR__')) {

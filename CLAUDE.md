@@ -28,7 +28,7 @@ apps/api/src/
   server.js              entrypoint (monta rotas /api/*, serve o frontend, inicia migrations+monitores)
   config/db.js           pool Knex (singleton via getDb()/db proxy)
   middlewares/           auth.js (JWT, adminMiddleware), errorHandler.js (asyncHandler, HttpError)
-  migrations/versions/   001..018 — modelo de dados (rode em ordem; NUNCA ALTER TABLE solto)
+  migrations/versions/   001..019 — modelo de dados (rode em ordem; NUNCA ALTER TABLE solto)
   repositories/          conversaRepository.js, mensagemRepository.js (toda query de conversa/msg)
   routes/                auth, chat, webhooks (públicas) + agentes, fluxos, prompts, dashboard, filas, ... (autenticadas)
   services/
@@ -46,6 +46,8 @@ apps/api/src/
     contextCards.js      ★ puro: os cartões do Cliente 360 + testes
     knowledge.js         ★ base de conhecimento: busca FTS, workflow, lacunas (FASE 7)
     knowledgeHelpers.js  ★ puro: workflow editorial, validade, corte do trecho + testes
+    playbook.js          ★ procedimentos oficiais: injeção no prompt e rastreio (FASE 8)
+    playbookHelpers.js   ★ puro: workflow, progresso, bloco do prompt + testes
     inbox.js outbox.js jobs.js  ★ filas da FASE 4 (entrada durável, envio write-ahead, relógio)
     filaDb.js            reivindicação com SKIP LOCKED + lease (as 3 filas usam)
     politicaRetry.js     ★ puro: TTL/_parkedAte, backoff, expiração, destino de lease + testes
@@ -71,8 +73,9 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 
 **Dev (sem Docker):** precisa Postgres 16 + Redis 7 + Node 20. Em `apps/api`: `cp .env.example .env`, `npm install`, `npm run seed`, `npm run dev`. Em `apps/web`: `npm install`, `npm run dev`.
 
-**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps) — **338 testes puros**, rodam em qualquer máquina sem serviço nenhum. `motorFluxo.js` **não é importável em teste** (puxa `config/db.js` → Knex no topo e as deps não ficam instaladas localmente); por isso toda lógica testável vive em **módulos puros** ao lado dele — escreva o teste primeiro (TDD):
+**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps) — **362 testes puros**, rodam em qualquer máquina sem serviço nenhum. `motorFluxo.js` **não é importável em teste** (puxa `config/db.js` → Knex no topo e as deps não ficam instaladas localmente); por isso toda lógica testável vive em **módulos puros** ao lado dele — escreva o teste primeiro (TDD):
 - `fluxoHelpers.js` — resolução de campos editor↔motor + escala NPS.
+- `playbookHelpers.js` — **o Playbook Engine da FASE 8**: workflow (`rascunho→teste→publicado`), qual etapa uma tool cumpre, progresso e a montagem do bloco que vai ao prompt.
 - `knowledgeHelpers.js` — **o workflow editorial da FASE 7** (máquina de estados), validade e corte do trecho enviado à IA. A normalização de texto NÃO está aqui: é do Postgres, para ser idêntica à do índice.
 - `mascarar.js` / `permissoes.js` / `contextCards.js` — **as decisões da FASE 6**: o que é mascarado, quem pode ver e quais cartões o painel mostra.
 - `filasHelpers.js` — **as decisões das filas da FASE 5** (§FASE 5): `dentroDoHorario` (fila ou global), `nivelUrgencia` (SLA por fila), `podeAssumir` (capacidade) e `conversaVisivel` (quem enxerga o quê).
@@ -81,7 +84,7 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 - `motorLoop.js` — o loop do motor extraído como função pura (`executarLoop`). ⚠️ **Divergiu na FASE 1**: o laço real virou assíncrono na persistência (`await estados.set/delete` num `finally`, grafo congelado, `fim({manter})`). Este arquivo — e o `motorSimulador.js` que roda sobre ele — espelham o laço **pré-FASE-1**. "Espelho byte-a-byte" hoje vale só para a travessia (qual nó vem depois), não para o ciclo de vida da execução.
 - `motorSimulador.js` (+`.cli.js`) — **simulador** de conversa multi-turno sobre o `executarLoop` (passo a passo, detecta concluido/travado/perdido/aguardando). `node src/services/motorSimulador.cli.js <fluxo.json> [cenario.json]`.
 
-**Testes de integração** (`apps/api/tests/integracao/`, `npm run test:integracao`) — **158 testes**, provam o que só o banco/Redis provam: dedup por `external_id`, SSE cruzando instâncias, migrations replay-safe, os **critérios de aceite do motor persistente** (§14), os **14 critérios da FASE 4** (`fase4-filas.test.js`) os **critérios da FASE 5** (`fase5-filas-atendimento.test.js`: claim atômico de duas assunções simultâneas, supervisor tomando conversa, Flow Execution sobrevivendo à troca de fila) e os da **FASE 6** (`fase6-cliente360.test.js`: PII mascarada no payload, SGP fora do ar não derruba o painel, histórico não vaza entre clientes sem telefone). É o único lugar onde o `motorFluxo.js` roda de verdade num teste (`DATABASE_URL` está posta, então ele importa). **Não há Docker nesta máquina**; o Postgres é nativo (`brew install postgresql@16`). Eles se **pulam** sem as envs, então `npm test` segue verde em qualquer lugar:
+**Testes de integração** (`apps/api/tests/integracao/`, `npm run test:integracao`) — **176 testes**, provam o que só o banco/Redis provam: dedup por `external_id`, SSE cruzando instâncias, migrations replay-safe, os **critérios de aceite do motor persistente** (§14), os **14 critérios da FASE 4** (`fase4-filas.test.js`) os **critérios da FASE 5** (`fase5-filas-atendimento.test.js`: claim atômico de duas assunções simultâneas, supervisor tomando conversa, Flow Execution sobrevivendo à troca de fila) e os da **FASE 6** (`fase6-cliente360.test.js`: PII mascarada no payload, SGP fora do ar não derruba o painel, histórico não vaza entre clientes sem telefone). É o único lugar onde o `motorFluxo.js` roda de verdade num teste (`DATABASE_URL` está posta, então ele importa). **Não há Docker nesta máquina**; o Postgres é nativo (`brew install postgresql@16`). Eles se **pulam** sem as envs, então `npm test` segue verde em qualquer lugar:
 ```bash
 DATABASE_URL_TEST='postgres://maxxi:maxxi_dev_pass@127.0.0.1:5432/maxxi_v2_test' \
 REDIS_URL_TEST='redis://127.0.0.1:6380' npm run test:integracao
@@ -103,7 +106,7 @@ Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/max
 - **Credenciais de integração vivem no BANCO (`sistema_kv`), não em env.** SGP, Evolution, Anthropic, OpenAI, Telegram são configurados pela tela admin (**Configurações** / **Canais**) e gravados em `sistema_kv`. Só **infra** vem de env: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `PORT`, `CORS_ORIGIN`, `META_VERIFY_TOKEN`, `ERP_URL`/`ERP_API_KEY` — mais as da FASE 3: `KV_SECRET` (cripto em repouso), `META_APP_SECRET`, `TELEGRAM_WEBHOOK_SECRET`, `EVOLUTION_WEBHOOK_TOKEN` (assinatura de webhook).
   - **Segredo nunca volta pelo GET** (FASE 3, §117): `CHAVES_SECRETAS` em `services/kvSeguro.js` lista as 6 credenciais reais; `GET /sysconfig` e `GET /sysconfig/:chave` devolvem `••••••••1234`. **O PUT ignora valor que contém `•`** — a tela manda o form inteiro a cada save, então sem isso salvar sem tocar no campo trocaria a credencial por uma máscara, e a tela seguiria mostrando máscara depois (o estrago só apareceria num 403 do SGP).
   - **Cripto em repouso é OPORTUNISTA.** Com `KV_SECRET` no ambiente, credencial re-salva pela tela grava `enc:v1:...`; sem ela, grava em texto plano como sempre. Não há migration que cifre nada — de propósito: exigiria a env já setada no deploy, e sem ela as credenciais de produção ficariam ilegíveis. Ativação é gradual: setar a env e re-salvar. **Leia sempre por `lerValorKV`**, que decifra ANTES de parsear (o `try { JSON.parse } catch { cru }` antigo fazia o ciphertext virar "o valor"). A coluna é `jsonb`, então o ciphertext vai serializado — `enc:v1:` cru não é JSON válido. Muitas vars do `.env.example` (IMAP/SMTP/ASTERISK/VAPID/META_ACCESS_TOKEN) **não são lidas pelo código** — são aspiracionais.
-- **Migrations:** cada mudança de schema é um arquivo novo em `apps/api/src/migrations/versions/NNN_nome.js` com `up(db)`/`down(db)`. Runner próprio (tabela `_migrations`, transacional, ordenado por nome). Nunca rode `ALTER TABLE` direto. **Escreva idempotente** (`hasColumn`/`IF NOT EXISTS`) — o rastreamento é **por nome de arquivo**, então renomear uma migration já aplicada faz ela rodar de novo. ✅ **As 17 são replay-safe, e há teste travando isso** (`tests/integracao/migrations-replay.test.js`). `001` e `002` não eram — usavam `createTableIfNotExists`, deprecado no knex, que emite o `CREATE TABLE IF NOT EXISTS` mas dispara `ADD CONSTRAINT`/`CREATE INDEX` incondicionalmente; corrigidas em 2026-08-21 com um helper local `criarTabela()` + guarda `hasTable`. **Nunca use `createTableIfNotExists`** — migration que falha no boot pula os monitores de SLA e da supervisora. A sequência tem um buraco no **010** de propósito: 011/012/013 foram renumeradas na reconciliação de 2026-08-21 e as originais (008/009/010) já constam no `_migrations` de produção.
+- **Migrations:** cada mudança de schema é um arquivo novo em `apps/api/src/migrations/versions/NNN_nome.js` com `up(db)`/`down(db)`. Runner próprio (tabela `_migrations`, transacional, ordenado por nome). Nunca rode `ALTER TABLE` direto. **Escreva idempotente** (`hasColumn`/`IF NOT EXISTS`) — o rastreamento é **por nome de arquivo**, então renomear uma migration já aplicada faz ela rodar de novo. ✅ **As 18 são replay-safe, e há teste travando isso** (`tests/integracao/migrations-replay.test.js`). `001` e `002` não eram — usavam `createTableIfNotExists`, deprecado no knex, que emite o `CREATE TABLE IF NOT EXISTS` mas dispara `ADD CONSTRAINT`/`CREATE INDEX` incondicionalmente; corrigidas em 2026-08-21 com um helper local `criarTabela()` + guarda `hasTable`. **Nunca use `createTableIfNotExists`** — migration que falha no boot pula os monitores de SLA e da supervisora. A sequência tem um buraco no **010** de propósito: 011/012/013 foram renumeradas na reconciliação de 2026-08-21 e as originais (008/009/010) já constam no `_migrations` de produção.
 - **Estado do fluxo é PERSISTENTE** (`flow_executions`, migration 014 — FASE 1, 2026-08-21). `estadoStore.js` tem a cara de um `Map` (`get/set/delete`) mas é assíncrono e grava no banco; o sandbox continua injetando um `Map` puro por `opts.estados`, e `await` sobre valor síncrono é idêntico — **um só caminho de código**. Regras não-óbvias:
   - Uma linha por conversa **viva**; some quando a execução acaba. Por isso o **grafo do fluxo mora dentro do blob** (`estado._grafo`, congelado ao nascer): fixa a versão E impede que ativar outro fluxo sequestre conversa em andamento. `opts.fluxo` tem **precedência absoluta** (é o que faz "Testar fluxo" exercitar o rascunho).
   - A gravação é **uma só, num `finally` no fim do turno**. Não volte a gravar só no `aguardar_input`: tudo que a travessia acumula (ficha do SGP, contadores da IA, `salvar_dado`) se perderia num crash antes da pausa.
@@ -158,6 +161,16 @@ Detalhe em [brain/systems/maxxi/components/testes-de-fluxo.md](brain/systems/max
   - **No sandbox a tool LÊ mas não ESCREVE**: rodada de teste não infla contador de lacuna nem suja o rastreamento de uso.
   - ⚠️ **O knex conta `?` como placeholder dentro de comentário SQL** — um `"? IS NULL"` num comentário custou um "Expected 7 bindings, saw 8".
   - Inspeção: `SELECT status, count(*) FROM knowledge_artigos GROUP BY 1`; lacunas em `GET /api/knowledge/gaps`.
+- **Playbook: a etapa é provada pela TOOL, não pelo relato da IA** (`playbook*`, migration 019 — FASE 8). Regras não-óbvias:
+  - Cada etapa declara as `tools` que a **evidenciam**; rodou a tool, cumpriu a etapa. Pedir para a IA se auto-reportar não serve, porque a **Quality AI (FASE 11) não pode auditar acreditando no que o próprio modelo disse ter feito**. Etapas conversacionais ("tratar objeções") não têm tool que as prove e usam `concluir_etapa_playbook` — **dois mecanismos porque são dois tipos de etapa**.
+  - **O workflow é `rascunho → teste → publicado → arquivado`** — o Knowledge usa `revisão` no meio. Procedimento se valida **rodando**, texto se valida **lendo**; unificar obrigaria uma das máquinas a mentir.
+  - **O snapshot de versão é o playbook INTEIRO, com etapas** (§64): guardar só o número faria a auditoria de um atendimento antigo ver o procedimento de hoje. **Playbook sem etapas não publica**, e **editar publicado dá 409**.
+  - **O bloco é reinjetado no prompt A CADA TURNO**, com `[x]` nas etapas cumpridas e "← VOCÊ ESTÁ AQUI" na próxima. Injetar só na primeira passagem faz a IA esquecer o roteiro no segundo turno — quando ela improvisa. Etapa cumprida **continua visível**: sumir com ela faz a IA repetir a pergunta.
+  - **As exceções (§61) vão no prompt** — sem elas o playbook vira checklist burro e a IA testa remotamente um cabo que o cliente já disse estar rompido. O prompt também **proíbe recitar as etapas ao cliente**.
+  - **`opcional` nunca é a próxima etapa; `condicional` não impede concluir.** Exigir condicional sempre transformaria toda exceção em pendência eterna.
+  - **Uma execução viva por (conversa, playbook)** — quem volta continua de onde parou. **No sandbox não há execução**, mas a tool responde "simulado" (não responder faria a IA tentar de novo).
+  - `concluir_etapa_playbook` **some da lista de tools quando não há playbook ativo** — tool inútil compete com a tool certa.
+  - Inspeção: `GET /api/playbooks/execucao/:conversaId` (etapas, foco, pendências).
 - **Helper chamado é helper importado** (`tests/imports-de-rota.test.js`). Em ESM, `auditar(...)` sem o `import` **não** quebra no boot nem no `node --check` — estoura `ReferenceError` no primeiro clique. Foi assim que `assumir`/`devolver-ia`/`encerrar` responderam 500 em produção desde a FASE 3 até a FASE 5 achar. A mesma guarda barra `import * as` sobre um repositório (o namespace não tem os métodos do objeto exportado).
 - **Catálogo de nós tem duas faces:** `apps/web/src/lib/nodeTypes.js` (visual, ~32 tipos) deve espelhar o `switch` de `processarNo` em `motorFluxo.js` (backend). Ao adicionar um nó, atualize os dois + o painel de propriedades **dentro de `FluxoEditor.jsx`** (`components/fluxo/PropsPanel.jsx` era arquivo morto e foi removido na FASE 2). Há **teste de contrato** entre `nodeTypes.js`, o `NOS` do validador e o `switch` do motor — ele falha quando a divergência cresce. **Cuidado com o nome dos campos:** o `PropsPanel` historicamente salvou campos com nomes que o motor não lia (`botao`/`secao`/`instrucao`/`tipo`), então a config era ignorada na execução. Hoje `fluxoHelpers.js` normaliza esses casos (lê o nome do editor com fallback pro antigo) — mas **a regra é manter os nomes iguais nas duas faces**; o helper é rede de segurança, não desculpa pra divergir.
 - **Envio por canal passa pelo registry `services/canais/`**, nunca por `if (canal === ...)`. Cada provedor é um adapter com **um método por tipo de mensagem** (`texto`, `botoes`, `lista`, `cta`, `imagem`, `audio`, `arquivo`); o dispatcher resolve por `conversas.canal`. Regras não-óbvias: **a degradação mora dentro do adapter** (o Telegram degrada `lista`→**botões** com ≤8 itens, não para texto); tipo não implementado usa o método **`padrao`**, que **só o Telegram tem** — a Evolution não tem de propósito, porque hoje ela descarta tipos desconhecidos (inclusive `localizacao`) em silêncio, e um fallback genérico mudaria isso. Os adapters recebem os transportes por **injeção** para serem testáveis sem rede.
@@ -229,13 +242,14 @@ que divergiu e os tetos assumidos.
 | **5** — Equipes, Filas e Human Handoff | ✅ 2026-08-22 |
 | **6** — Cliente 360 | ✅ 2026-08-22 |
 | **7** — Knowledge Hub | ✅ 2026-08-22 |
-| 8–13 | abertas |
+| **8** — Playbook Engine | ✅ 2026-08-22 |
+| 9–13 | abertas |
 
 ## Estado do produto (2026-08-22)
 
 **Está EM PRODUÇÃO**, em VPS via Coolify: `https://gochat.netgo.net.br`. O SGP responde de verdade e a IA comercial roda com tool calling — pré-cadastro, `listar_planos_ativos` e `salvar_dado` exercitados em conversa real.
 
-### Plano de Evolução V1.0 — 8 de 13 fases entregues
+### Plano de Evolução V1.0 — 9 de 13 fases entregues
 
 | Fase | Estado |
 |---|---|
@@ -246,10 +260,11 @@ que divergiu e os tetos assumidos.
 | **4** — Inbox, Outbox e Jobs | ✅ mergeada |
 | **5** — Equipes, Filas e Human Handoff | ✅ mergeada |
 | **6** — Cliente 360 | ✅ mergeada |
-| **7** — Knowledge Hub | ✅ implementada (2026-08-22) |
-| 8–13 | ⬜ não começadas |
+| **7** — Knowledge Hub | ✅ mergeada |
+| **8** — Playbook Engine | ✅ implementada (2026-08-22) |
+| 9–13 | ⬜ não começadas |
 
-O que mudou de estrutural: **conversa sobrevive a restart e deploy** (`flow_executions`, versão do fluxo congelada por conversa), **credencial não sai mais em texto plano** e há cripto em repouso oportunista, **`/health/ready` bloqueia até as migrations terminarem**, há **graceful shutdown**, **mensagem que entra é durável, envio é write-ahead e `aguardar_tempo` espera de verdade** (`inbox`/`outbox`/`jobs`), **o atendimento humano tem filas de verdade** — SLA e horário por fila, capacidade por agente, "assumir próximo" atômico e transferência entre filas sem perder a Flow Execution — e agora **a lateral do chat virou o Cliente 360**: ficha do assinante, Context Cards, diagnóstico por tool, com **PII mascarada no servidor** e permissões que finalmente decidem alguma coisa — e a IA passou a **consultar uma base de conhecimento** em vez de inventar procedimento, com workflow editorial, versionamento e registro de lacunas. Suítes: **338 testes puros + 158 de integração** contra Postgres e Redis reais.
+O que mudou de estrutural: **conversa sobrevive a restart e deploy** (`flow_executions`, versão do fluxo congelada por conversa), **credencial não sai mais em texto plano** e há cripto em repouso oportunista, **`/health/ready` bloqueia até as migrations terminarem**, há **graceful shutdown**, **mensagem que entra é durável, envio é write-ahead e `aguardar_tempo` espera de verdade** (`inbox`/`outbox`/`jobs`), **o atendimento humano tem filas de verdade** — SLA e horário por fila, capacidade por agente, "assumir próximo" atômico e transferência entre filas sem perder a Flow Execution — e agora **a lateral do chat virou o Cliente 360**: ficha do assinante, Context Cards, diagnóstico por tool, com **PII mascarada no servidor** e permissões que finalmente decidem alguma coisa — e a IA passou a **consultar uma base de conhecimento** em vez de inventar procedimento, com workflow editorial, versionamento e registro de lacunas — e a seguir **procedimentos oficiais (playbooks)** entram no prompt a cada turno, com a etapa dada por cumprida pela **ferramenta que a evidencia**, não pelo que o modelo diz ter feito. Suítes: **362 testes puros + 176 de integração** contra Postgres e Redis reais.
 
 Detalhe por fase em [brain/work/tasks/](brain/work/tasks/); plano completo em [docs/ers/](docs/ers/).
 

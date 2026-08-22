@@ -33,6 +33,7 @@ import { chatTesteRouter }   from './routes/chatTeste.js';
 import { filasAtendimentoRouter } from './routes/filasAtendimento.js';
 import { cliente360Router } from './routes/cliente360.js';
 import { knowledgeRouter } from './routes/knowledge.js';
+import { playbooksRouter } from './routes/playbooks.js';
 import { filasRouter }       from './routes/filas.js';
 import { errorHandler }      from './middlewares/errorHandler.js';
 
@@ -102,6 +103,7 @@ app.use('/api/filas',       filasRouter);   // FASE 4: inbox/outbox/jobs — ins
 app.use('/api/atendimento', filasAtendimentoRouter); // FASE 5: filas de GENTE (não confundir com a de cima)
 app.use('/api/cliente360',  cliente360Router);  // FASE 6: painel do assinante
 app.use('/api/knowledge',   knowledgeRouter);   // FASE 7: base de conhecimento
+app.use('/api/playbooks',   playbooksRouter);   // FASE 8: procedimentos oficiais
 
 // Frontend estático
 if (existsSync(frontendDist)) {
