@@ -40,12 +40,22 @@ o `.env.example` e o compose seguirem coerentes. Redis já estava de pé (7.4.8)
 ```bash
 cd apps/api
 DATABASE_URL_TEST='postgres://maxxi:maxxi_dev_pass@127.0.0.1:5432/maxxi_v2_test' \
-REDIS_URL_TEST='redis://127.0.0.1:6379' \
+REDIS_URL_TEST='redis://127.0.0.1:6380' \
 npm run test:integracao
 ```
 
 Sem essas envs eles se **pulam** com motivo explícito — `npm test` continua
 185/185 em qualquer máquina, sem serviço nenhum.
+
+> ⚠️ **O `6379` desta máquina NÃO é um Redis local — é um túnel SSH** (`ssh -f -N
+> workflow-vps`). Os testes de integração desta fase publicaram no Redis do outro
+> lado do túnel. Sob ele, `broadcast` entre instâncias falha de forma
+> intermitente (latência acima da janela de 3 s do `ateQue`) e o processo de
+> teste não encerra. Corrigido em 2026-08-21 com um **Redis local dedicado**:
+> `brew install redis && redis-server --port 6380 --daemonize yes --save ''`,
+> e `REDIS_URL_TEST='redis://127.0.0.1:6380'`. Resultado: **22/22, 1.4 s**
+> (contra 21/22 e 4.6 s pelo túnel). **Nunca aponte `REDIS_URL_TEST` para o
+> 6379 desta máquina.**
 
 ## O que virou fato
 

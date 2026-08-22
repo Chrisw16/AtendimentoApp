@@ -69,7 +69,7 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 **Testes de integração** (`apps/api/tests/integracao/`, `npm run test:integracao`) — provam o que só o banco/Redis provam: dedup por `external_id` e SSE cruzando instâncias. **Não há Docker nesta máquina**; o Postgres é nativo (`brew install postgresql@16`). Eles se **pulam** sem as envs, então `npm test` segue verde em qualquer lugar:
 ```bash
 DATABASE_URL_TEST='postgres://maxxi:maxxi_dev_pass@127.0.0.1:5432/maxxi_v2_test' \
-REDIS_URL_TEST='redis://127.0.0.1:6379' npm run test:integracao
+REDIS_URL_TEST='redis://127.0.0.1:6380' npm run test:integracao
 ```
 ⚠️ O banco de teste é **truncado** a cada rodada — aponte só para um descartável. Detalhe em [brain/work/tasks/2026-08-21_fase-0-baseline.md](brain/work/tasks/2026-08-21_fase-0-baseline.md).
 
