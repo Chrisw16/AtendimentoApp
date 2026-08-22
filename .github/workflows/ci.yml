@@ -1,0 +1,77 @@
+# CI (FASE 13, §146).
+#
+# Sem infra nova: os serviços de Postgres e Redis são do próprio runner do
+# GitHub. O repo já é GitHub e o `gh` já é usado no projeto.
+#
+# ⚠️ NÃO há etapa de lint, e é uma divergência DELIBERADA do §146. Adicionar
+# eslint significaria dependência nova, config e centenas de avisos herdados
+# (~200 `console.*`, entre outros) — um sinal vermelho permanente que ninguém
+# lê. O valor de lint neste repositório já está coberto por teste:
+# `imports-de-rota.test.js` (o defeito que deixou 3 rotas em 500 por semanas) e
+# `contrato-catalogos.test.js`. Se entrar um dia, entra como job separado.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: maxxi
+          POSTGRES_PASSWORD: maxxi_dev_pass
+          POSTGRES_DB: maxxi_v2_test
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+        ports: ['5432:5432']
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+        ports: ['6379:6379']
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm, cache-dependency-path: apps/api/package-lock.json }
+
+      - name: Instalar (API)
+        working-directory: apps/api
+        run: npm ci
+
+      # Rodam em qualquer máquina, sem serviço nenhum — é a suíte que garante
+      # que o projeto continua testável fora deste repositório.
+      - name: Testes puros
+        working-directory: apps/api
+        run: npm test
+
+      - name: Testes de integração
+        working-directory: apps/api
+        env:
+          DATABASE_URL_TEST: postgres://maxxi:maxxi_dev_pass@127.0.0.1:5432/maxxi_v2_test
+          REDIS_URL_TEST: redis://127.0.0.1:6379
+        run: npm run test:integracao
+
+      # §146 — o validador de fluxo. Alvo: 0 erros e 0 avisos.
+      - name: Validar fluxo de referência
+        working-directory: apps/api
+        run: node src/services/fluxoValidador.cli.js examples/fluxo-netgo-v2.json
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      # O build do front é o que pega import quebrado — o defeito real que já
+      # passou por aqui mais de uma vez.
+      - name: Build do painel
+        working-directory: apps/web
+        run: npm ci && npm run build

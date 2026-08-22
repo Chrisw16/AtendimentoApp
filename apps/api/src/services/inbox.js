@@ -76,6 +76,16 @@ export async function processarPendentes({ db = getDb(), limite = 10, aoReivindi
 }
 
 async function processarEntrada(linha, db) {
+  // §137 — o correlation ID do webhook MORRE no 200: o turno roda depois, no
+  // worker. A âncora durável é a linha do `inbox`, que já é UUID e já sobrevive
+  // a morte de processo. Abrindo o escopo aqui, todo o resto — handler, motor,
+  // tool, SGP, outbox — herda o contexto pela cadeia de `await`, sem edição.
+  const { comContexto } = await import('./log.js');
+  return comContexto({ correlation_id: linha.id, canal: linha.canal, origem_entrada: 'webhook' },
+    () => _processarEntrada(linha, db));
+}
+
+async function _processarEntrada(linha, db) {
   try {
     const carregar = HANDLERS[linha.canal];
     if (!carregar) throw new Error(`canal desconhecido: ${linha.canal}`);

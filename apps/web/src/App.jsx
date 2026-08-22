@@ -22,6 +22,7 @@ const Filas       = lazy(() => import('./pages/Filas'));
 const Knowledge   = lazy(() => import('./pages/Knowledge'));
 const Playbooks   = lazy(() => import('./pages/Playbooks'));
 const Qualidade   = lazy(() => import('./pages/Qualidade'));
+const Saude       = lazy(() => import('./pages/Saude'));
 const Clientes    = lazy(() => import('./pages/Clientes'));
 const Ocorrencias = lazy(() => import('./pages/Ocorrencias'));
 const OrdensServico = lazy(() => import('./pages/OrdensServico'));
@@ -101,6 +102,7 @@ function AppLayout() {
               <Route path="/knowledge"    element={<Knowledge />} />
               <Route path="/playbooks"    element={<AdminRoute><Playbooks /></AdminRoute>} />
               <Route path="/qualidade"    element={<AdminRoute><Qualidade /></AdminRoute>} />
+              <Route path="/saude"        element={<AdminRoute><Saude /></AdminRoute>} />
               <Route path="/analytics"    element={<AdminRoute><Analytics /></AdminRoute>} />
               <Route path="/clientes"     element={<Clientes />} />
               <Route path="/ocorrencias"  element={<Ocorrencias />} />

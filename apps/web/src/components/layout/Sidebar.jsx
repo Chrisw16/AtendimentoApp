@@ -4,7 +4,7 @@ import {
   MessageSquare, LayoutDashboard, Users, GitBranch,
   BarChart2, Clock, Star, Bell, Settings, Bot,
   ChevronLeft, Zap, Network, Map,
-  Building, ChevronDown, Wrench, Inbox, BookOpen, ListChecks, ClipboardCheck,
+  Building, ChevronDown, Wrench, Inbox, BookOpen, ListChecks, ClipboardCheck, Activity,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import styles from './Sidebar.module.css';
@@ -46,7 +46,8 @@ const NAV = [
   {
     group: 'Infraestrutura',
     items: [
-      { to: '/rede',        icon: Network,  label: 'Monitor de Rede',  adminOnly: true },
+      { to: '/rede',        icon: Network,   label: 'Monitor de Rede',   adminOnly: true },
+      { to: '/saude',       icon: Activity,  label: 'Saúde do Sistema',  adminOnly: true },
     ],
   },
 ];

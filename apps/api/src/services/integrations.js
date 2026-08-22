@@ -52,7 +52,47 @@ async function getSGPConfig() {
 // ── HELPERS SGP ───────────────────────────────────────────────────
 
 // SGP usa application/x-www-form-urlencoded com app+token em todos os requests
-async function sgpPost(path, params = {}) {
+// ── DISJUNTOR DO SGP (FASE 13) ───────────────────────────────────
+// Um só, e no lugar certo: os três helpers abaixo são o funil de TODA chamada
+// ao SGP. Com o ERP fora, cada turno gastava os 8–12 s do timeout dentro do
+// atendimento do cliente; aberto, a falha é imediata e o motor segue para o
+// caminho degradado que o §133 já previa.
+let _disjuntorSGP = null;
+
+export function estadoDisjuntorSGP() {
+  return _disjuntorSGP ? { ..._disjuntorSGP } : null;
+}
+
+async function comDisjuntor(nome, fn) {
+  const dj = await import('./disjuntor.js');
+  if (!_disjuntorSGP) _disjuntorSGP = dj.novo({ limite: 5, esperaMs: 45_000 });
+
+  if (!dj.permite(_disjuntorSGP)) {
+    const err = new Error('SGP indisponível no momento (proteção automática ativa). Tente em instantes.');
+    err.disjuntor = true;
+    throw err;
+  }
+  _disjuntorSGP = dj.aoPassar(_disjuntorSGP);
+
+  try {
+    const r = await fn();
+    _disjuntorSGP = dj.sucesso(_disjuntorSGP);
+    return r;
+  } catch (err) {
+    // 4xx não conta: é o SGP respondendo que o contrato não existe — o serviço
+    // está de pé, e abrir o disjuntor tiraria do ar uma integração saudável.
+    if (dj.contaComoFalha(err)) {
+      _disjuntorSGP = dj.falha(_disjuntorSGP, String(err.message).slice(0, 120));
+      if (_disjuntorSGP.estado === 'aberto') {
+        console.warn(`[SGP] disjuntor ABERTO após ${_disjuntorSGP.falhas} falhas — pausando chamadas por 45s`);
+      }
+    }
+    throw err;
+  }
+}
+
+function sgpPost(path, params = {}) { return comDisjuntor(path, () => _sgpPost(path, params)); }
+async function _sgpPost(path, params = {}) {
   const { url, app, token } = await getSGPConfig();
   const body = new URLSearchParams({ app, token, ...params }).toString();
   const res = await fetch(`${url}${path}`, {
@@ -63,12 +103,16 @@ async function sgpPost(path, params = {}) {
   });
   if (!res.ok) {
     const corpo = await res.text().catch(() => '');
-    throw new Error(`SGP ${res.status} em ${path}${corpo ? ` — ${corpo.slice(0, 400)}` : ''}`);
+    // O corpo de erro do SGP é ficha do assinante. Redige AQUI, na origem: o
+    // `redigirTexto` do log é rede de segurança, não o único filtro.
+    const { redigirTexto } = await import('./mascarar.js');
+    throw new Error(`SGP ${res.status} em ${path}${corpo ? ` — ${redigirTexto(corpo).slice(0, 400)}` : ''}`);
   }
   return res.json();
 }
 
-async function sgpPostJSON(path, body = {}) {
+function sgpPostJSON(path, body = {}) { return comDisjuntor(path, () => _sgpPostJSON(path, body)); }
+async function _sgpPostJSON(path, body = {}) {
   const { url, app, token } = await getSGPConfig();
   const res = await fetch(`${url}${path}`, {
     method: 'POST',
@@ -80,7 +124,8 @@ async function sgpPostJSON(path, body = {}) {
   return res.json();
 }
 
-async function sgpGet(path, params = {}) {
+function sgpGet(path, params = {}) { return comDisjuntor(path, () => _sgpGet(path, params)); }
+async function _sgpGet(path, params = {}) {
   const { url, app, token } = await getSGPConfig();
   const qs = new URLSearchParams({ app, token, ...params }).toString();
   const res = await fetch(`${url}${path}?${qs}`, {

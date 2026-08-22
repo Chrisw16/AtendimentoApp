@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mascararCpf, mascararTelefone, mascararEmail, mascararPII } from './mascarar.js';
+import { mascararCpf, mascararTelefone, mascararEmail, mascararPII, redigirTexto } from './mascarar.js';
 
 describe('mascararCpf', () => {
   test('CPF guarda o miolo e esconde as pontas', () => {
@@ -106,5 +106,48 @@ describe('mascararPII', () => {
     const m = mascararPII({ contratos: [{ cpf: '12345678901' }] });
     assert.equal(m.contratos[0].cpf, '12345678901',
       'quem monta o payload precisa chamar por nível; recursivo daria falsa cobertura');
+  });
+});
+
+describe('redigirTexto — a rede para o log (FASE 13)', () => {
+  test('CRITÉRIO: CPF em texto livre não chega ao log', () => {
+    // O incidente real: `[SGP] consultacliente` imprimia o CPF completo.
+    for (const t of ['consultacliente cpf=12345678901', 'CPF 123.456.789-01 do cliente']) {
+      const r = redigirTexto(t);
+      assert.ok(!r.includes('12345678901'), r);
+      assert.ok(!r.includes('123.456.789-01'), r);
+    }
+  });
+
+  test('CRITÉRIO: credencial em query string não vaza', () => {
+    // `sgpGet` põe o token na URL — logar a URL inteira vaza a credencial.
+    const r = redigirTexto('GET https://sgp/api?app=netgo&token=abc123def456xyz');
+    assert.ok(!r.includes('abc123def456xyz'), r);
+    assert.match(r, /token=\*\*\*/);
+  });
+
+  test('Bearer é redigido', () => {
+    assert.ok(!redigirTexto('Authorization: Bearer eyJhbGciOiJIUzI1').includes('eyJhbGci'));
+  });
+
+  test('telefone e e-mail somem', () => {
+    const r = redigirTexto('fone 5584999887766 email fulano@provedor.com');
+    assert.ok(!r.includes('5584999887766'));
+    assert.ok(!r.includes('fulano@'));
+  });
+
+  test('texto sem PII passa intacto — a redação não pode estragar o log', () => {
+    const t = '[Motor] Fluxo "Atendimento": 14 nós, 18 edges';
+    assert.equal(redigirTexto(t), t);
+  });
+
+  test('número que NÃO é documento sobrevive', () => {
+    // 4 e 6 dígitos são protocolo, porta, contrato — redigir tudo cegaria o log.
+    assert.match(redigirTexto('contrato 4242 na porta 400123'), /4242/);
+  });
+
+  test('entrada vazia não estoura', () => {
+    assert.equal(redigirTexto(null), '');
+    assert.equal(redigirTexto(''), '');
   });
 });

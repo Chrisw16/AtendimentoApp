@@ -89,3 +89,48 @@ export function mascararPII(obj, { revelar = false } = {}) {
   }
   return saida;
 }
+
+/**
+ * Redige PII e credencial de um texto LIVRE (FASE 13, §136).
+ *
+ * Diferente do `mascararPII`, que opera em campos conhecidos, este passa por
+ * cima de mensagem de log, stack trace e corpo de erro de integração — lugares
+ * onde o dado chega sem estrutura e por isso escapava de toda a proteção da
+ * FASE 6.
+ *
+ * Motivadores concretos: o `[SGP] consultacliente` já imprimiu CPF completo, o
+ * `sgpPost` embute 400 caracteres do corpo de erro do SGP (que é ficha de
+ * assinante) na mensagem do `Error`, e o `sgpGet` põe o **token na query
+ * string** — logar a URL inteira vaza credencial.
+ *
+ * ⚠️ Regex não pega nome nem endereço. A regra do CLAUDE.md ("nunca despeje
+ * `params`/`tu.input`/resposta crua") CONTINUA valendo: isto é cinto de
+ * segurança, não licença.
+ */
+export function redigirTexto(texto) {
+  let s = String(texto ?? '');
+  if (!s) return s;
+
+  // Credenciais. O `Bearer` vem PRIMEIRO: a regra de `chave=valor` para no
+  // espaço, então ela capturaria a palavra "Bearer" e deixaria o token inteiro
+  // logo depois — trocando a etiqueta e preservando o segredo.
+  s = s.replace(/\bBearer\s+[A-Za-z0-9._\-]{8,}/gi, 'Bearer ***');
+  s = s.replace(/\b(authorization)\s*[=:]\s*(?!\*)(?!Bearer\b)\S+/gi, '$1=***');
+  s = s.replace(/\b(token|app|apikey|api_key|senha|password|secret)\s*[=:]\s*("?)([^\s&"',}]{4,})\2/gi,
+    (_m, chave, aspas) => `${chave}=${aspas}***${aspas}`);
+
+  // CPF/CNPJ com ou sem pontuação
+  s = s.replace(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g, (m) => mascararCpf(m));
+  s = s.replace(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g, (m) => mascararCpf(m));
+  s = s.replace(/\b\d{14}\b/g, (m) => mascararCpf(m));
+  s = s.replace(/\b\d{11}\b/g, (m) => mascararCpf(m));
+
+  // Telefone: 55 + DDD + 8/9 dígitos, ou DDD + 8/9
+  s = s.replace(/\b(?:55)?\d{2}9?\d{8}\b/g, (m) => mascararTelefone(m));
+  s = s.replace(/\(\d{2}\)\s?\d{4,5}-?\d{4}\b/g, (m) => mascararTelefone(m));
+
+  // E-mail
+  s = s.replace(/\b[\w.+-]+@[\w.-]+\.\w{2,}\b/g, (m) => mascararEmail(m));
+
+  return s;
+}
