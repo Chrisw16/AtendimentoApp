@@ -41,18 +41,18 @@ detalhe; aqui fica só o quadro.
 Suítes ao fechar a FASE 4: **249 testes puros · 82 de integração**.
 Migrations: **16** (014 `flow_executions`, 015 `audit_log`, 016 `inbox`/`outbox`/`jobs`).
 
-## ⚠️ O placar mede o `main`, não a produção
+## ✅ O placar e a produção voltaram a bater (2026-08-22 04:26 UTC)
 
-**O Coolify não deploya desde 21/08 20:06 UTC.** Houve pelo menos 4 pushes
-depois disso, todos com webhook devolvendo 200, e a produção não se moveu.
+O push da FASE 4 (04:17 UTC) **deployou** em ~9 min. Confirmado por sonda de
+rota: `GET /api/filas` → **401** (rota nascida na FASE 4) e `/health/ready` →
+**200**, que também prova as migrations até a **016** aplicadas em produção.
+As FASES 1 a 4 estão no ar.
 
-Consequência direta: **nada das FASES 1 a 4 está no ar.** A conversa em
-produção ainda morre no restart, a credencial ainda sai em texto plano no
-`GET /sysconfig` e o XSS do handshake da Meta segue aberto. O trabalho está
-feito e não está entregue — a distinção importa.
-
-Sonda certa para "o que está no ar": `last-modified` de `GET /`.
-`/health` devolve `2.0.0` fixo e é inútil para isso.
+**A sonda que esta doc recomendava estava errada.** O `last-modified` de
+`GET /` NÃO se moveu com esse deploy (seguiu em 03:31) — dá falso negativo, e
+foi provavelmente o que sustentou o diagnóstico de "o Coolify não deploya" de
+21/08. A sonda confiável é uma **rota que só existe no código novo**: 404 =
+antigo, 401/200 = novo. `/health` devolve `2.0.0` fixo e nunca serviu.
 
 ## Dívida que cada fase deixou explícita
 
