@@ -7,15 +7,25 @@ import Button from '../components/ui/Button';
 import Input  from '../components/ui/Input';
 import styles from './Agentes.module.css';
 
+/**
+ * FASE 6: estas chaves passaram a DECIDIR alguma coisa (`services/permissoes.js`
+ * no backend). A lista anterior — chat/tarefas/frota/ocorrências — nunca foi
+ * lida por lugar nenhum: o admin marcava caixas e o sistema seguia deixando
+ * todo mundo fazer tudo.
+ *
+ * Há teste de contrato travando esta lista contra o `CAPACIDADES` do backend;
+ * mexer aqui sem mexer lá quebra a suíte de propósito.
+ */
 const PERMISSOES_LABELS = {
-  chat:       'Chat',
-  historico:  'Histórico',
-  tarefas:    'Tarefas',
-  financeiro: 'Financeiro',
-  clientes:   'Clientes',
-  frota:      'Frota',
-  ocorrencias:'Ocorrências',
+  cliente360:          'Ver painel do cliente',
+  financeiro:          'Ver financeiro (títulos, boletos)',
+  diagnostico:         'Ver diagnóstico técnico',
+  acoes:               'Executar ações (boleto, chamado, promessa)',
+  ver_dados_completos: 'Ver CPF e telefone SEM máscara',
 };
+
+/** Só esta é negada por omissão — as outras valem por padrão (compatibilidade). */
+const NEGADA_POR_OMISSAO = new Set(['ver_dados_completos']);
 
 // ── MODAL AGENTE ─────────────────────────────────────────────────
 function AgenteModal({ agente, onClose, onSave }) {
@@ -26,16 +36,21 @@ function AgenteModal({ agente, onClose, onSave }) {
     role:       agente?.role       || 'agente',
     avatar:     agente?.avatar     || '🧑',
     permissoes: agente?.permissoes || {},
+    capacidade: agente?.capacidade ?? 0,
   });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  // O valor efetivo de uma permissão não marcada depende do padrão dela: as
+  // antigas valem por omissão, `ver_dados_completos` não. Sem isso a caixa
+  // apareceria desmarcada para uma permissão que o agente TEM.
+  const efetiva = (perm) => {
+    const v = form.permissoes[perm];
+    return v === undefined || v === null ? !NEGADA_POR_OMISSAO.has(perm) : !!v;
+  };
   const togglePerm = (perm) =>
-    setForm(f => ({
-      ...f,
-      permissoes: { ...f.permissoes, [perm]: !f.permissoes[perm] },
-    }));
+    setForm(f => ({ ...f, permissoes: { ...f.permissoes, [perm]: !efetiva(perm) } }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -87,24 +102,34 @@ function AgenteModal({ agente, onClose, onSave }) {
             </div>
           </div>
 
-          {/* Permissões (só para agentes) */}
+          {/* Permissões e capacidade (só para agentes — admin passa em tudo) */}
           {form.role === 'agente' && (
-            <div className={styles.permsSection}>
-              <span className={styles.label}>Permissões de acesso</span>
-              <div className={styles.permsGrid}>
-                {Object.entries(PERMISSOES_LABELS).map(([key, label]) => (
-                  <label key={key} className={styles.permItem}>
-                    <input
-                      type="checkbox"
-                      checked={!!form.permissoes[key]}
-                      onChange={() => togglePerm(key)}
-                      className={styles.permCheck}
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
+            <>
+              <Input
+                label="Conversas simultâneas"
+                type="number"
+                min="0"
+                value={form.capacidade}
+                onChange={e => set('capacidade', e.target.value)}
+                hint="0 = sem limite"
+              />
+              <div className={styles.permsSection}>
+                <span className={styles.label}>Permissões de acesso</span>
+                <div className={styles.permsGrid}>
+                  {Object.entries(PERMISSOES_LABELS).map(([key, label]) => (
+                    <label key={key} className={styles.permItem}>
+                      <input
+                        type="checkbox"
+                        checked={efetiva(key)}
+                        onChange={() => togglePerm(key)}
+                        className={styles.permCheck}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
+            </>
           )}
 
           {error && <p className={styles.error} role="alert">{error}</p>}

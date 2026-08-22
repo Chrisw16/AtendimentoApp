@@ -121,3 +121,40 @@ describe('contrato entre os catálogos de tool', () => {
     assert.deepEqual(fantasmas, [], `tools no default do motor que não existem: ${fantasmas.join(', ')}`);
   });
 });
+
+/**
+ * FASE 6 — a tela de Agentes e o `permissoes.js` do backend precisam falar da
+ * MESMA lista. A lista antiga (chat/tarefas/frota/ocorrências) existiu por
+ * fases inteiras sem nenhum leitor: o admin marcava caixas e o sistema seguia
+ * deixando todo mundo fazer tudo. Este teste é para que isso não se repita —
+ * permissão desenhada na tela que o backend não conhece é controle de mentira.
+ */
+describe('contrato entre a tela de permissões e o backend', () => {
+  test('as chaves da tela existem em CAPACIDADES, e vice-versa', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { CAPACIDADES }  = await import('../src/services/permissoes.js');
+
+    const src = readFileSync(new URL('../../web/src/pages/Agentes.jsx', import.meta.url), 'utf8');
+    const bloco = src.match(/const PERMISSOES_LABELS = \{([\s\S]*?)\};/);
+    assert.ok(bloco, 'PERMISSOES_LABELS sumiu de Agentes.jsx');
+    const daTela = [...bloco[1].matchAll(/^\s*([a-z_0-9]+)\s*:/gm)].map(m => m[1]);
+
+    const doBackend = Object.keys(CAPACIDADES);
+    assert.deepEqual([...daTela].sort(), [...doBackend].sort(),
+      'a tela oferece permissões que o backend ignora (ou esconde as que ele exige)');
+  });
+
+  test('o conjunto de "negada por omissão" da tela bate com o padrão do backend', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { CAPACIDADES }  = await import('../src/services/permissoes.js');
+
+    const src = readFileSync(new URL('../../web/src/pages/Agentes.jsx', import.meta.url), 'utf8');
+    const bloco = src.match(/NEGADA_POR_OMISSAO = new Set\(\[([\s\S]*?)\]\)/);
+    assert.ok(bloco, 'NEGADA_POR_OMISSAO sumiu de Agentes.jsx');
+    const daTela = [...bloco[1].matchAll(/'([a-z_0-9]+)'/g)].map(m => m[1]).sort();
+
+    const doBackend = Object.entries(CAPACIDADES).filter(([, d]) => !d.padrao).map(([k]) => k).sort();
+    assert.deepEqual(daTela, doBackend,
+      'a caixa apareceria desmarcada para uma permissão que o agente TEM (ou o contrário)');
+  });
+});

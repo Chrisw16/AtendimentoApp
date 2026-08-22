@@ -7,7 +7,10 @@ import { getDb } from '../config/db.js';
 export const agentesRouter = Router();
 agentesRouter.use(authMiddleware);
 
-const CAMPOS_PUBLICOS = ['id','nome','login','avatar','role','ativo','online','criado_em'];
+// `permissoes` e `capacidade` entram aqui na FASE 6: sem lê-los, a tela de
+// Agentes abre o formulário com as caixas desmarcadas e o primeiro save apaga
+// a configuração de todo mundo — o mesmo estrago que a tela de Canais fazia.
+const CAMPOS_PUBLICOS = ['id','nome','login','avatar','role','ativo','online','criado_em','permissoes','capacidade'];
 
 // GET /api/agentes
 agentesRouter.get('/', asyncHandler(async (req, res) => {
@@ -38,7 +41,7 @@ agentesRouter.get('/:id', asyncHandler(async (req, res) => {
 
 // POST /api/agentes — admin only
 agentesRouter.post('/', adminMiddleware, asyncHandler(async (req, res) => {
-  const { nome, login, senha, role = 'agente', avatar = '🧑', permissoes = {} } = req.body;
+  const { nome, login, senha, role = 'agente', avatar = '🧑', permissoes = {}, capacidade = 0 } = req.body;
   if (!nome || !login || !senha) throw new HttpError(400, 'nome, login e senha são obrigatórios');
 
   const db = getDb();
@@ -47,7 +50,7 @@ agentesRouter.post('/', adminMiddleware, asyncHandler(async (req, res) => {
 
   const senha_hash = await bcrypt.hash(senha, 10);
   const [agente]   = await db('agentes')
-    .insert({ nome, login, senha_hash, role, avatar, permissoes })
+    .insert({ nome, login, senha_hash, role, avatar, permissoes, capacidade: Math.max(0, Number(capacidade) || 0) })
     .returning(CAMPOS_PUBLICOS);
 
   res.status(201).json(agente);
@@ -55,7 +58,7 @@ agentesRouter.post('/', adminMiddleware, asyncHandler(async (req, res) => {
 
 // PUT /api/agentes/:id — admin only
 agentesRouter.put('/:id', adminMiddleware, asyncHandler(async (req, res) => {
-  const { nome, login, senha, role, avatar, ativo, permissoes } = req.body;
+  const { nome, login, senha, role, avatar, ativo, permissoes, capacidade } = req.body;
   const db = getDb();
 
   const patch = {};
@@ -65,6 +68,9 @@ agentesRouter.put('/:id', adminMiddleware, asyncHandler(async (req, res) => {
   if (avatar     !== undefined) patch.avatar     = avatar;
   if (ativo      !== undefined) patch.ativo      = ativo;
   if (permissoes !== undefined) patch.permissoes = permissoes;
+  // Capacidade simultânea (FASE 5) só ganhou tela agora. Negativo vira 0 =
+  // ilimitado, que é o default da coluna.
+  if (capacidade !== undefined) patch.capacidade = Math.max(0, Number(capacidade) || 0);
   if (senha) patch.senha_hash = await bcrypt.hash(senha, 10);
 
   if (Object.keys(patch).length === 0) throw new HttpError(400, 'Nenhum campo para atualizar');

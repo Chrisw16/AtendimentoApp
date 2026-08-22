@@ -140,6 +140,17 @@ export const filasApi = {
   assumirProximo:(fila_id)      => api.post('/atendimento/assumir-proximo', fila_id ? { fila_id } : {}),
 };
 
+// ── ENDPOINTS — CLIENTE 360 (FASE 6) ──────────────────────────────
+export const cliente360Api = {
+  // `diagnostico=1` inclui conexão e chamados — é lento (2 chamadas ao SGP),
+  // por isso não vem no carregamento normal do painel.
+  ficha:       (convId, diagnostico = false) =>
+    api.get(`/cliente360/${convId}${diagnostico ? '?diagnostico=1' : ''}`),
+  capacidades: ()                => api.get('/cliente360/capacidades'),
+  acao:        (convId, body)    => api.post(`/cliente360/${convId}/acao`, body),
+  diagnostico: (convId)          => api.post(`/cliente360/${convId}/diagnostico`),
+};
+
 // ── ENDPOINTS — AGENTES ───────────────────────────────────────────
 export const promptsApi = {
   list:      ()           => api.get('/prompts'),

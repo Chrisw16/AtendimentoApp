@@ -217,3 +217,57 @@
   color: var(--text-primary); font-size: var(--text-xs); cursor: pointer; width: 100%;
 }
 .filaAtual { font-size: 11px; color: var(--text-tertiary); margin: 2px 0 0; }
+
+/* ── FASE 6: Cliente 360 ── */
+.cards { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 0; }
+.card {
+  border: 1px solid var(--border); border-left: 3px solid var(--text-tertiary);
+  border-radius: 7px; padding: 8px 10px; background: var(--bg-elevated);
+}
+.card[data-sev="critico"]      { border-left-color: #dc2626; }
+.card[data-sev="alerta"]       { border-left-color: #f59e0b; }
+.card[data-sev="info"]         { border-left-color: #2050B8; }
+.card[data-sev="oportunidade"] { border-left-color: #16a34a; }
+.cardTop { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-primary); }
+.card[data-sev="critico"] .cardTop { color: #dc2626; }
+.cardDetalhe { font-size: 11px; color: var(--text-secondary); margin: 3px 0 0; }
+.cardAcao { font-size: 11px; color: var(--text-primary); margin: 4px 0 0; font-weight: 600; }
+.skelCard { height: 54px; margin: 10px 12px 0; border-radius: 7px; }
+
+.avisos {
+  display: flex; gap: 6px; margin: 10px 12px 0; padding: 8px 10px;
+  border: 1px solid #fde68a; background: #fffbeb; border-radius: 7px;
+  font-size: 11px; color: #92400e;
+}
+.avisos p { margin: 2px 0 0; }
+
+.badge {
+  display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
+  background: var(--accent, #2050B8); color: #fff; font-size: 10px; font-weight: 700;
+}
+.nota { font-size: 11px; color: var(--text-tertiary); margin: 6px 0 0; }
+
+.acoesGrid { display: flex; flex-wrap: wrap; gap: 5px; }
+.acaoChip {
+  border: 1px solid var(--border-strong); background: var(--bg-elevated);
+  border-radius: 999px; padding: 4px 10px; font-size: 11px;
+  color: var(--text-secondary); cursor: pointer;
+}
+.acaoChip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.acaoChip:disabled { opacity: .5; cursor: default; }
+
+.saida { margin: 10px 12px 0; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.saidaTop {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; background: var(--bg-elevated); font-size: 11px;
+}
+.saidaTop button { background: none; border: none; cursor: pointer; color: var(--text-tertiary); }
+.saidaTexto {
+  margin: 0; padding: 8px 10px; font-size: 11px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto;
+  font-family: var(--font-mono, monospace); color: var(--text-secondary);
+}
+
+.chamado { font-size: 11px; color: var(--text-secondary); padding: 3px 0; }
+.histLinha { display: flex; gap: 8px; font-size: 11px; padding: 3px 0; color: var(--text-secondary); }
+.histTexto { color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
