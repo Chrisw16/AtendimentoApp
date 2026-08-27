@@ -174,6 +174,26 @@ export default function ConversaInfo({ conversa, chat }) {
 
   return (
     <aside className={styles.panel}>
+      {/* ⚠️ Removido quando a coluna virou painel, e reposto no mesmo dia a
+          pedido de quem usa: sem ele o painel abre um monte de dado sem dizer
+          de quem é — e o nome do header da conversa fica na outra ponta da
+          tela. O `identidade` vem MASCARADO do servidor; nada é escondido aqui. */}
+      <div className={styles.contactHeader}>
+        <div className={styles.contactAvatar}>
+          {(id.nome || conversa.nome || '?').charAt(0).toUpperCase()}
+        </div>
+        <div className={styles.contactInfo}>
+          <p className={styles.contactNome}>{id.nome || conversa.nome || 'Sem nome'}</p>
+          <p className={styles.contactTel}>{id.telefone || conversa.telefone}</p>
+        </div>
+        <div className={styles.statusBadge} data-status={conversa.status}>
+          {conversa.status === 'ia'         && 'IA'}
+          {conversa.status === 'aguardando' && 'Fila'}
+          {conversa.status === 'ativa'      && 'Agente'}
+          {conversa.status === 'encerrada'  && 'Fechado'}
+        </div>
+      </div>
+
       <div className={styles.scroll}>
         {/* ── HANDOFF DA IA (§74) ── */}
         {handoff && (

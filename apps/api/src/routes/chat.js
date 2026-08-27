@@ -68,8 +68,18 @@ chatRouter.get('/conversas/:id', asyncHandler(async (req, res) => {
 chatRouter.get('/conversas/:id/mensagens', asyncHandler(async (req, res) => {
   const { limit, before } = req.query;
   const msgs = await mensagemRepo.listar(req.params.id, { limit: Number(limit) || 50, before });
-  await conversaRepo.zerarNaoLidas(req.params.id);
-  await mensagemRepo.marcarLidas(req.params.id);
+
+  // ⚠️ Marcar como lida é ESCRITA, e ela não pode acontecer só porque alguém
+  // abriu a conversa para ler. Desde que a lateral passou a mostrar a fila
+  // (2026-08-27), qualquer agente consegue abrir uma conversa AGUARDANDO para
+  // decidir se assume — e zerar o `nao_lidas` ali apagaria o aviso para quem
+  // vier depois, incluindo o colega que de fato vai atender.
+  const conv = await conversaRepo.porId(req.params.id);
+  if (conv?.agente_id && conv.agente_id === req.agente.id) {
+    await conversaRepo.zerarNaoLidas(req.params.id);
+    await mensagemRepo.marcarLidas(req.params.id);
+  }
+
   res.json({ mensagens: msgs });
 }));
 

@@ -9,7 +9,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { agruparConversas, GRUPOS } from '../../web/src/lib/agruparConversas.js';
+import { agruparConversas, GRUPOS, combinaBusca } from '../../web/src/lib/agruparConversas.js';
 
 const HOJE  = Date.parse('2026-08-27T14:00:00Z');
 const ONTEM = Date.parse('2026-08-26T14:00:00Z');
@@ -100,5 +100,37 @@ describe('agruparConversas', () => {
   test('entrada nula não quebra a tela', () => {
     assert.equal(agruparConversas(null).length, 5);
     assert.equal(agruparConversas([null, undefined, { id: 'x', status: 'ia' }]).length, 5);
+  });
+});
+
+// ── combinaBusca ────────────────────────────────────────────────
+// A lateral filtra em DOIS lugares (o store, para as conversas próprias, e a
+// lista, para a fila que vem de outro endpoint). Enquanto eram duas cópias, o
+// store não dava `trim` e a lista dava: digitar " joao" escondia as conversas
+// próprias e deixava a fila inteira na tela.
+describe('combinaBusca', () => {
+  const c = { nome: 'João Silva', telefone: '84999998888', ultima_mensagem: 'Boa tarde' };
+
+  test('termo vazio ou só espaço combina com tudo', () => {
+    assert.equal(combinaBusca(c, ''), true);
+    assert.equal(combinaBusca(c, '   '), true);
+    assert.equal(combinaBusca(c, null), true);
+  });
+
+  test('espaço em volta não muda o resultado — era exatamente a divergência', () => {
+    assert.equal(combinaBusca(c, ' joão'), combinaBusca(c, 'joão'));
+    assert.equal(combinaBusca(c, 'joão '), true);
+  });
+
+  test('procura em nome, telefone e última mensagem, sem caixa', () => {
+    assert.equal(combinaBusca(c, 'JOÃO'), true);
+    assert.equal(combinaBusca(c, '99999'), true);
+    assert.equal(combinaBusca(c, 'tarde'), true);
+    assert.equal(combinaBusca(c, 'maria'), false);
+  });
+
+  test('campo ausente não estoura', () => {
+    assert.equal(combinaBusca({}, 'joão'), false);
+    assert.equal(combinaBusca(null, 'joão'), false);
   });
 });

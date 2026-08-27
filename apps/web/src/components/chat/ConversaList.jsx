@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Bot, User, ArrowDownToLine, Inbox } from 'lucide-react';
 import { chatApi } from '../../lib/api';
-import { agruparConversas, GRUPOS } from '../../lib/agruparConversas';
+import { agruparConversas, GRUPOS, combinaBusca } from '../../lib/agruparConversas';
 import { useStore } from '../../store';
 import GrupoConversas from './GrupoConversas';
 import ConversaCard from './ConversaCard';
@@ -55,11 +55,7 @@ export default function ConversaList({ chat, filas = [], agenteId, ehAdmin }) {
     // `conversasBuscadas` já veio filtrada pelo store, mas a fila vem de OUTRO
     // endpoint e chegava crua: digitar na busca escondia as conversas próprias
     // e deixava a fila inteira na tela, e o "Nada encontrado" nunca aparecia.
-    const q = busca.trim().toLowerCase();
-    const daFila = (filaEspera?.fila || []).filter(c => !q
-      || c.nome?.toLowerCase().includes(q)
-      || c.telefone?.includes(q)
-      || c.ultima_mensagem?.toLowerCase().includes(q));
+    const daFila = (filaEspera?.fila || []).filter(c => combinaBusca(c, busca));
     return agruparConversas([...(conversasBuscadas || []), ...daFila], { filasFechadas });
   },
     // `conversasBuscadas` é recalculada a cada render do hook, então a memo

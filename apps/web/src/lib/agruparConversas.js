@@ -10,6 +10,23 @@
  * vez e abrir só o que pede ação.
  */
 
+/**
+ * O filtro da busca da lateral, num lugar só.
+ *
+ * A lateral filtra em DOIS pontos — o store, para as conversas próprias, e a
+ * lista, para a fila que vem de `/chat/fila`. Enquanto foram duas cópias elas
+ * divergiram: uma dava `trim` no termo e a outra não, então digitar com espaço
+ * à esquerda escondia as conversas próprias e deixava a fila inteira na tela.
+ */
+export function combinaBusca(conversa, termo) {
+  const q = String(termo || '').trim().toLowerCase();
+  if (!q) return true;
+  if (!conversa) return false;
+  return !!(conversa.nome?.toLowerCase().includes(q)
+    || conversa.telefone?.includes(q)
+    || conversa.ultima_mensagem?.toLowerCase().includes(q));
+}
+
 export const GRUPOS = [
   // A ordem é a da urgência operacional, não a do ciclo de vida.
   { key: 'aguardando', label: 'Aguardando',      abreDefault: true  },

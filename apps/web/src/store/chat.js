@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { combinaBusca } from '../lib/agruparConversas';
 
 export const useChatStore = create((set, get) => ({
   /* ── CONVERSAS ────────────────────────────────────────────── */
@@ -75,14 +76,8 @@ export const useChatStore = create((set, get) => ({
     const { conversas, busca } = get();
     let list = conversas;
 
-    if (busca.trim()) {
-      const q = busca.toLowerCase();
-      list = list.filter(c =>
-        c.nome?.toLowerCase().includes(q) ||
-        c.telefone?.includes(q) ||
-        c.ultima_mensagem?.toLowerCase().includes(q)
-      );
-    }
+    // `combinaBusca` é a fonte única, testada — ver o comentário lá.
+    if (busca.trim()) list = list.filter(c => combinaBusca(c, busca));
 
     return list;
   },

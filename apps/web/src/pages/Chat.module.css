@@ -3,6 +3,8 @@
   height: 100%;
   overflow: hidden;
   background: var(--bg-base);
+  /* Âncora do painel lateral quando a tela é estreita e ele sobe por cima. */
+  position: relative;
 }
 
 

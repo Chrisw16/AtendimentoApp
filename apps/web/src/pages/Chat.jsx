@@ -81,10 +81,11 @@ export default function Chat() {
 
       {conversa && (
         <>
-          <ReguaIcones ativo={painel} onAbrir={setPainel} status={conversa.status} />
+          {/* A ordem importa: a coluna vem ANTES da régua, para a régua ficar
+              sempre encostada na borda direita da tela. */}
 
-          {/* `key` na gaveta: trocar de conversa com ela aberta precisa remontar
-              o conteúdo, senão o contrato do cliente anterior atravessa. */}
+          {/* `key`: trocar de conversa com o painel aberto precisa remontar o
+              conteúdo, senão o contrato do cliente anterior atravessa. */}
           <Gaveta key={conversa.id} aberta={!!painel} titulo={titulo} onFechar={() => setPainel(null)}>
             {painel === 'assinante' && <ConversaInfo conversa={conversa} chat={chat} />}
             {painel === 'copiloto'  && (
@@ -94,6 +95,8 @@ export default function Chat() {
             )}
             {painel === 'notas'     && <PainelNotas conversa={conversa} />}
           </Gaveta>
+
+          <ReguaIcones ativo={painel} onAbrir={setPainel} status={conversa.status} />
         </>
       )}
     </div>

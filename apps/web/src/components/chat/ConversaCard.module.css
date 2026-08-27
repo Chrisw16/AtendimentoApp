@@ -24,6 +24,23 @@
 .itemAtivo:hover { background: var(--accent-muted); }
 
 /* ── AVATAR ── */
+/* ⚠️ `.avatar` e `.content` são <button>: sem zerar border/background/padding
+   o navegador desenha a moldura padrão dele, e o cartão vira duas caixinhas
+   cinza dentro do cartão. Foi assim que a primeira versão foi para produção. */
+.avatar,
+.content {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .avatar {
   position: relative;
   width: 36px;
@@ -168,8 +185,8 @@
 }
 
 /* ── AÇÕES ──
-   O `.item` é um <button>; estes ficam por cima em position:absolute para não
-   aninhar botão dentro de botão (HTML inválido e o clique interno vaza). */
+   `.item` é um <div>; estes ficam sobrepostos em position:absolute para não
+   aninhar botão dentro de botão (HTML inválido, e o clique interno vaza). */
 .acoes {
   position: absolute;
   right: 8px;
@@ -214,4 +231,12 @@
 .menuBtn:hover { color: var(--accent); background: var(--bg-surface); border-color: var(--border); }
 
 /* Espaço para as ações não cobrirem a prévia da mensagem. */
-.comAcoes .preview { padding-right: 74px; }
+/* O botão Atender + o ⋮ ocupam ~94px a partir da borda; com 74 a prévia passava
+   por baixo justamente no grupo "Aguardando", que é o que nasce aberto. */
+.comAcoes .preview { padding-right: 96px; }
+
+/* Em tela de toque não existe hover: sem isto o ⋮ — e com ele as três ações
+   mais usadas do dia — fica inalcançável num tablet. */
+@media (hover: none) {
+  .menuBtn { opacity: 1; }
+}
