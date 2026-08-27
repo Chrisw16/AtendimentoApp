@@ -3,7 +3,7 @@ title: Redesenho do módulo Chat — a tela onde a atendente passa o dia
 type: task
 created: 2026-08-27
 last_updated: 2026-08-27
-status: in-progress
+status: done
 priority: p1
 knowledge_refs: ["systems/maxxi/telas/chat", "systems/maxxi/components/fila-e-sla", "systems/maxxi/components/cliente-360-e-copiloto"]
 related: ["[[Fila e SLA]]", "[[Cliente 360 e Copiloto]]", "[[FASE 5 — Equipes, Filas e Human Handoff]]", "[[FASE 6 — Cliente 360]]"]
@@ -158,7 +158,84 @@ conversa desconhecida não vira linha nova.
 `dentroDoHorario` para o frontend criaria uma segunda verdade sobre o horário
 da operação; o grupo lê o booleano que o backend calculou.
 
+## O que a tela no ar corrigiu do próprio desenho
+
+Três coisas só apareceram depois do deploy, e as três valem mais que o plano:
+
+### O painel abria POR CIMA — e cobrir a conversa é o oposto do que ele serve
+
+A gaveta nasceu overlay porque copiei a anatomia do `PainelSGP`, que é o único
+drawer que o app tinha. Errado: o atendente precisa da ficha **e** da conversa
+ao mesmo tempo — escurecer o chat para mostrar o dado com que ele vai responder
+inverte a função da tela. Virou **coluna**: divide o espaço, não cobre. Abaixo
+de 1180px ela volta a sobrepor, que é o único caso em que sobrepor ajuda.
+
+O `PainelSGP` **continua overlay de propósito**, e agora a diferença tem
+sentido: a coluna é acompanhamento lado a lado, o overlay é o mergulho completo
+no assinante. Ele se marca com `data-drawer-sobreposto` para o Esc da coluna
+saber que há algo por cima.
+
+### O cartão parecia quebrado, e a culpa era do reset que faltou
+
+`.avatar` e `.content` são `<button>`, e eu não zerei `border`/`background`/
+`padding`. A moldura cinza dentro do cartão era a **borda nativa do botão**. É o
+tipo de coisa que o build não vê, o teste não vê, e a primeira olhada na tela
+vê na hora.
+
+### O cabeçalho do contato fez falta
+
+Tirei o nome/avatar/status do topo do painel por serem redundantes com o header
+da conversa. Na tela real o header fica na **outra ponta**, e o painel abria um
+monte de dado sem dizer de quem era. Reposto.
+
+## O que a verificação adversarial pegou antes do deploy
+
+Um segundo agente revisou as correções do primeiro. Os que sobreviveram à
+verificação e viraram commit:
+
+- ⚠️ **Clicar numa conversa da fila não abria nada** para quem não é admin: o
+  cartão vem de `/chat/fila`, e a busca da conversa selecionada olhava só
+  `chat.conversas`. O grupo principal da tela nova seria inclicável.
+- ⚠️ **Abrir uma conversa da fila para decidir se assume ZERAVA o `nao_lidas`
+  dela.** `GET /conversas/:id/mensagens` marca como lida sem checar dono — antes
+  não importava, porque o agente comum não conseguia abrir conversa alheia pela
+  UI. A lateral nova tornou isso alcançável, e o aviso sumiria para o colega que
+  fosse atender. Marcar como lida é **escrita**, e agora só acontece para o dono.
+- **Fechar o painel do SGP fechava a coluna junto** (overlay aninhado sem
+  `stopPropagation`), e o Esc idem.
+- **O menu `⋮` era decepado pelo overflow da lista** — `position: absolute` não
+  escapa de `overflow` de ancestral, então nos cartões da metade de baixo o
+  formulário de "Finalizar" ficava invisível.
+- **A busca filtrava com predicados DIFERENTES nos dois lugares** (o store sem
+  `trim`, a lista com): `" joao"` escondia as conversas próprias e deixava a
+  fila inteira na tela — o sintoma que a correção anterior dizia matar, ao
+  contrário. Virou `combinaBusca`, fonte única e testada.
+- **O toggle IA/Humano mentia:** `PUT /chat/modo` existe desde sempre e não
+  tinha cliente nenhum. Mudava a cor do botão e o backend seguia no modo antigo,
+  até o próximo `loadConversas` reverter. A rota é `adminMiddleware`, então o
+  botão também sumiu para quem não é admin.
+- **O `⋮` ficava invisível em tela de toque** (`opacity: 0` até o hover) — numa
+  operação com tablet, as três ações mais usadas do dia deixavam de existir.
+
 ## Estado
 
-Design aprovado. Backend corrigido (3 pontos acima), `agruparConversas` no ar
-com 10 testes, suíte em **523 puros**. Componentes da tela em construção.
+**Entregue e no ar em 2026-08-27.** Suíte: **527 testes puros** (14 deles do
+`agruparConversas`/`combinaBusca`). Nenhum runner de frontend foi adicionado — a
+lógica testável saiu para `lib/`, e o resto é build + olhar a tela, que foi
+exatamente o que pegou os três defeitos de cima.
+
+### Tetos assumidos, para quem vier depois
+
+- **`ConversaInfo.jsx` continua grande** (~450 linhas). Ele deixou de ser coluna
+  e virou conteúdo de painel, que era o ganho que importava — carregar sob
+  demanda. Quebrar em três arquivos era code motion sem benefício novo.
+- **`SupervisoraIA.jsx` segue órfã**: ninguém importa, e os
+  `window.dispatchEvent` de `useChat` caem no vazio. Ou vira o 4º ícone da
+  régua, ou sai.
+- **A guarda do Esc é um `querySelector` global.** Funciona porque nenhum outro
+  modal do app monta junto com o Chat. Um modal global futuro (paleta de
+  comandos, confirmação) trava o Esc da coluna em silêncio.
+- **`conversa_atualizada` é broadcast para todos os clientes SSE**, e o
+  `upsertConversa` insere conversa desconhecida quando ela vem com `status`.
+  Continua sendo um vazamento de visibilidade — pré-existente, e fora do escopo
+  desta tarefa.
