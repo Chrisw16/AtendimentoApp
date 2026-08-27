@@ -6,18 +6,25 @@
  * que GRAVA é simulado (chamado, promessa, pré-cadastro, transferência).
  *
  * GET  /api/chat-teste/:token  → valida o link e devolve o nome do fluxo
- * POST /api/chat-teste/:token  → { mensagem, estado } → roda um turno e devolve
- *                                { respostas, estado, status }  (resumível: o
- *                                cliente devolve o `estado` do turno anterior)
+ * POST /api/chat-teste/:token  → { mensagem, sessao } → roda um turno e devolve
+ *                                { respostas, sessao, status }
  *
- * Stateless: o estado da conversa vive no cliente (cada visitante tem o seu),
- * então o link aguenta vários testadores ao mesmo tempo.
+ * ⚠️ O estado NÃO volta mais para o navegador. Era stateless (o cliente
+ * devolvia o `estado` do turno anterior) até 2026-08-27, quando a bateria em
+ * produção mostrou o que isso significa: o blob carrega
+ * `contexto._contratos_sgp`, a ficha crua do assinante — nome, endereço com
+ * lat/lng, senha do PPPoE, e login e senha da Central do Assinante. Como o link
+ * não pede login, qualquer pessoa com a URL digitava um CPF e recebia tudo.
+ * Agora o navegador só carrega um id opaco; a ficha fica no servidor
+ * (`sessaoTeste.js`, TTL de 2 h). Vários testadores ao mesmo tempo continuam
+ * funcionando, cada um com a sua sessão.
  */
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { asyncHandler, HttpError } from '../middlewares/errorHandler.js';
 import { getDb } from '../config/db.js';
 import { processarConversa } from '../services/motorFluxo.js';
+import { novoId, guardar, ler } from '../services/sessaoTeste.js';
 
 export const chatTesteRouter = Router();
 
@@ -40,7 +47,9 @@ chatTesteRouter.post('/:token', asyncHandler(async (req, res) => {
   const f = await fluxoPorToken(req.params.token);
   if (!f) throw new HttpError(404, 'Link de teste inválido ou revogado');
 
-  const { mensagem = '', estado = null } = req.body || {};
+  const { mensagem = '', sessao = null } = req.body || {};
+  // Sessão desconhecida ou vencida recomeça do zero — nunca herda a de outro.
+  const estado = ler(sessao);
   const SID = `share:${f.id}`;
   const estados = new Map();
   if (estado) estados.set(SID, estado);
@@ -55,5 +64,6 @@ chatTesteRouter.post('/:token', asyncHandler(async (req, res) => {
   });
 
   const novo = estados.get(SID) || null;
-  res.json({ respostas, estado: novo, status: novo ? 'aguardando' : 'encerrado' });
+  const id = guardar(sessao || novoId(), novo);
+  res.json({ respostas, sessao: id, status: novo ? 'aguardando' : 'encerrado' });
 }));

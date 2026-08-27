@@ -864,6 +864,16 @@ async function processarIAResponde(no, ctx) {
   // de procedimento ativo) mora em `fluxoHelpers` para ser testável sem banco.
   const tools = filtrarTools(IA_TOOLS, toolsAtivas, { playbookAtivo: !!pb });
 
+  // Sem esta linha não havia como saber, de fora, se o perfil e o procedimento
+  // estavam de fato valendo: o motor não logava nada no caminho feliz, e o
+  // operador que ligou o perfil na tela não tinha como distinguir "não pegou"
+  // de "pegou e o modelo ignorou". Silêncio não é evidência de nada.
+  const feitasLog = Array.isArray(pb?.exec?.etapas_feitas) ? pb.exec.etapas_feitas.length : 0;
+  console.log(`[IA] nó=${no.id} perfil=${perfil?.slug || '—'} prompt=${slug}`
+    + ` playbook=${pb ? `${pb.playbook.slug} ${feitasLog}/${pb.etapas.length}` : '—'}`
+    + ` tools=${tools.length}${cfg.tools_ativas ? ' (lista do nó)' : ''}`
+    + ` max_turnos=${maxTurnos} turno=${turnosUsados + 1}`);
+
   try {
     const ai = await getAnthropicClient({ conversaId: ctx.conversa.id, origem: 'motor', sandbox: ctx.sandbox });
     let texto = '';

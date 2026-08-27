@@ -17,7 +17,7 @@ const header = { padding: '12px 16px', background: '#0E1A2B', color: '#fff', fon
 export default function ChatTeste() {
   const { token } = useParams();
   const [info, setInfo] = useState(null);     // null=carregando · 'invalid' · { nome }
-  const [estado, setEstado] = useState(null);
+  const [sessao, setSessao] = useState(null);   // id opaco: a ficha do assinante fica no servidor
   const [log, setLog] = useState([]);
   const [input, setInput] = useState('');
   const [encerrado, setEncerrado] = useState(false);
@@ -40,8 +40,8 @@ export default function ChatTeste() {
     if (viaInput) setInput('');
     setEnviando(true); setErro('');
     try {
-      const r = await chatTesteApi.enviar(token, { mensagem: msg, estado });
-      setEstado(r.estado || null);
+      const r = await chatTesteApi.enviar(token, { mensagem: msg, sessao });
+      setSessao(r.sessao || null);
       (r.respostas || []).forEach(resp => setLog(l => [...l, { de: 'bot', resp }]));
       if (r.status === 'encerrado') { setEncerrado(true); setLog(l => [...l, { de: 'sys', texto: '— conversa encerrada —' }]); }
     } catch (e) { setErro(e.message || 'Erro ao enviar'); }
