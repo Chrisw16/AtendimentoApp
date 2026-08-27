@@ -325,6 +325,21 @@ para o mesmo poder, e um deles ficaria sem a checagem do outro.
 E a chamada ao modelo **nasceu no `llmGateway`** — era a promessa registrada na
 FASE 9.
 
+## Depois do plano — a bateria de produção (2026-08-27)
+
+As 13 fases estavam entregues e a suíte verde, e mesmo assim a IA em produção
+rodava **sem a base de conhecimento**: `cfg.tools_ativas` dos nós, escrita antes
+da FASE 7, substitui a lista padrão inteira, e `buscar_conhecimento` nunca
+chegava ao modelo. Os 55 artigos da 024 estavam no banco e nada os lia.
+
+Fase entregue não é fase **ligada**. A lição que fica é a de sempre nesta casa,
+numa forma nova: **o que depende de configuração do operador precisa de uma
+sonda que responda "está valendo?"** — e o motor não logava nada no caminho
+feliz, então "não pegou" e "pegou e o modelo ignorou" tinham o mesmo sintoma.
+
+Detalhe, método e a fila aberta em [[Bateria de produção da IA — o que a suíte
+não pegava]].
+
 ## See Also
 
 - [[FASE 0 — Reconciliação e linha de base]] · [[FASE 1 — Fundação crítica / P0 (motor persistente)]] · [[FASE 2 — Registry Foundation (Node Registry + Tool Registry)]] · [[FASE 3 — Segurança e governança base]]
