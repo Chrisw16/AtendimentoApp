@@ -157,13 +157,10 @@ export async function down(db) {
 | Dashboard       | ✅ Completo |
 | Agentes         | ✅ Completo |
 | Fluxos          | ✅ Completo |
-| Monitor de Rede | ✅ Completo |
 | Tarefas         | 🔲 Stub    |
 | Satisfação/NPS  | 🔲 Stub    |
 | Canais          | 🔲 Stub    |
-| Clientes        | 🔲 Stub    |
-| Ocorrências     | 🔲 Stub    |
-| Ordens de Serviço| 🔲 Stub   |
+| Clientes (histórico de contato) | ✅ Completo |
 | Frota           | 🔲 Stub    |
 | Cobertura       | 🔲 Stub    |
 | Dispositivos CPE| 🔲 Stub    |
@@ -171,6 +168,14 @@ export async function down(db) {
 | E-mail          | 🔲 Stub    |
 | VoIP            | 🔲 Stub    |
 | Configurações   | 🔲 Stub    |
+
+**Removidos em 2026-08-26** (migration 027): **Ocorrências**, **Ordens de Serviço** e
+**Monitor de Rede**. O ERP desta operação é o SGP — manter chamado nas duas bases sem
+conciliação criava duas verdades para o mesmo fato. Nenhuma tool da IA foi afetada:
+`criar_chamado`, `historico_ocorrencias` e `status_rede` sempre falaram com o SGP por
+HTTP, nunca com estas tabelas. **Clientes** deixou de ser proxy de busca no SGP e virou o
+**histórico de contato** (view `clientes_contato`, migration 028): quem já falou com a
+gente, quantas vezes, e se já sabemos quem é.
 
 ---
 

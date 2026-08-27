@@ -1,6 +1,6 @@
 # Brain Index — Maxxi v2
 
-Last rebuilt: 2026-08-22
+Last rebuilt: 2026-08-26
 
 > Índice do conhecimento sobre o Maxxi v2 / GoCHAT. Rode `/brain rebuild-index` após mudanças manuais.
 
@@ -23,7 +23,7 @@ Last rebuilt: 2026-08-22
 - **Cliente 360 e Copiloto** (painel do assinante, Context Cards, sugestão, handoff) — a lateral do chat e a próxima ação — `systems/maxxi/components/cliente-360-e-copiloto.md`
 - **Realtime SSE** (sseManager, broadcast) — entrega em tempo real (+ bug do Redis) — `systems/maxxi/components/realtime-sse.md`
 - **Auth e Segurança** (JWT, permissões, dívida) — autenticação e postura de segurança — `systems/maxxi/components/auth-e-seguranca.md`
-- **Modelo de Dados** (schema, migrations, 44 tabelas) — Postgres/Knex, single-tenant; o que cada fase acrescentou — `systems/maxxi/components/modelo-de-dados.md`
+- **Modelo de Dados** (schema, migrations, 40 tabelas + 3 views) — Postgres/Knex, single-tenant; o que cada fase acrescentou — `systems/maxxi/components/modelo-de-dados.md`
 - **Frontend Maxxi** (apps/web, React, Zustand, useChat) — painel e suas páginas — `systems/maxxi/components/frontend.md`
 - **Design System Maxxi** (tokens, tema light) — paleta navy+laranja, fontes — `systems/maxxi/components/design-system.md`
 - **API Backend Maxxi** (Express, rotas) — superfície REST (~62 endpoints) — `systems/maxxi/components/api-backend.md`
@@ -35,7 +35,7 @@ Last rebuilt: 2026-08-22
 - **Telas e Navegação** (abas, menu, sidebar, rotas) — mapa das telas, guards e integração entre abas — `systems/maxxi/telas/telas-e-navegacao.md`
 - **Abas de Atendimento** (Chat, Histórico, Satisfação) — telas do agente no dia a dia — `systems/maxxi/telas/atendimento.md`
 - **Abas de Configuração** (Dashboard, Agentes, Fluxos, Canais, Prompts IA, Configurações) — montagem e parametrização (admin) — `systems/maxxi/telas/configuracao.md`
-- **Abas de Operações e Infraestrutura** (Clientes, Ocorrências, Ordens, Cobertura, Monitor) — operação ISP + telas sem rota e stubs — `systems/maxxi/telas/operacoes.md`
+- **Abas de Operações** (Clientes, Cobertura) — Clientes = histórico de contato; por que Ocorrências/Ordens/Monitor saíram; telas sem rota e stubs — `systems/maxxi/telas/operacoes.md`
 
 ## Domains
 - **SGP** (Sistema de Gestão de Provedores, ERP ISP) — domínio do ERP e vocabulário ISP — `domains/sgp.md`
@@ -83,6 +83,9 @@ Last rebuilt: 2026-08-22
 - **FASE 11 — Quality AI V1** — `work/tasks/2026-08-22_fase-11-quality-ai.md`
 - **FASE 12 — Conversation Events + Analytics** — `work/tasks/2026-08-22_fase-12-analytics.md`
 - **FASE 13 — Observabilidade e hardening** — `work/tasks/2026-08-22_fase-13-observabilidade.md`
+
+### Pós-plano
+- **Remoção dos módulos de ERP + Clientes como histórico** (Ocorrências, Ordens, Monitor de Rede, clientes_contato) — o produto parou de fingir ser ERP; migrations 027/028 — `work/tasks/2026-08-26_remocao-erp-e-clientes-historico.md`
 
 ### Outros
 - **Achados de código (2026-06-30)** (bugs, dívida técnica, segurança) — levantamento do estudo estático — `work/bugs/2026-06-30_achados-codigo.md`

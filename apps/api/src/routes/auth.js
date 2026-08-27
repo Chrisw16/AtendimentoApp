@@ -49,6 +49,14 @@ authRouter.post('/login', loginLimiter, asyncHandler(async (req, res) => {
     login: agente.login,
     nome:  agente.nome,
     role:  agente.role,
+    // Sem esta linha o `pode()` da FASE 6 lia SEMPRE `permissoes: undefined` e
+    // caía nos padrões: `ver_dados_completos` (padrão false) nunca era
+    // concedida, mesmo com a caixa marcada na tela de Agentes, e as demais
+    // valiam para todo mundo. O CLAUDE.md afirmava que `agentes.permissoes`
+    // "finalmente decide algo" — não decidia: o payload nunca chegava ao
+    // middleware. Blob legado não muda de comportamento (chave ausente cai no
+    // padrão, como já caía); o que passa a valer é o admin que DESMARCOU algo.
+    permissoes: agente.permissoes || {},
   });
 
   // Atualiza online
@@ -96,6 +104,6 @@ authRouter.get('/refresh', authMiddleware, asyncHandler(async (req, res) => {
   const db    = getDb();
   const agente = await db('agentes').where({ id: req.agente.id, ativo: true }).first();
   if (!agente) throw new HttpError(401, 'Agente inativo');
-  const token = signToken({ id: agente.id, login: agente.login, nome: agente.nome, role: agente.role });
+  const token = signToken({ id: agente.id, login: agente.login, nome: agente.nome, role: agente.role, permissoes: agente.permissoes || {} });
   res.json({ token, user: { id: agente.id, nome: agente.nome, login: agente.login, role: agente.role } });
 }));

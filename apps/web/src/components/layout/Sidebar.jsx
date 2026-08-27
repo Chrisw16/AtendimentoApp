@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   MessageSquare, LayoutDashboard, Users, GitBranch,
-  BarChart2, Clock, Star, Bell, Settings, Bot,
-  ChevronLeft, Zap, Network, Map,
-  Building, ChevronDown, Wrench, Inbox, BookOpen, ListChecks, ClipboardCheck, Activity,
+  BarChart2, Clock, Star, Settings, Bot,
+  ChevronLeft, Zap, Map,
+  Building, ChevronDown, Inbox, BookOpen, ListChecks, ClipboardCheck, Activity,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import styles from './Sidebar.module.css';
@@ -32,22 +32,14 @@ const NAV = [
       { to: '/analytics',  icon: BarChart2,       label: 'Analytics',  adminOnly: true },
       { to: '/prompts-ia',   icon: Bot,              label: 'Prompts IA',    adminOnly: true },
       { to: '/configuracoes',icon: Settings,         label: 'Configurações', adminOnly: true },
+      { to: '/saude',        icon: Activity,         label: 'Saúde do Sistema', adminOnly: true },
     ],
   },
   {
     group: 'Operações',
     items: [
       { to: '/clientes',   icon: Building, label: 'Clientes' },
-      { to: '/ocorrencias',icon: Bell,     label: 'Ocorrências' },
-      { to: '/ordens',     icon: Wrench,   label: 'Ordens de Serviço' },
       { to: '/cobertura',  icon: Map,      label: 'Cobertura' },
-    ],
-  },
-  {
-    group: 'Infraestrutura',
-    items: [
-      { to: '/rede',        icon: Network,   label: 'Monitor de Rede',   adminOnly: true },
-      { to: '/saude',       icon: Activity,  label: 'Saúde do Sistema',  adminOnly: true },
     ],
   },
 ];
@@ -88,7 +80,7 @@ export default function Sidebar() {
   const { role, user } = useStore(s => ({ role: s.role, user: s.user }));
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(
-    new Set(['Atendimento', 'Configuração', 'Operações', 'Infraestrutura'])
+    new Set(['Atendimento', 'Configuração', 'Operações'])
   );
 
   const toggleGroup = (group) => {

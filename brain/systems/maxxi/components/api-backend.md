@@ -2,7 +2,7 @@
 title: API Backend Maxxi
 type: component
 created: 2026-06-30
-last_updated: 2026-08-22
+last_updated: 2026-08-26
 status: active
 related: ["[[Maxxi v2 / GoCHAT — Visão geral]]", "[[Auth e Segurança]]", "[[Modelo de Dados]]", "[[Canais e Webhooks]]", "[[Fila e SLA]]", "[[Achados de código (2026-06-30)]]"]
 sources: ["2026-06-30_estudo-codigo-maxxi"]
@@ -22,6 +22,17 @@ tags: [backend, api, express, rotas]
 > ⚠️ **`/api/filas` e `/api/atendimento/filas` são coisas diferentes** — a primeira é fila
 > de mensagem, a segunda é fila de pessoa.
 
+> ### ⚠️ Atualizado em 2026-08-26 — rotas que SAÍRAM
+>
+> `/api/ocorrencias` e `/api/ordens` foram **removidos** (routers deletados, `server.js`
+> não os monta mais): o ERP desta operação é o SGP, e manter chamado nas duas bases sem
+> conciliação criava duas verdades. De `/api/monitor` saíram **só** `GET /status` e
+> `POST /ping` — o router **continua existindo** e serve a tela **Saúde do Sistema**
+> (`GET /erros`, `PUT /erros/:id`, `GET /saude`), que por acidente histórico morava no
+> mesmo arquivo. `/api/clientes` foi **reescrita**: virou histórico de contato sobre a
+> view `clientes_contato`, sem falar com o SGP. Ver
+> [[Remoção dos módulos de ERP + Clientes como histórico]].
+
 
 Express (ESM) com `server.js` como entrypoint. Sobe o servidor primeiro (o `/health` responde sempre), e roda migrations + monitores ([[Fila e SLA|SLA]], [[Supervisora IA|supervisora]]) em background no boot. Middlewares globais: `helmet`, `cors` (`CORS_ORIGIN`), `rate-limit` (200/min), `express.json` (10mb). `errorHandler` global (`asyncHandler`, `HttpError`). Sem zod — validação manual.
 
@@ -32,15 +43,17 @@ Express (ESM) com `server.js` como entrypoint. Sobe o servidor primeiro (o `/hea
 **Autenticadas:**
 - `/api/chat` — o caminho do agente: SSE, conversas (listar/ver), mensagens (listar/enviar), **ações** (assumir, devolver-ia, encerrar, transferir), fila, notas, reações, respostas-rápidas, modo bot/humano (admin), stats. Toda query passa por `conversaRepository`/`mensagemRepository`.
 - `/api/fluxos`, `/api/prompts`, `/api/dashboard`, `/api/agentes`, `/api/canais`, `/api/sysconfig`, `/api/planos` — admin.
-- `/api/clientes` (híbrido SGP+local), `/api/ocorrencias`, `/api/ordens`, `/api/tarefas`, `/api/satisfacao`, `/api/cobertura`, `/api/monitor`, `/api/financeiro`.
+- `/api/clientes` — **histórico de contato** (FASE 6 + 2026-08-26): `GET /` (lista/busca sobre a view `clientes_contato`) e `GET /:conversaId` (o contato e suas últimas 20 conversas). Exige a capacidade `cliente360`; PII mascarada no servidor. O `:id` é o **uuid da última conversa**, nunca o telefone — aceitar a chave de agrupamento como parâmetro deixaria qualquer agente listar o histórico de um número arbitrário digitando-o na URL.
+- `/api/tarefas`, `/api/satisfacao`, `/api/cobertura`, `/api/monitor` (erros + saúde), `/api/financeiro`.
 
-Status: ~13 recursos com backend real, 1 parcial (`financeiro` depende de `ERP_URL`), nenhum stub puro. `dashboard` calcula KPIs + NPS; `sysconfig` guarda config e tem um **testador de tools SGP** (`POST /tools/test`).
+Status: ~11 recursos com backend real, 1 parcial (`financeiro` depende de `ERP_URL`), nenhum stub puro. `dashboard` calcula KPIs + NPS; `sysconfig` guarda config e tem um **testador de tools SGP** (`POST /tools/test`).
 
 ## Padrões e armadilhas
 
 - Repositórios concentram as queries de conversa/mensagem (zero SQL espalhado nessas).
-- `clientes` integra SGP com fallback no banco local.
-- `monitor /ping` faz **DDL em runtime** (cria `equipamentos_rede`); `alertas_rede` nunca é criada.
+- ~~`clientes` integra SGP com fallback no banco local~~ → a busca ao vivo no SGP **saiu** (2026-08-26). Consultar o ERP por CPF arbitrário é o que o [[Cliente 360 e Copiloto|Cliente 360]] faz **dentro** de uma conversa, com `contratosPermitidos` limitando o contrato; um segundo caminho sem essa allowlist é a "integração paralela" que a FASE 6 proibiu.
+- ~~`monitor /ping` faz **DDL em runtime** (cria `equipamentos_rede`)~~ → a rota foi removida em 2026-08-26, levando junto o **último `createTableIfNotExists` do código**. Enquanto ela existisse, a migration 027 dropava a tabela e o primeiro POST a ressuscitaria vazia.
+- **LIKE com escape** em `clientes.js`: `termosBusca` escapa `%`/`_`/`\\` (`clientesHelpers.js`, puro e testado). Sem isso, um `%` digitado no campo casa com a base inteira — em silêncio.
 - Achados de segurança da camada de rotas (mass-assignment, keys expostas no `sysconfig`, etc.) em [[Achados de código (2026-06-30)]] e [[Auth e Segurança]].
 
 ## See Also

@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versão** | 1.0 |
-| **Data** | 2026-08-21 |
-| **Estado do documento** | Linha de base inicial |
+| **Versão** | 1.1 |
+| **Data** | 2026-08-26 |
+| **Estado do documento** | Linha de base inicial + averbação de remoções (Apêndice D) |
 | **Sistema** | Maxxi v2 (marca comercial **GoCHAT**) |
 | **Versão do sistema** | 2.0.0 (`/health`) · commit base `32a558c` |
 | **Repositório** | `github.com/Chrisw16/AtendimentoApp` |
@@ -36,7 +36,7 @@ O GoCHAT é uma plataforma de **atendimento omnichannel com inteligência artifi
 
 > Uma mensagem entra por um canal (WhatsApp via Evolution ou Meta Cloud API, ou Telegram) → vira uma **conversa** → um **motor de fluxo** interpreta um grafo de atendimento desenhado visualmente → a **IA (Claude, com tool calling)** resolve consultas reais no **SGP** (o ERP do provedor: boleto, conexão, chamado técnico, planos, pré-cadastro) → quando necessário, transfere para um **agente humano**, que atende por um painel web com chat em tempo real.
 
-Está **dentro** do escopo: ingestão multicanal, execução de fluxos conversacionais, IA com acesso a ferramentas do ERP, atendimento humano com fila e SLA, supervisão assistida por IA, configuração completa por interface administrativa, ferramentas de teste de fluxo, e um conjunto de módulos operacionais de ISP (clientes, ocorrências, ordens de serviço, cobertura, monitor de rede).
+Está **dentro** do escopo: ingestão multicanal, execução de fluxos conversacionais, IA com acesso a ferramentas do ERP, atendimento humano com fila e SLA, supervisão assistida por IA, configuração completa por interface administrativa, ferramentas de teste de fluxo, e e um conjunto de módulos operacionais de ISP. ⛔ **Alterado em 2026-08-26:** ocorrências, ordens de serviço e monitor de rede **saíram do escopo** — o ERP desta operação é o SGP, e manter chamado nas duas bases sem conciliação criava duas verdades para o mesmo fato. Restam clientes (redefinido como histórico de contato) e cobertura. Ver `RF-OPS-002/004/007/008/011` e o Apêndice D.
 
 Está **fora** do escopo desta versão: multi-tenancy row-level (a estratégia adotada é **uma instância isolada por provedor**), canais de e-mail/VoIP/SMS (presentes apenas como placeholders), e faturamento próprio (o financeiro é uma leitura do ERP).
 
@@ -50,6 +50,9 @@ Cada requisito recebe um identificador estável no formato `RF-<MÓDULO>-<NNN>` 
 | ◐ | **Parcial** | Presente, mas incompleto — falta caminho de configuração, cobertura de casos ou uma dependência. |
 | ⚠ | **Divergente** | Implementado de forma que contradiz a intenção aparente, ou inconsistente entre duas camadas que deveriam espelhar-se. |
 | ✗ | **Não implementado** | Referenciado no código, na configuração ou na interface, mas sem implementação efetiva. |
+| ⛔ | **Removido** | Existia na linha de base e foi **retirado do produto** depois dela. A linha **permanece**, com a data e o motivo. |
+
+> **Sobre a marca ⛔.** Este é um documento *as-is* **datado**, e sua utilidade depende de ser rastreável: quem lê um commit, um log de produção ou um artigo antigo do brain precisa achar aqui o requisito que aquilo mencionava. Apagar a linha faria o requisito sumir sem deixar rastro — o leitor concluiria que nunca existiu, que é pior do que saber que existiu e por que saiu. Requisito removido, portanto, é **averbado**, não excluído. O que mudou desde a linha de base está consolidado no **Apêndice D**.
 
 Um segundo eixo, **verificação**, aparece quando relevante: *validado em produção*, *validado em teste automatizado*, *verificado por leitura estática*.
 
@@ -138,7 +141,7 @@ O GoCHAT é um **sistema novo, autocontido**, que se posiciona entre os canais d
 | F9 | Editar os prompts da IA em tempo de execução | 4.10 |
 | F10 | Configurar integrações, canais, planos e horário de atendimento pela interface | 4.11 |
 | F11 | Apresentar métricas de atendimento, produtividade e NPS | 4.12 |
-| F12 | Operar processos de ISP: clientes, ocorrências, ordens de serviço, cobertura, rede | 4.13 |
+| F12 | Operar processos de ISP: clientes (histórico de contato) e cobertura. ⛔ *Ocorrências, ordens de serviço e rede removidos em 2026-08-26.* | 4.13 |
 
 ### 2.3 Classes de usuário
 
@@ -220,8 +223,8 @@ Painel web em React, responsivo a desktop, organizado em **quatro grupos de menu
 |---|---|
 | **Atendimento** | Chat · Histórico · Satisfação |
 | **Configuração** | Dashboard · Agentes · Fluxos (+ Editor) · Canais · Analytics · Prompts IA · Configurações |
-| **Operações** | Clientes · Ocorrências · Ordens de Serviço · Cobertura |
-| **Infraestrutura** | Monitor de Rede |
+| **Operações** | Clientes · Cobertura — ⛔ *Ocorrências e Ordens de Serviço removidas em 2026-08-26* |
+| ~~**Infraestrutura**~~ | ⛔ *Grupo extinto em 2026-08-26: com o Monitor de Rede removido, restava só Saúde do Sistema, que passou a **Configuração**.* |
 | **Sem rota** | Tarefas · Financeiro (implementadas, inacessíveis — ⚠ `RF-OPS-010`) |
 | **Stubs vazios** | Analytics · Dispositivos · E-mail · VoIP · Frota |
 
@@ -252,7 +255,7 @@ Não aplicável. O sistema não interage diretamente com hardware. O diagnóstic
 
 | Interface | Descrição |
 |---|---|
-| **REST/JSON** | 95 endpoints em 19 routers, sob `/api/*`. Corpo limitado a 10 MB. |
+| **REST/JSON** | 95 endpoints em 19 routers, sob `/api/*`, na linha de base. Corpo limitado a 10 MB. ⛔ *Em 2026-08-26 saíram os routers `ocorrencias` e `ordens` (12 endpoints) e duas rotas de `monitor`; `clientes` passou de 3 endpoints para 2.* |
 | **SSE** | `GET /api/chat/sse` — canal servidor→painel. Autenticado por token na *query string*, porque `EventSource` não envia cabeçalhos. Ping a cada 25 s; o cliente reconecta em 3 s. |
 | **Webhooks de entrada** | `POST /api/webhooks/{evolution,meta,telegram}` — públicos. `GET /api/webhooks/meta` responde ao desafio de verificação da Meta. |
 | **Redis pub/sub** | Canal `maxxi:sse`, para propagar broadcast entre processos. Implementado sobre `ioredis`; **conexão real ainda não validada** (Seção 8.2). |
@@ -678,18 +681,18 @@ Camada de IA que assiste o **agente humano**, distinta da IA que atende o client
 
 | ID | Requisito | Estado |
 |---|---|:---:|
-| `RF-OPS-001` | **Clientes** — busca híbrida: consulta o SGP primeiro e recua para as conversas locais. Painel com contato, contrato, financeiro e CPEs. | ◐ |
-| `RF-OPS-002` | **Ocorrências** — tickets **locais** com lista filtrável, timeline, fechamento e notas, vinculados a `conversa_id`, `contrato_id` e `agente_id`. | ◐ |
-| `RF-OPS-003` | Ocorrências locais são **registros distintos** dos chamados abertos no SGP pelo nó `abrir_chamado` e pela ferramenta `criar_chamado`. | ✅ |
-| `RF-OPS-004` | **Ordens de Serviço** — OS de campo com máquina de estados (aberta → agendada → em campo → concluída), endereço, coordenadas, agendamento e técnico. | ◐ |
+| `RF-OPS-001` | **Clientes** — ⛔ **redefinido em 2026-08-26.** Deixou de ser busca híbrida no SGP e passou a ser o **histórico de contato**: quem já falou com a plataforma, quantas vezes, e se há vínculo telefone↔CPF/contrato reconhecido. Lê a view `clientes_contato` (migration `028`), que agrega `conversas` por `COALESCE(telefone, id::text)`. Não consulta o SGP: a consulta ao ERP por CPF é atribuição do Cliente 360, **dentro** de uma conversa e com a lista de contratos permitidos. | ✅ |
+| `RF-OPS-002` | ⛔ **REMOVIDO em 2026-08-26** (migration `027` dropa `ocorrencias`). Era: *Ocorrências — tickets locais com lista filtrável, timeline, fechamento e notas, vinculados a `conversa_id`, `contrato_id` e `agente_id`.* Motivo: o ERP desta operação é o SGP; o mesmo chamado nas duas bases, sem conciliação, produz duas verdades para o mesmo fato. | ⛔ |
+| `RF-OPS-003` | ⛔ **Sem objeto desde 2026-08-26.** Registrava que as ocorrências locais eram registros **distintos** dos chamados do SGP abertos pelo nó `abrir_chamado` e pela ferramenta `criar_chamado`. Removidas as locais, resta uma única base de chamados — a do SGP. As ferramentas de IA **não foram afetadas**: sempre falaram com o SGP por HTTP. | ⛔ |
+| `RF-OPS-004` | ⛔ **REMOVIDO em 2026-08-26** (migration `027` dropa `ordens_servico`). Era: *Ordens de Serviço — OS de campo com máquina de estados (aberta → agendada → em campo → concluída), endereço, coordenadas, agendamento e técnico.* Mesmo motivo de `RF-OPS-002`: a OS é fechada no SGP, onde estão contrato, estoque e cobrança. | ⛔ |
 | `RF-OPS-005` | **Cobertura** — mapa de zonas sobre Leaflet/OpenStreetMap, com geocodificação Nominatim. Hoje **apenas visualiza e remove** zonas: falta a ferramenta de desenho. | ◐ |
 | `RF-OPS-006` | `GET /api/cobertura/check` é **público**, pensado para consulta de cobertura a partir do site ou de um widget. | ✅ |
-| `RF-OPS-007` | **Monitor de Rede** — indicadores de equipamentos (on-line, off-line, degradado) e alertas, com atualização a cada 30 s; `POST /monitor/ping` recebe os pings. | ◐ |
-| `RF-OPS-008` | `POST /monitor/ping` executa **DDL em tempo de execução** (`createTableIfNotExists`), embora `equipamentos_rede` e `alertas_rede` já sejam criadas pela migration `002`. É um antipadrão remanescente, não uma dependência. | ⚠ |
+| `RF-OPS-007` | ⛔ **REMOVIDO em 2026-08-26** (migration `027` dropa `equipamentos_rede` e `alertas_rede`; rotas `GET /monitor/status` e `POST /monitor/ping` excluídas). Era: *Monitor de Rede — indicadores de equipamentos e alertas, com atualização a cada 30 s.* Motivo: era um NMS que ninguém alimentava — `alertas_rede` nunca era escrita, e o status de rede que a IA usa vem do SGP (`status_rede`). O router `monitor` **continua existindo** e serve a tela Saúde do Sistema (`GET /erros`, `PUT /erros/:id`, `GET /saude`). | ⛔ |
+| `RF-OPS-008` | ⛔ **RESOLVIDO POR REMOÇÃO em 2026-08-26.** Era: *`POST /monitor/ping` executa DDL em tempo de execução (`createTableIfNotExists`).* Com a rota, saiu o **último `createTableIfNotExists` do código**. A ordem importou: enquanto a rota existisse, a migration `027` dropava a tabela e o primeiro POST a ressuscitaria vazia. | ⛔ |
 | `RF-OPS-009` | **Financeiro** — indicadores, cobranças e régua de cobrança. A régua é real; resumo e cobranças dependem de `ERP_URL`. | ◐ |
 | `RF-OPS-010` | **Tarefas** e **Financeiro** estão implementadas mas **não possuem rota** em `App.jsx` — são inacessíveis pela navegação, embora a permissão `tarefas` exista e o backend responda. | ⚠ |
-| `RF-OPS-011` | `PUT` de `ocorrencias`, `ordens` e `tarefas` aplica **atribuição em massa** (`{...req.body}`), sem lista de campos permitidos. | ⚠ |
-| `RF-OPS-012` | Analytics, Dispositivos, E-mail, VoIP e Frota são **telas vazias**. | ✗ |
+| `RF-OPS-011` | `PUT` de `tarefas` aplicava **atribuição em massa** (`{...req.body}`) — corrigido na FASE 3 com lista de campos permitidos e verificação de propriedade. O mesmo valia para `ocorrencias` e `ordens`; ⛔ **as duas rotas deixaram de existir em 2026-08-26.** | ✅ |
+| `RF-OPS-012` | Dispositivos, E-mail, VoIP e Frota são **telas vazias**. (Analytics deixou de ser stub na FASE 12.) | ✗ |
 
 ---
 
@@ -741,7 +744,7 @@ Esta é a área que mais exige endurecimento antes de qualquer revenda.
 | `RNF-SEG-004` | As permissões granulares de agente **não são aplicadas no backend**; rotas não administrativas verificam apenas a validade do token. | ⚠ |
 | `RNF-SEG-005` | Os webhooks são públicos e **não validam assinatura de origem**. Qualquer requisição bem formada a `POST /api/webhooks/*` injeta uma mensagem no sistema. | ⚠ |
 | `RNF-SEG-006` | Não há limite específico para tentativas de login — vale apenas o limite global de 200/min. | ⚠ |
-| `RNF-SEG-007` | Atribuição em massa nos `PUT` de `ocorrencias`, `ordens` e `tarefas`; `tarefas` sem verificação de propriedade em `PUT`/`DELETE`. | ⚠ |
+| `RNF-SEG-007` | Atribuição em massa nos `PUT` de `ocorrencias`, `ordens` e `tarefas`; `tarefas` sem verificação de propriedade em `PUT`/`DELETE`. **Fechado na FASE 3** (lista de campos permitidos + propriedade em `tarefas`); ⛔ `ocorrencias` e `ordens` **removidas em 2026-08-26**. | ✅ |
 | `RNF-SEG-008` | SQL interpolado por string no dashboard, atenuado por lista de valores permitidos; `LIKE` sem escape na busca de clientes. | ⚠ |
 | `RNF-SEG-009` | Senhas com hash **bcrypt**; nunca trafegam nem são armazenadas em claro. | ✅ |
 | `RNF-SEG-010` | `helmet` ativo, com CSP e COEP desabilitados para permitir o frontend embutido. | ◐ |
@@ -834,13 +837,14 @@ PostgreSQL 16 via Knex. **21 tabelas** definidas por **12 migrations**, mais a t
 
 | Tabela | Papel |
 |---|---|
-| `ocorrencias` | Tickets locais (distintos dos chamados do SGP) |
-| `ordens_servico` | OS de campo com coordenadas e máquina de estados |
+| ~~`ocorrencias`~~ | ⛔ **Dropada em 2026-08-26** (migration `027`). Tickets locais (distintos dos chamados do SGP). |
+| ~~`ordens_servico`~~ | ⛔ **Dropada em 2026-08-26** (migration `027`). OS de campo com coordenadas e máquina de estados. |
 | `tarefas` | Quadro kanban interno |
 | `zonas_cobertura` | Polígonos GeoJSON de cobertura |
 | `consultas_cobertura` | Registro de consultas públicas |
-| `equipamentos_rede` | Inventário do monitor de rede |
-| `alertas_rede` | Alertas do monitor de rede |
+| ~~`equipamentos_rede`~~ | ⛔ **Dropada em 2026-08-26** (migration `027`). Inventário do monitor de rede. |
+| ~~`alertas_rede`~~ | ⛔ **Dropada em 2026-08-26** (migration `027`). Alertas do monitor de rede — nunca escrita pelo código. |
+| `clientes_contato` *(view)* | ➕ **Acrescentada em 2026-08-26** (migration `028`). Agrega `conversas` por `COALESCE(telefone, id::text)`: histórico de contato e vínculo telefone↔CPF/contrato. **Não é tabela de propósito** — os fatos já moram em `conversas`; uma tabela seria segunda verdade e nasceria vazia (mesmo argumento com que a FASE 12 recusou um event store). |
 | `avaliacoes` | NPS em **escala 1–5** (tela Satisfação) |
 | `satisfacao` | NPS em **escala 0–10** (nó `nps_inline` e Dashboard) |
 | `auditoria` | Registro de ações — existe, não é alimentada sistematicamente |
@@ -880,9 +884,9 @@ PostgreSQL 16 via Knex. **21 tabelas** definidas por **12 migrations**, mais a t
 | **cobertura** | `GET /zonas` · `POST /zonas` · `PUT /zonas/:id` · `DELETE /zonas/:id` | A |
 | **chat** | `GET /sse` · `GET /conversas` · `GET /conversas/:id` · `GET /conversas/:id/mensagens` · `POST /conversas/:id/mensagens` · `POST /conversas/:id/assumir` · `POST /conversas/:id/devolver-ia` · `POST /conversas/:id/encerrar` · `POST /conversas/:id/transferir` · `GET /fila` · `POST /conversas/:id/notas` · `GET /conversas/:id/notas` · `POST /mensagens/:msgId/reacao` · `DELETE /mensagens/:msgId` · `GET /respostas-rapidas` · `GET /stats` | A |
 | **chat** | `PUT /modo` | AD |
-| **clientes** | `GET /` · `GET /buscar` · `GET /:id` | A |
-| **ocorrencias** | `GET /` · `GET /tipos` · `GET /:id` · `POST /` · `PUT /:id` · `POST /:id/fechar` · `POST /:id/notas` | A |
-| **ordens** | `GET /` · `GET /:id` · `POST /` · `PUT /:id` · `DELETE /:id` | A |
+| **clientes** | `GET /` · `GET /:conversaId` — ⛔ *`GET /buscar` removido em 2026-08-26; ambas passaram a ler a view `clientes_contato` e a exigir a capacidade `cliente360`* | A |
+| ~~**ocorrencias**~~ | ⛔ **Router removido em 2026-08-26.** Era: `GET /` · `GET /tipos` · `GET /:id` · `POST /` · `PUT /:id` · `POST /:id/fechar` · `POST /:id/notas`. | — |
+| ~~**ordens**~~ | ⛔ **Router removido em 2026-08-26.** Era: `GET /` · `GET /:id` · `POST /` · `PUT /:id` · `DELETE /:id`. | — |
 | **tarefas** | `GET /` · `POST /` · `PUT /:id` · `DELETE /:id` | A |
 | **satisfacao** | `GET /resumo` · `GET /avaliacoes` · `POST /avaliacoes` | A |
 | **agentes** | `GET /` · `GET /online` · `GET /:id` · `POST /` · `PUT /:id` · `DELETE /:id` | AD |
@@ -895,7 +899,7 @@ PostgreSQL 16 via Knex. **21 tabelas** definidas por **12 migrations**, mais a t
 | **financeiro** | `GET /resumo` · `GET /cobrancas` · `GET /regua` · `PUT /regua` | AD |
 | **monitor** | `GET /status` · `POST /ping` | AD |
 
-> **Observação sobre `POST /api/monitor/ping`.** O endpoint destina-se a receber pings de equipamentos de rede, mas está sob guarda de administrador — um agente coletor precisaria de credencial de administrador para reportar. É incoerente com o propósito aparente do endpoint.
+> **Observação sobre `POST /api/monitor/ping`.** ⛔ **Endpoint removido em 2026-08-26**, junto com `GET /api/monitor/status`. O registro fica porque descrevia uma incoerência real: o endpoint destinava-se a receber pings de equipamentos, mas estava sob guarda de administrador — um agente coletor precisaria de credencial de administrador para reportar. O router `monitor` permanece, servindo `GET /erros`, `PUT /erros/:id` e `GET /saude` (tela Saúde do Sistema).
 
 ---
 
@@ -1001,7 +1005,7 @@ Ainda assim, **o volume real é aproximadamente zero** — o painel reporta trin
 | `RF-PRM` | `routes/prompts.js` · `apps/web/src/pages/PromptsIA.jsx` |
 | `RF-CFG` | `routes/sysconfig.js` · `routes/canais.js` · `routes/planos.js` |
 | `RF-MET` | `routes/dashboard.js` · `routes/satisfacao.js` · `fluxoHelpers.js` (NPS) |
-| `RF-OPS` | `routes/{clientes,ocorrencias,ordens,tarefas,cobertura,monitor,financeiro}.js` |
+| `RF-OPS` | `routes/{clientes,tarefas,cobertura,monitor,financeiro}.js` · `services/clientesHelpers.js` · `migrations/versions/{027,028}_*.js` — ⛔ `routes/{ocorrencias,ordens}.js` removidos em 2026-08-26 |
 | Catálogo de nós | `apps/web/src/lib/nodeTypes.js` ↔ `services/motorFluxo.js` (`processarNo`) |
 | Modelo de dados | `apps/api/src/migrations/versions/*.js` |
 
@@ -1034,6 +1038,7 @@ Regras aprendidas na operação e que condicionam a montagem de qualquer fluxo n
 | Versão | Data | Alterações | Autor |
 |---|---|---|---|
 | 1.0 | 2026-08-21 | Linha de base inicial. Reconstrução as-is a partir do código no commit `32a558c`, com verificação direta de endpoints, tipos de nó, ferramentas, schema e suíte de testes. | Engenharia GoCHAT |
+| 1.1 | 2026-08-26 | **Averbação de remoções.** Migrations `027` (drop de `ocorrencias`, `ordens_servico`, `equipamentos_rede`, `alertas_rede`) e `028` (view `clientes_contato`). Requisitos `RF-OPS-002`, `RF-OPS-003`, `RF-OPS-004`, `RF-OPS-007` e `RF-OPS-008` marcados ⛔ **Removido**, com a redação original preservada e o motivo registrado; `RF-OPS-001` **redefinido** (Clientes = histórico de contato); `RF-OPS-011` e `RNF-SEG-007` fechados. Nenhuma linha foi excluída — o documento é histórico e precisa continuar rastreável a partir de commits e logs antigos. Detalhe em `brain/work/tasks/2026-08-26_remocao-erp-e-clientes-historico.md`. | Engenharia GoCHAT |
 
 ---
 

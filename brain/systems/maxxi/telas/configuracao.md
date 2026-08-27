@@ -20,7 +20,7 @@ KPIs de atendimento/IA/NPS/canais: total de atendimentos, % resolvido pela IA, c
 
 ## Agentes (`/agentes`) — operadores e permissões
 
-CRUD dos usuários do painel com **permissões granulares** por checkbox (chat, historico, tarefas, financeiro, clientes, frota, ocorrencias) para o role `agente`; admin tem tudo. `GET/POST/PUT /api/agentes`, senha em bcrypt, auto-desativação bloqueada. **Integração:** os agentes aparecem no [[Abas de Atendimento|Chat]] (assumir/transferir), no Dashboard (online) e como técnicos em [[Abas de Operações e Infraestrutura|Ordens de Serviço]]. As permissões alimentam `hasPerm` (mas o roteamento não as aplica — ver [[Auth e Segurança]]).
+CRUD dos usuários do painel com **permissões granulares** por checkbox (chat, historico, tarefas, financeiro, clientes, frota, ocorrencias) para o role `agente`; admin tem tudo. `GET/POST/PUT /api/agentes`, senha em bcrypt, auto-desativação bloqueada. **Integração:** os agentes aparecem no [[Abas de Atendimento|Chat]] (assumir/transferir), no Dashboard (online). As permissões alimentam `hasPerm` (mas o roteamento não as aplica — ver [[Auth e Segurança]]).
 
 ## Fluxos (`/fluxos`) e Editor de Fluxo (`/fluxos/:id`)
 
@@ -44,4 +44,4 @@ Edita os 8 prompts da IA (regras/estilo/roteador/financeiro/suporte/comercial/fa
 
 ## See Also
 
-- [[Telas e Navegação]] · [[Abas de Atendimento]] · [[Abas de Operações e Infraestrutura]]
+- [[Telas e Navegação]] · [[Abas de Atendimento]] · [[Abas de Operações]]

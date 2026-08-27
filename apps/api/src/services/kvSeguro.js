@@ -149,6 +149,12 @@ export function mascararConfig(config) {
  */
 export function valorParaGravar(chave, valor, segredo = process.env.KV_SECRET) {
   if (ehSecreta(chave) && ehMascara(valor)) return { gravar: false };
+  // Credencial colada da documentação vem com espaço/quebra de linha grudado.
+  // O header sai literal e o provedor devolve 401 "API key is invalid" — que
+  // lê como chave errada, não como chave suja, e manda o operador caçar no
+  // lugar errado. Só nas secretas: `prompt_ia` e `saudacao` são texto do
+  // operador, e o espaço ali pode ser dele.
+  if (ehSecreta(chave) && typeof valor === 'string') valor = valor.trim();
   const json = JSON.stringify(valor);
   if (!ehSecreta(chave) || !segredo) return { gravar: true, valor: json };
   return { gravar: true, valor: JSON.stringify(cifrar(json, segredo)) };

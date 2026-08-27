@@ -143,3 +143,8 @@ test('objeto de configuração sobrevive ao roundtrip de gravação', () => {
   const { valor } = valorParaGravar('horario', { inicio: '08:00', fim: '18:00' }, SEGREDO);
   assert.deepEqual(lerValorKV(JSON.parse(valor), 'horario'), { inicio: '08:00', fim: '18:00' });
 });
+
+test('credencial colada com espaço/quebra de linha é aparada — o header literal vira 401 opaco', () => {
+  const { valor } = valorParaGravar('anthropic_api_key', '  sk-ant-abc123\n', undefined);
+  assert.equal(valor, JSON.stringify('sk-ant-abc123'));
+});
