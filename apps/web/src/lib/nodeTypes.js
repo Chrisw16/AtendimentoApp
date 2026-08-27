@@ -334,3 +334,40 @@ export const IA_TOOLS_LIST = [
 // Default = só suporte. As comerciais (incluindo o pré-cadastro, que cria
 // cliente de verdade no SGP) exigem marcação explícita no ramo comercial.
 export const IA_TOOLS_DEFAULT = IA_TOOLS_LIST.filter(t => t.cat !== 'Comercial').map(t => t.id);
+
+/**
+ * De onde vem, de fato, cada valor do nó `ia_responde`: do NÓ, do PERFIL ou do
+ * padrão do motor. O painel de propriedades precisa disso para parar de exibir
+ * o default local como se fosse o valor que vai rodar — "Máx. turnos: 6" ao
+ * lado de um perfil que diz 25, e a lista de tools do dia no lugar das tools do
+ * perfil (marcar uma caixinha congelava a lista inteira como override).
+ *
+ * Espelha a precedência do motor e nada mais. Se mudar lá, muda aqui — há teste
+ * de contrato (`tests/contrato-catalogos.test.js`).
+ *
+ * @param {object} cfg    config do nó
+ * @param {object|null} perfil  linha de `ia_perfis` já resolvida pelo slug
+ */
+export function herancaIaResponde(cfg = {}, perfil = null) {
+  // `||` para string (vazio é ausência), `??` para número (0 é escolha).
+  const ou  = (doNo, doPerfil, padrao) =>
+    doNo     ? { valor: doNo,     origem: 'no' }
+    : doPerfil ? { valor: doPerfil, origem: 'perfil' }
+    : { valor: padrao, origem: 'padrao' };
+  const coalesce = (doNo, doPerfil, padrao) =>
+    doNo     != null ? { valor: doNo,     origem: 'no' }
+    : doPerfil != null ? { valor: doPerfil, origem: 'perfil' }
+    : { valor: padrao, origem: 'padrao' };
+
+  return {
+    contexto:   ou(cfg.contexto, perfil?.prompt_slug, 'outros'),
+    playbook:   ou(cfg.playbook, perfil?.playbook_slug, null),
+    max_turnos: coalesce(cfg.max_turnos ?? cfg.max_turns, perfil?.max_turnos, 6),
+    // `ia_perfis.tools` nasce `'[]'` — lista vazia é "não configurei", não
+    // "nenhuma tool". Tratar como escolha deixaria a IA muda.
+    tools: coalesce(
+      Array.isArray(cfg.tools_ativas) ? cfg.tools_ativas : null,
+      perfil?.tools?.length ? perfil.tools : null,
+      IA_TOOLS_DEFAULT),
+  };
+}

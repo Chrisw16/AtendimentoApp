@@ -26,7 +26,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-import { NODE_TYPES, PORTA_META, IA_TOOLS_LIST, IA_TOOLS_DEFAULT } from '../../web/src/lib/nodeTypes.js';
+import { NODE_TYPES, PORTA_META, IA_TOOLS_LIST, IA_TOOLS_DEFAULT, herancaIaResponde } from '../../web/src/lib/nodeTypes.js';
 import { NOS } from '../src/services/fluxoValidador.js';
 import { TOOLS_PADRAO } from '../src/services/fluxoHelpers.js';
 
@@ -156,5 +156,66 @@ describe('contrato entre a tela de permissões e o backend', () => {
     const doBackend = Object.entries(CAPACIDADES).filter(([, d]) => !d.padrao).map(([k]) => k).sort();
     assert.deepEqual(daTela, doBackend,
       'a caixa apareceria desmarcada para uma permissão que o agente TEM (ou o contrário)');
+  });
+});
+
+// ── herança perfil → nó, no painel de propriedades ──────────────
+//
+// 2026-08-27: o painel exibia todo campo como se o NÓ fosse o dono. "Máx.
+// turnos" mostrava o default `6` mesmo com um perfil que diz 25, e "Tools
+// ativas" mostrava `IA_TOOLS_DEFAULT` em vez das tools do perfil — então
+// marcar UMA caixinha serializava a lista inteira daquele dia como override
+// permanente. Foi assim que um nó ficou congelado sem `buscar_conhecimento` e
+// nunca mais viu tool nova: o painel não mentia por bug, mentia por desenho.
+//
+// `herancaIaResponde` existe para a tela poder dizer de onde vem cada valor, e
+// tem que espelhar EXATAMENTE a precedência do motor (`ia_responde`):
+//   contexto   = cfg.contexto || perfil.prompt_slug   || 'outros'
+//   playbook   = cfg.playbook || perfil.playbook_slug || null
+//   maxTurnos  = cfg.max_turnos ?? cfg.max_turns ?? perfil.max_turnos ?? 6
+//   tools      = cfg.tools_ativas ?? (perfil.tools.length ? perfil.tools : TOOLS_PADRAO)
+describe('herancaIaResponde espelha a precedência do motor', () => {
+  const PERFIL = { slug: 'comercial', prompt_slug: 'comercial', playbook_slug: 'venda', max_turnos: 25, tools: ['listar_planos_ativos'] };
+
+  test('sem perfil e sem config do nó, tudo vem do padrão do motor', () => {
+    const h = herancaIaResponde({}, null);
+    assert.deepEqual([h.contexto.valor, h.contexto.origem], ['outros', 'padrao']);
+    assert.deepEqual([h.playbook.valor, h.playbook.origem], [null, 'padrao']);
+    assert.deepEqual([h.max_turnos.valor, h.max_turnos.origem], [6, 'padrao']);
+    assert.deepEqual([...h.tools.valor].sort(), [...TOOLS_PADRAO].sort());
+    assert.equal(h.tools.origem, 'padrao');
+  });
+
+  test('com perfil e nó em branco, o valor exibido é o do PERFIL', () => {
+    const h = herancaIaResponde({ perfil: 'comercial' }, PERFIL);
+    assert.deepEqual([h.contexto.valor, h.contexto.origem],   ['comercial', 'perfil']);
+    assert.deepEqual([h.playbook.valor, h.playbook.origem],   ['venda', 'perfil']);
+    assert.deepEqual([h.max_turnos.valor, h.max_turnos.origem], [25, 'perfil']);
+    assert.deepEqual([h.tools.valor, h.tools.origem],         [['listar_planos_ativos'], 'perfil']);
+  });
+
+  test('o que o nó define vence o perfil, e a origem diz isso', () => {
+    const cfg = { perfil: 'comercial', contexto: 'suporte', playbook: 'sem_conexao', max_turnos: 12, tools_ativas: ['criar_chamado'] };
+    const h = herancaIaResponde(cfg, PERFIL);
+    for (const c of ['contexto', 'playbook', 'max_turnos', 'tools']) assert.equal(h[c].origem, 'no', c);
+    assert.equal(h.max_turnos.valor, 12);
+  });
+
+  test('perfil com tools vazias (o default da coluna) cai no padrão, não em lista vazia', () => {
+    // `ia_perfis.tools` nasce `'[]'`. Tratar isso como "o perfil escolheu
+    // nenhuma tool" deixaria a IA muda — o motor faz `?.length ? : padrão`.
+    const h = herancaIaResponde({ perfil: 'x' }, { ...PERFIL, tools: [] });
+    assert.deepEqual([...h.tools.valor].sort(), [...TOOLS_PADRAO].sort());
+    assert.equal(h.tools.origem, 'padrao');
+  });
+
+  test('max_turnos = 0 no nó é override, não ausência (o motor usa ??)', () => {
+    const h = herancaIaResponde({ max_turnos: 0 }, PERFIL);
+    assert.deepEqual([h.max_turnos.valor, h.max_turnos.origem], [0, 'no']);
+  });
+
+  test('lê o alias max_turns que a tela antiga gravava', () => {
+    const h = herancaIaResponde({ max_turns: 25 }, null);
+    assert.deepEqual([h.max_turnos.valor, h.max_turnos.origem], [25, 'no']);
   });
 });

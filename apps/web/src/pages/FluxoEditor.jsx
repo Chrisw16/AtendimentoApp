@@ -8,7 +8,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../store';
-import { NODE_TYPES, NODE_GROUPS, PORTA_META, IA_TOOLS_LIST, IA_TOOLS_DEFAULT } from '../lib/nodeTypes';
+import { NODE_TYPES, NODE_GROUPS, PORTA_META, IA_TOOLS_LIST, IA_TOOLS_DEFAULT, herancaIaResponde } from '../lib/nodeTypes';
 import { api } from '../lib/api';
 
 // ── CSS OVERRIDE — apenas ajustes visuais que NÃO interferem na detecção
@@ -89,6 +89,8 @@ const VARS = [
 const IS  = { width:'100%', background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.12)', borderRadius:6, padding:'6px 9px', color:'#fff', fontSize:12, outline:'none', fontFamily:'DM Sans,sans-serif', boxSizing:'border-box' };
 const TA  = { ...IS, resize:'vertical', fontFamily:'JetBrains Mono,monospace', lineHeight:1.5 };
 const LBL = { fontSize:11, color:'rgba(255,255,255,.4)', marginBottom:4, fontWeight:600, letterSpacing:'.03em', display:'block' };
+
+const BTN_HERDAR = { background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.14)', color:'rgba(255,255,255,.6)', borderRadius:5, padding:'1px 6px', fontSize:10, cursor:'pointer' };
 
 function Fld({ label, hint, children }) {
   return (
@@ -317,6 +319,9 @@ function PropsPanel({ node, onChange, onDelete }) {
   const def = NODE_TYPES[node.data.tipo] || {};
   const cfg = node.data.config || {};
   const set = (k, v) => onChange({ ...node.data, config:{ ...cfg, [k]:v } });
+  // Apagar a chave é o que faz o campo voltar a HERDAR do perfil — gravar
+  // `null`/'' seria um override de valor vazio, que é coisa diferente.
+  const limpar = (k) => { const { [k]: _, ...resto } = cfg; onChange({ ...node.data, config: resto }); };
   const bts = Array.isArray(cfg.botoes)?cfg.botoes:[];
   // Contextos selecionáveis = prompts existentes, menos os blocos injetáveis (regras/estilo).
   const contextos = promptsIA.filter(p => !['regras', 'estilo'].includes(p.slug));
@@ -373,7 +378,18 @@ function PropsPanel({ node, onChange, onDelete }) {
         {node.data.tipo==='listar_planos'&&<Fld label="Cidade" hint="Preenche: planos.lista"><input value={cfg.cidade||''} onChange={e=>set('cidade',e.target.value)} placeholder="{{cliente.cidade}}" style={IS}/></Fld>}
 
         {node.data.tipo==='ia_responde' && (() => {
-          const toolsAtivas = Array.isArray(cfg.tools_ativas) ? cfg.tools_ativas : IA_TOOLS_DEFAULT;
+          // A tela mostrava o default LOCAL como se fosse o que ia rodar: "Máx.
+          // turnos 6" ao lado de um perfil que diz 25, e `IA_TOOLS_DEFAULT` no
+          // lugar das tools do perfil. Pior, marcar UMA caixinha serializava a
+          // lista exibida inteira como override permanente do nó — foi assim
+          // que um nó ficou congelado sem `buscar_conhecimento`. A precedência
+          // de verdade mora em `herancaIaResponde`, espelhada do motor.
+          const perfilSel = perfisIA.find(p => p.slug === cfg.perfil) || null;
+          const her = herancaIaResponde(cfg, perfilSel);
+          const deOndeVem = (c) => c.origem === 'no' ? null
+            : c.origem === 'perfil' ? `herdado do perfil ${perfilSel?.nome || cfg.perfil}`
+            : 'padrão do motor';
+          const toolsAtivas = her.tools.valor;
           const toggleTool = (id) => {
             const novas = toolsAtivas.includes(id)
               ? toolsAtivas.filter(t => t !== id)
@@ -391,7 +407,7 @@ function PropsPanel({ node, onChange, onDelete }) {
               </Fld>
               <Fld label="Contexto (prompt base)" hint="Puxa o prompt da aba Prompts IA — o coração da IA neste nó">
                 <select value={cfg.contexto||''} onChange={e=>set('contexto',e.target.value)} style={{...IS,cursor:'pointer'}}>
-                  <option value="">— padrão (Outros/Fallback) —</option>
+                  <option value="">{her.contexto.origem === 'perfil' ? `— ${deOndeVem(her.contexto)}: ${her.contexto.valor} —` : '— padrão (Outros/Fallback) —'}</option>
                   {contextos.map(p => <option key={p.slug} value={p.slug}>{p.nome} ({p.slug})</option>)}
                   {cfg.contexto && !contextos.some(p=>p.slug===cfg.contexto) && (
                     <option value={cfg.contexto}>⚠ atual (não é um prompt válido): {cfg.contexto}</option>
@@ -400,7 +416,7 @@ function PropsPanel({ node, onChange, onDelete }) {
               </Fld>
               <Fld label="Procedimento (playbook)" hint="Injeta o roteiro oficial no prompt a cada turno, com as etapas já cumpridas marcadas. Só playbooks PUBLICADOS valem em produção.">
                 <select value={cfg.playbook||''} onChange={e=>set('playbook',e.target.value)} style={{...IS,cursor:'pointer'}}>
-                  <option value="">— sem procedimento —</option>
+                  <option value="">{her.playbook.origem === 'perfil' ? `— ${deOndeVem(her.playbook)}: ${her.playbook.valor} —` : '— sem procedimento —'}</option>
                   {playbooks.map(p => <option key={p.id} value={p.slug}>{p.nome}{p.status!=='publicado'?` (${p.status})`:''}</option>)}
                   {cfg.playbook && !playbooks.some(p=>p.slug===cfg.playbook) && (
                     <option value={cfg.playbook}>⚠ atual (não existe mais): {cfg.playbook}</option>
@@ -427,9 +443,27 @@ function PropsPanel({ node, onChange, onDelete }) {
                 </select>
               </Fld>
               <Fld label="Máx. turnos" hint="Cada troca cliente↔IA conta. Cadastro comercial precisa de ~25. Após este número → porta max_turnos.">
-                <input type="number" value={cfg.max_turnos ?? cfg.max_turns ?? 6} onChange={e=>set('max_turnos',parseInt(e.target.value)||6)} style={{...IS,width:80}}/>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  {/* Vazio = herda. O `6` de antes era o default do INPUT, não o
+                      valor efetivo: com perfil Comercial a tela dizia 6 e o
+                      motor rodava 25. Agora o herdado é placeholder. */}
+                  <input type="number" value={cfg.max_turnos ?? cfg.max_turns ?? ''} placeholder={String(her.max_turnos.valor)}
+                    onChange={e=>e.target.value===''?limpar('max_turnos'):set('max_turnos',parseInt(e.target.value)||0)} style={{...IS,width:80}}/>
+                  {her.max_turnos.origem === 'no'
+                    ? (perfilSel && <button onClick={()=>{limpar('max_turnos');limpar('max_turns');}} style={BTN_HERDAR}>↩ herdar</button>)
+                    : <span style={{fontSize:10,color:'rgba(255,255,255,.35)'}}>{deOndeVem(her.max_turnos)}</span>}
+                </div>
               </Fld>
-              <Fld label="Tools ativas" hint="Marque quais ferramentas a IA pode usar neste nó">
+              <Fld label="Tools ativas" hint="Marque quais ferramentas a IA pode usar neste nó. Memória e base de conhecimento entram sempre, marcadas ou não — nó esquecido não pode virar IA que inventa.">
+                <div style={{fontSize:10.5,marginBottom:5,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                  {her.tools.origem === 'no' ? (
+                    <>
+                      <span style={{color:'#ff9f43'}}>⬤ lista própria deste nó</span>
+                      <button onClick={()=>limpar('tools_ativas')} style={BTN_HERDAR}>↩ herdar</button>
+                      <span style={{color:'rgba(255,255,255,.3)'}}>congelada: tool nova do sistema não entra sozinha.</span>
+                    </>
+                  ) : <span style={{color:'rgba(255,255,255,.35)'}}>{deOndeVem(her.tools)} — mexer aqui cria uma lista própria deste nó.</span>}
+                </div>
                 <div style={{display:'flex',flexDirection:'column',gap:4,padding:'6px',background:'rgba(255,255,255,.03)',borderRadius:6,border:'1px solid rgba(255,255,255,.06)'}}>
                   {cats.map(cat => (
                     <div key={cat} style={{marginBottom:3}}>
