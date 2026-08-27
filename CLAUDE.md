@@ -324,6 +324,8 @@ Fluxo de referência pronto e validado: [apps/api/examples/fluxo-netgo-v2.json](
 - **`estado.aguardando` não distingue quem acordou o fluxo** — por isso a FASE 4 criou `aguardandoTimer` e o `tipo:'timer'`. Ao adicionar OUTRA forma de retomada (SLA, callback de provedor), repita o padrão: campo próprio + tipo próprio. `'sistema'` faz o `ia_responde` pausar e `'texto'` vazio faz a Anthropic recusar — os dois já foram bugs.
 - **Todo efeito colateral novo do motor precisa do gate `if (!ctx.sandbox)`**. O sandbox usa ids `sandbox:<uuid>`/`share:<uuid>`, que não são uuid — `estadoStore` tem guarda (`ehUuid`), `agendarTimer` e o outbox também; tabela nova não terá.
 
+- **A tela de Chat recebe `agente_nome`, `fila_nome` e `fila_cor` em toda listagem — e historicamente jogava fora.** `CONVERSA_FIELDS` no `conversaRepository` já faz os dois `leftJoin` de propósito (o comentário no arquivo explica: sem eles a tela só teria o `fila_id`). Antes de propor rota nova para a tela de atendimento, **confira o que a listagem já manda**: o redesenho do Chat de 2026-08-27 não precisou de uma linha de API. Detalhe em [brain/work/tasks/2026-08-27_redesenho-do-chat.md](brain/work/tasks/2026-08-27_redesenho-do-chat.md).
+
 ## Operando em produção (VPS + logs)
 
 O deploy é Coolify numa VPS acessível por `ssh workflow-vps` — **sempre com `-o ClearAllForwardings=yes`**, senão os `LocalForward` do `~/.ssh/config` colidem com um túnel já aberto e a conexão morre antes do comando. O container do app é o `vdxpjv…` mais recente (`docker ps`), e o Postgres é o host que o `DATABASE_URL` dele aponta (`docker exec … psql -U postgres`).
