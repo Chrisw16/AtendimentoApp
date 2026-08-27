@@ -21,7 +21,7 @@ import styles from './Sidebar.module.css';
  * Os cinco grupos são cinco perguntas diferentes:
  *   Atendimento — o que eu abro COM o cliente na linha
  *   Desempenho  — como fomos (auditoria interna + nota do cliente, juntas)
- *   Automação   — como a IA atende quando não tem gente
+ *   Automação   — como a IA atende quando não tem gente, e do que ela se alimenta
  *   Operação    — quem atende e por onde a mensagem entra
  *   Sistema     — a casa
  *
@@ -39,7 +39,6 @@ const NAV = [
       { to: '/chat',        icon: MessageSquare,   label: 'Chat' },
       { to: '/historico',   icon: Clock,           label: 'Histórico' },
       { to: '/clientes',    icon: Building,        label: 'Clientes' },
-      { to: '/knowledge',   icon: BookOpen,        label: 'Conhecimento' },
       { to: '/cobertura',   icon: Map,             label: 'Cobertura' },
     ],
   },
@@ -57,6 +56,12 @@ const NAV = [
     items: [
       { to: '/fluxos',      icon: GitBranch,       label: 'Fluxos',        adminOnly: true },
       { to: '/playbooks',   icon: ListChecks,      label: 'Procedimentos', adminOnly: true },
+      // Conhecimento mora aqui porque é INSUMO DA IA, não tela de consulta do
+      // agente: é dela que sai a resposta em vez de o modelo inventar
+      // procedimento (FASE 7). Fica ao lado de Procedimentos — as duas são
+      // conteúdo que a IA consome; Prompts IA é como ela fala, e vem depois.
+      // ⚠️ É o único item não-adminOnly do grupo: o agente também lê a base.
+      { to: '/knowledge',   icon: BookOpen,        label: 'Conhecimento' },
       { to: '/prompts-ia',  icon: Bot,             label: 'Prompts IA',    adminOnly: true },
     ],
   },
