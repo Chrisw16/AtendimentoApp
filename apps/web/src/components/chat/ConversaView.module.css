@@ -111,6 +111,9 @@
   margin-bottom: 2px;
 }
 .msgMinha { justify-content: flex-end; }
+/* Usada no JSX desde sempre e nunca definida aqui — a mensagem da IA não
+   recebia estilo nenhum. */
+.msgIA { justify-content: flex-start; }
 
 /* ── BUBBLE ──────────────────────────────────────────────────── */
 .msg {
@@ -131,8 +134,11 @@
 }
 
 .msgBubbleIA {
-  background: rgba(59,158,255,0.08);
-  border-color: rgba(59,158,255,0.2);
+  /* Era `rgba(59,158,255,…)`, o azul do tema escuro antigo — e ele brigava com
+     o roxo `--status-ia` que a bolinha de status da lista usa para dizer
+     exatamente a mesma coisa ("isto é a IA"). Agora é o mesmo tom nos dois. */
+  background: color-mix(in srgb, var(--status-ia) 8%, transparent);
+  border-color: color-mix(in srgb, var(--status-ia) 22%, transparent);
 }
 
 .sender {

@@ -120,6 +120,11 @@ export const chatApi = {
   transferirFila:  (id, body)    => api.post(`/chat/conversas/${id}/transferir-fila`, body),
   fila:            ()            => api.get('/chat/fila'),
   nota:            (id, body)    => api.post(`/chat/conversas/${id}/notas`, body),
+  // O GET existia no backend desde a 001 e não tinha nem cliente nem tela.
+  notas:           (id)          => api.get(`/chat/conversas/${id}/notas`),
+  // `PUT /chat/modo` existia desde sempre e não tinha cliente: o botão IA/Humano
+  // mudava só a cor no Zustand e o backend seguia no modo antigo.
+  setModo:         (modo)        => api.put('/chat/modo', { modo }),
   reagir:          (msgId, body) => api.post(`/chat/mensagens/${msgId}/reacao`, body),
   apagar:          (msgId)       => api.delete(`/chat/mensagens/${msgId}`),
   respostasRapidas: ()           => api.get('/chat/respostas-rapidas'),

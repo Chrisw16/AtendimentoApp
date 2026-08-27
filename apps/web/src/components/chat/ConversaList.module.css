@@ -100,171 +100,25 @@
 .search:focus { border-color: var(--accent-border); }
 .search::placeholder { color: var(--text-tertiary); }
 
-/* ── FILTROS ─────────────────────────────────────────────────── */
-.filtros {
-  display: flex;
-  gap: 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.filtros::-webkit-scrollbar { display: none; }
-
-.filtro {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all var(--duration-fast);
-}
-.filtro:hover { background: var(--bg-elevated); color: var(--text-secondary); }
-.filtroAtivo  { background: var(--accent-muted); color: var(--accent); }
-
-.count {
-  font-size: 10px;
-  background: var(--bg-overlay);
-  border-radius: var(--radius-full);
-  padding: 0 4px;
-  min-width: 16px;
-  text-align: center;
-}
-.filtroAtivo .count { background: rgba(0,229,160,0.15); }
-
-/* ── LISTA ───────────────────────────────────────────────────── */
+/* ── LISTA ──
+   Os filtros em aba, o cartão, o avatar e o badge saíram daqui: aba virou
+   `GrupoConversas` e o cartão virou `ConversaCard`, com CSS próprio. */
 .lista {
   flex: 1;
   overflow-y: auto;
-  padding: 4px;
+  overflow-x: hidden;
+  padding-bottom: var(--space-2);
 }
 
 .empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 40px 20px;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-10) var(--space-4);
   color: var(--text-tertiary);
   font-size: var(--text-sm);
   text-align: center;
 }
-.emptyIcon { opacity: 0.4; }
-
-/* ── ITEM ────────────────────────────────────────────────────── */
-.item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px;
-  border-radius: var(--radius-md);
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--duration-fast);
-}
-.item:hover   { background: var(--bg-elevated); }
-.itemAtivo    { background: var(--accent-muted) !important; }
-
-/* ── AVATAR ──────────────────────────────────────────────────── */
-.avatar {
-  position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  flex-shrink: 0;
-  overflow: visible;
-}
-.avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: var(--radius-md);
-}
-
-.dot {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  border: 2px solid var(--bg-surface);
-}
-.dotIa      { background: var(--status-ia); }
-.dotWaiting { background: var(--status-waiting); }
-.dotActive  { background: var(--status-active); }
-.dotClosed  { background: var(--status-closed); }
-
-.itemAtivo .dot { border-color: var(--accent-muted); }
-
-/* ── CONTENT ─────────────────────────────────────────────────── */
-.content {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.row1, .row2 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-}
-
-.nome {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-.itemAtivo .nome { color: var(--accent); }
-
-.hora {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.preview {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-.badge {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  background: var(--accent);
-  border-radius: var(--radius-full);
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-inverse);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
+.emptyIcon { opacity: .35; }

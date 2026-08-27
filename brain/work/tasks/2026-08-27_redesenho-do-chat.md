@@ -16,9 +16,14 @@ tags: [work, task, chat, ux, frontend]
 **Iniciado em 2026-08-27.** Origem: o operador mandou prints do painel que a
 equipe usa hoje (TSMX) pedindo que a nossa tela ficasse tão fácil quanto.
 
-## O achado que define o tamanho da tarefa
+## O achado que definiu o tamanho da tarefa
 
-**É frontend puro. Nenhuma linha de API muda.**
+**Quase tudo já vinha pronto do backend — a tela é que descartava.**
+
+(O "quase" custou três correções de API, todas achadas pela análise e listadas
+mais abaixo. A premissa de partida — "isto é frontend puro" — estava errada, e
+errada de um jeito útil: foi tentar montar a lateral que expôs defeitos que
+ninguém tinha visto porque a aba que os mostraria nunca era aberta.)
 
 `conversaRepository.CONVERSA_FIELDS` já devolve `agente_nome`, `fila_nome` e
 `fila_cor` em **toda** listagem — o comentário no próprio arquivo diz por que

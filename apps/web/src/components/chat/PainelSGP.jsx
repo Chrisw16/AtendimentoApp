@@ -130,7 +130,10 @@ export default function PainelSGP({ conversa, ficha, contrato, contratos, onTroc
   const id  = ficha?.identidade || {};
 
   return (
-    <div className={s.pgSgpOverlay} onClick={onFechar}>
+    // `stopPropagation`: desde que o Cliente 360 virou conteúdo de gaveta, este
+    // drawer é DESCENDENTE de outro overlay. Sem parar aqui, fechar o painel do
+    // SGP borbulhava e fechava a gaveta do assinante junto.
+    <div className={s.pgSgpOverlay} onClick={e => { e.stopPropagation(); onFechar(); }}>
       <aside className={s.pgSgpDrawer} onClick={e => e.stopPropagation()} role="dialog" aria-label="Painel do assinante">
         <header className={s.pgSgpHeader}>
           <div className={s.pgSgpHeaderTxt}>

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { filasApi, cliente360Api, api } from '../../lib/api';
+import { cliente360Api, api } from '../../lib/api';
 import { useStore } from '../../store';
 import {
   Phone, Mail, MapPin, Clock, User, Tag, Wifi, WifiOff, Activity, Bot,
-  ChevronDown, ExternalLink, AlertCircle, AlertTriangle, X, Stethoscope, FileText,
-  LayoutPanelLeft, Landmark, Zap, Send, Download, History, MessageSquare, Signal,
+  ChevronDown, AlertCircle, AlertTriangle, Stethoscope, FileText,
+  LayoutPanelLeft, Landmark, Zap, Send, Download, History, Signal,
 } from 'lucide-react';
 import Button from '../ui/Button';
 import PainelSGP from './PainelSGP';
@@ -75,11 +75,11 @@ function ContextCard({ card }) {
 const brl = (v) => `R$ ${(Number(v) || 0).toFixed(2).replace('.', ',')}`;
 
 export default function ConversaInfo({ conversa, chat }) {
-  const { encerrar, transferirFila, enviarMensagem } = chat;
+  const { enviarMensagem } = chat;
   const toast = useStore(s => s.toast);
-  const [showEncerrar, setShowEncerrar] = useState(false);
-  const [motivo, setMotivo] = useState('');
-  const [filas, setFilas]   = useState([]);
+  // Encerrar e transferir saíram daqui para o `MenuAcoes`, que vive no cartão e
+  // no header: eram as duas ações mais usadas do dia e estavam no FIM de uma
+  // coluna que só aparecia depois de selecionar a conversa e rolar até o pé.
   const [saida, setSaida]   = useState(null);   // resultado da última ação/diagnóstico
   const [painelAberto, setPainelAberto] = useState(false);
   // Qual contrato o painel está olhando. `null` = o principal da ficha. Zera ao
@@ -91,11 +91,6 @@ export default function ConversaInfo({ conversa, chat }) {
   const [finAberto, setFinAberto] = useState(true);
 
   useEffect(() => { setContratoId(null); setPainelAberto(false); setSaida(null); }, [conversa.id]);
-
-  useEffect(() => {
-    if (conversa.status === 'encerrada') return;
-    filasApi.list().then(setFilas).catch(() => setFilas([]));
-  }, [conversa.status]);
 
   const { data: caps } = useQuery({
     queryKey: ['cliente360-caps'],
@@ -177,29 +172,8 @@ export default function ConversaInfo({ conversa, chat }) {
     toast('PIX enviado ao cliente', 'success');
   };
 
-  const confirmarEncerrar = () => {
-    encerrar(conversa.id, motivo);
-    setShowEncerrar(false);
-    setMotivo('');
-  };
-
   return (
     <aside className={styles.panel}>
-      {/* ── CONTATO ── */}
-      <div className={styles.contactHeader}>
-        <div className={styles.contactAvatar}>{(id.nome || conversa.nome || '?').charAt(0).toUpperCase()}</div>
-        <div className={styles.contactInfo}>
-          <p className={styles.contactNome}>{id.nome || conversa.nome || 'Sem nome'}</p>
-          <p className={styles.contactTel}>{id.telefone || conversa.telefone}</p>
-        </div>
-        <div className={styles.statusBadge} data-status={conversa.status}>
-          {conversa.status === 'ia'         && 'IA'}
-          {conversa.status === 'aguardando' && 'Fila'}
-          {conversa.status === 'ativa'      && 'Agente'}
-          {conversa.status === 'encerrada'  && 'Fechado'}
-        </div>
-      </div>
-
       <div className={styles.scroll}>
         {/* ── HANDOFF DA IA (§74) ── */}
         {handoff && (
@@ -442,53 +416,6 @@ export default function ConversaInfo({ conversa, chat }) {
           {ficha && !ficha.conversas_anteriores && <p className={styles.nota}>Primeiro contato deste número.</p>}
         </Section>
 
-        {/* ── AÇÕES DA CONVERSA ── */}
-        {conversa.status !== 'encerrada' && (
-          <Section title="Conversa" icon={MessageSquare} defaultOpen>
-            <div className={styles.acoes}>
-              <Button variant="danger" size="sm" icon={X} onClick={() => setShowEncerrar(true)} className={styles.acaoBtn}>
-                Encerrar conversa
-              </Button>
-            </div>
-
-            {filas.length > 0 && (
-              <div className={styles.filaWrap}>
-                <label className={styles.filaLabel} htmlFor="fila-destino">Transferir para fila</label>
-                <select
-                  id="fila-destino"
-                  className={styles.filaSelect}
-                  value=""
-                  onChange={e => e.target.value && transferirFila(conversa.id, e.target.value)}
-                >
-                  <option value="">Escolher fila…</option>
-                  {filas.filter(f => f.ativa && f.id !== conversa.fila_id).map(f => (
-                    <option key={f.id} value={f.id}>
-                      {f.nome}{f.aguardando ? ` (${f.aguardando} na fila)` : ''}
-                    </option>
-                  ))}
-                </select>
-                {conversa.fila_nome && <p className={styles.filaAtual}>Fila atual: {conversa.fila_nome}</p>}
-              </div>
-            )}
-
-            {showEncerrar && (
-              <div className={styles.encerrarForm}>
-                <p className={styles.encerrarTitle}>Confirmar encerramento</p>
-                <textarea
-                  className={styles.encerrarInput}
-                  placeholder="Motivo (opcional)"
-                  value={motivo}
-                  onChange={e => setMotivo(e.target.value)}
-                  rows={2}
-                />
-                <div className={styles.encerrarActions}>
-                  <Button variant="ghost" size="sm" onClick={() => setShowEncerrar(false)}>Cancelar</Button>
-                  <Button variant="danger" size="sm" onClick={confirmarEncerrar}>Encerrar</Button>
-                </div>
-              </div>
-            )}
-          </Section>
-        )}
       </div>
 
       {painelAberto && (

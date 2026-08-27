@@ -5,3 +5,7 @@
   background: var(--bg-base);
 }
 
+
+/* A régua tem o próprio `flex-shrink: 0` (ReguaIcones.module.css) e a gaveta é
+   `position: fixed`, fora da conta do flex — é por isso que a conversa fica
+   com a largura toda. */

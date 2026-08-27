@@ -1,10 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import {
   Send, Paperclip, Smile, Bot, User, MoreVertical,
-  CheckCheck, Check, Clock, AlertCircle, ChevronDown,
+  CheckCheck, Check, Clock, AlertCircle, ChevronDown, X,
 } from 'lucide-react';
 import Button from '../ui/Button';
-import Copiloto from './Copiloto';
+import MenuAcoes from './MenuAcoes';
 import styles from './ConversaView.module.css';
 
 /* ── HELPERS ─────────────────────────────────────────────────── */
@@ -134,9 +134,9 @@ function MessageInput({ onEnviar, disabled, textoExterno, onConsumirExterno }) {
 }
 
 /* ── CONVERSA VIEW ───────────────────────────────────────────── */
-export default function ConversaView({ chat, conversa }) {
-  const { mensagens, conversaAtiva, enviarMensagem, assumir, devolverIA } = chat;
-  const [textoCopiloto, setTextoCopiloto] = useState('');
+export default function ConversaView({ chat, conversa, filas = [], textoExterno, onConsumirExterno }) {
+  const { mensagens, conversaAtiva, enviarMensagem, assumir, devolverIA,
+          transferirFila, encerrar } = chat;
   const listRef    = useRef(null);
   const atBottom   = useRef(true);
   const [showScroll, setShowScroll] = useState(false);
@@ -209,7 +209,22 @@ export default function ConversaView({ chat, conversa }) {
               Devolver IA
             </Button>
           )}
-          <Button variant="ghost" size="sm" icon={MoreVertical} aria-label="Mais opções" />
+          {/* Finalizar sai do fim da coluna da direita e vem para onde a mão
+              já está. O ⋮ era um <Button> sem onClick — placeholder morto. */}
+          {!encerrada && (
+            <>
+              <MenuAcoes conversa={conversa} filas={filas} modoInicial="finalizar"
+                onTransferirFila={transferirFila} onDevolverIA={devolverIA} onFinalizar={encerrar}
+                trigger={(props) => (
+                  <Button variant="danger" size="sm" icon={X} {...props}>Finalizar</Button>
+                )} />
+              <MenuAcoes conversa={conversa} filas={filas}
+                onTransferirFila={transferirFila} onDevolverIA={devolverIA} onFinalizar={encerrar}
+                trigger={(props) => (
+                  <Button variant="ghost" size="sm" icon={MoreVertical} aria-label="Mais opções" {...props} />
+                )} />
+            </>
+          )}
         </div>
       </div>
 
@@ -229,22 +244,13 @@ export default function ConversaView({ chat, conversa }) {
         </button>
       )}
 
-      {/* ── COPILOTO (FASE 10) ── */}
-      {!encerrada && conversa.status === 'ativa' && (
-        <Copiloto
-          conversa={conversa}
-          onInserir={setTextoCopiloto}
-          onEnviar={(t) => enviarMensagem(conversa.id, t)}
-        />
-      )}
-
       {/* ── INPUT ── */}
       {!encerrada ? (
         <MessageInput
           onEnviar={(texto) => enviarMensagem(conversa.id, texto)}
           disabled={false}
-          textoExterno={textoCopiloto}
-          onConsumirExterno={() => setTextoCopiloto('')}
+          textoExterno={textoExterno}
+          onConsumirExterno={onConsumirExterno}
         />
       ) : (
         <div className={styles.encerrada}>Conversa encerrada</div>

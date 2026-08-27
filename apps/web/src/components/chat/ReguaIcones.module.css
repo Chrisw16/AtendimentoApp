@@ -1,0 +1,31 @@
+.regua {
+  flex-shrink: 0;
+  width: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+}
+
+.botao {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease),
+              background var(--duration-fast) var(--ease);
+}
+.botao:hover:not(:disabled) { background: var(--bg-overlay); color: var(--text-secondary); }
+.botao:disabled { opacity: .35; cursor: default; }
+
+.botaoAtivo,
+.botaoAtivo:hover { background: var(--accent-muted); color: var(--accent); border-color: var(--accent-border); }

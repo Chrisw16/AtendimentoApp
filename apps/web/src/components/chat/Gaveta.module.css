@@ -1,0 +1,64 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: flex-end;
+  animation: surge var(--duration-fast) var(--ease);
+}
+@keyframes surge { from { opacity: 0; } }
+
+.gaveta {
+  width: min(390px, 100vw);
+  height: 100%;
+  background: var(--bg-base);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  animation: desliza var(--duration-base) var(--ease);
+}
+@keyframes desliza { from { transform: translateX(28px); opacity: .6; } }
+
+.header {
+  flex-shrink: 0;
+  height: var(--topbar-height);
+  padding: 0 var(--space-2) 0 var(--space-4);
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text-active);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.titulo {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.fechar {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--sidebar-text);
+  cursor: pointer;
+}
+.fechar:hover { background: var(--sidebar-hover); color: var(--sidebar-text-active); }
+
+.corpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Em flex column todo filho encolhe por padrão, e com overflow no pai o cartão
+   é DECEPADO em vez de rolado. Regra para todos, não cinco esquecíveis. */
+.corpo > * { flex-shrink: 0; }
