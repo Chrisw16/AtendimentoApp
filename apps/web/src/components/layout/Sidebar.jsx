@@ -9,37 +9,70 @@ import {
 import { useStore } from '../../store';
 import styles from './Sidebar.module.css';
 
+/**
+ * A navegação é agrupada por O QUE VOCÊ ESTÁ FAZENDO, não por onde a tela mora.
+ *
+ * O agrupamento anterior tinha um grupo "Configuração" com 11 dos 17 itens —
+ * Dashboard e Analytics inclusive, que não configuram coisa nenhuma. Grupo que
+ * recebe tudo não agrupa nada: vira a lista original com um título em cima. E
+ * o título "Configuração" abrigava um item "Configurações", que faz o operador
+ * ler duas vezes para achar o que já tinha achado.
+ *
+ * Os cinco grupos são cinco perguntas diferentes:
+ *   Atendimento — o que eu abro COM o cliente na linha
+ *   Desempenho  — como fomos (auditoria interna + nota do cliente, juntas)
+ *   Automação   — como a IA atende quando não tem gente
+ *   Operação    — quem atende e por onde a mensagem entra
+ *   Sistema     — a casa
+ *
+ * A ordem dos grupos segue FREQUÊNCIA de uso, não ordem de montagem: quem
+ * mexe em fluxo mexe toda semana, quem mexe em canal mexeu uma vez.
+ *
+ * ⚠️ Grupo que fica vazio depois do filtro `adminOnly` não é renderizado
+ * (`.filter(s => s.items.length > 0)` mais abaixo) — sem isso, um agente
+ * comum veria três cabeçalhos de grupo sem nada dentro.
+ */
 const NAV = [
   {
     group: 'Atendimento',
     items: [
-      { to: '/chat',       icon: MessageSquare, label: 'Chat' },
-      { to: '/historico',  icon: Clock,         label: 'Histórico' },
-      { to: '/satisfacao', icon: Star,          label: 'Satisfação' },
-      { to: '/knowledge',  icon: BookOpen,      label: 'Conhecimento' },
+      { to: '/chat',        icon: MessageSquare,   label: 'Chat' },
+      { to: '/historico',   icon: Clock,           label: 'Histórico' },
+      { to: '/clientes',    icon: Building,        label: 'Clientes' },
+      { to: '/knowledge',   icon: BookOpen,        label: 'Conhecimento' },
+      { to: '/cobertura',   icon: Map,             label: 'Cobertura' },
     ],
   },
   {
-    group: 'Configuração',
+    group: 'Desempenho',
     items: [
-      { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard',  adminOnly: true },
-      { to: '/agentes',    icon: Users,           label: 'Agentes',    adminOnly: true },
-      { to: '/filas',      icon: Inbox,           label: 'Filas',      adminOnly: true },
-      { to: '/fluxos',     icon: GitBranch,       label: 'Fluxos',     adminOnly: true },
-      { to: '/playbooks',  icon: ListChecks,      label: 'Procedimentos', adminOnly: true },
-      { to: '/canais',     icon: Zap,             label: 'Canais',     adminOnly: true },
-      { to: '/qualidade',  icon: ClipboardCheck,  label: 'Qualidade',  adminOnly: true },
-      { to: '/analytics',  icon: BarChart2,       label: 'Analytics',  adminOnly: true },
-      { to: '/prompts-ia',   icon: Bot,              label: 'Prompts IA',    adminOnly: true },
-      { to: '/configuracoes',icon: Settings,         label: 'Configurações', adminOnly: true },
-      { to: '/saude',        icon: Activity,         label: 'Saúde do Sistema', adminOnly: true },
+      { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard',  adminOnly: true },
+      { to: '/analytics',   icon: BarChart2,       label: 'Analytics',  adminOnly: true },
+      { to: '/qualidade',   icon: ClipboardCheck,  label: 'Qualidade',  adminOnly: true },
+      { to: '/satisfacao',  icon: Star,            label: 'Satisfação' },
     ],
   },
   {
-    group: 'Operações',
+    group: 'Automação',
     items: [
-      { to: '/clientes',   icon: Building, label: 'Clientes' },
-      { to: '/cobertura',  icon: Map,      label: 'Cobertura' },
+      { to: '/fluxos',      icon: GitBranch,       label: 'Fluxos',        adminOnly: true },
+      { to: '/playbooks',   icon: ListChecks,      label: 'Procedimentos', adminOnly: true },
+      { to: '/prompts-ia',  icon: Bot,             label: 'Prompts IA',    adminOnly: true },
+    ],
+  },
+  {
+    group: 'Operação',
+    items: [
+      { to: '/agentes',     icon: Users,           label: 'Agentes', adminOnly: true },
+      { to: '/filas',       icon: Inbox,           label: 'Filas',   adminOnly: true },
+      { to: '/canais',      icon: Zap,             label: 'Canais',  adminOnly: true },
+    ],
+  },
+  {
+    group: 'Sistema',
+    items: [
+      { to: '/configuracoes', icon: Settings,      label: 'Configurações',     adminOnly: true },
+      { to: '/saude',         icon: Activity,      label: 'Saúde do Sistema',  adminOnly: true },
     ],
   },
 ];
@@ -80,7 +113,7 @@ export default function Sidebar() {
   const { role, user } = useStore(s => ({ role: s.role, user: s.user }));
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(
-    new Set(['Atendimento', 'Configuração', 'Operações'])
+    new Set(['Atendimento', 'Desempenho', 'Automação', 'Operação', 'Sistema'])
   );
 
   const toggleGroup = (group) => {
