@@ -64,7 +64,7 @@ dashboardRouter.get('/kpis', asyncHandler(async (req, res) => {
         -- FASE 12: era "status='encerrada' AND agente_id IS NULL" — e o
         -- encerrar() ZERA o agente_id, então TODA conversa encerrada entrava
         -- aqui e a "resolução IA" dava ~100% por construção. O sinal honesto
-        -- é: existiu mensagem de agente nesta conversa?
+        -- é: existiu mensagem de agente nesta conversa.
         COUNT(*) FILTER (WHERE status = 'encerrada' AND NOT EXISTS (
           SELECT 1 FROM mensagens m WHERE m.conversa_id = conversas.id AND m.origem = 'agente')) as so_ia
       `)).first(),

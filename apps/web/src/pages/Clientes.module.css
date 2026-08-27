@@ -219,32 +219,51 @@
 .infoLabel { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
 .infoValue { font-size: var(--text-xs); color: var(--text-primary); word-break: break-word; }
 
-.erpLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--text-xs);
-  color: var(--accent);
-  margin-top: 4px;
-  transition: opacity var(--duration-fast);
-}
-.erpLink:hover { opacity: 0.75; }
-
-/* ── CPE ─────────────────────────────────────────────────────── */
-.cpeRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+/* ── HISTÓRICO DE CONVERSAS ──────────────────────────────────── */
+.conversaRow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
   background: var(--bg-elevated);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  cursor: default;
+  transition: border-color 0.12s;
 }
-.cpeIcon  { color: var(--text-tertiary); flex-shrink: 0; }
-.cpeModel { font-size: var(--text-xs); font-weight: 500; color: var(--text-primary); }
-.cpeSn    { font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono); }
-.cpeDot   { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-left: auto; }
-.cpeOnline  { background: var(--success); }
-.cpeOffline { background: var(--text-tertiary); }
+
+.conversaTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.conversaProtocolo {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.conversaData { font-size: 10px; color: var(--text-tertiary); }
+.conversaPreview {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  margin: 3px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conversaBottom {
+  display: flex;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.emAtendimento {
+  font-size: 10px;
+  color: var(--success);
+  white-space: nowrap;
+}
 
 /* ── SKELETON ────────────────────────────────────────────────── */
 .skelRow { display: flex; align-items: center; gap: 12px; padding: 12px; }

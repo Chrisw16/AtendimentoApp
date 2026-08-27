@@ -241,24 +241,12 @@ export const agentesApi = {
   online: ()           => api.get('/agentes/online'),
 };
 
-// ── ENDPOINTS — CLIENTES ──────────────────────────────────────────
+// ── ENDPOINTS — CLIENTES (histórico de contato) ───────────────────
+// `create`/`update` foram removidos: apontavam para rotas que nunca
+// existiram. O cadastro do assinante é do SGP, não nosso.
 export const clientesApi = {
   list:   (params)     => api.get('/clientes?' + new URLSearchParams(params)),
   get:    (id)         => api.get(`/clientes/${id}`),
-  create: (body)       => api.post('/clientes', body),
-  update: (id, body)   => api.put(`/clientes/${id}`, body),
-  buscar: (q)          => api.get(`/clientes/buscar?q=${encodeURIComponent(q)}`),
-};
-
-// ── ENDPOINTS — OCORRÊNCIAS ───────────────────────────────────────
-export const ocorrenciasApi = {
-  list:   (params)     => api.get('/ocorrencias?' + new URLSearchParams(params)),
-  get:    (id)         => api.get(`/ocorrencias/${id}`),
-  create: (body)       => api.post('/ocorrencias', body),
-  update: (id, body)   => api.put(`/ocorrencias/${id}`, body),
-  fechar: (id, body)   => api.post(`/ocorrencias/${id}/fechar`, body),
-  nota:   (id, body)   => api.post(`/ocorrencias/${id}/notas`, body),
-  tipos:  ()           => api.get('/ocorrencias/tipos'),
 };
 
 // ── ENDPOINTS — DASHBOARD ─────────────────────────────────────────

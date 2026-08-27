@@ -38,4 +38,4 @@ Pesquisa de satisfação: KPIs (nota média, NPS%, total, com comentário), dist
 
 ## See Also
 
-- [[Telas e Navegação]] · [[Abas de Configuração]] · [[Abas de Operações e Infraestrutura]]
+- [[Telas e Navegação]] · [[Abas de Configuração]] · [[Abas de Operações]]

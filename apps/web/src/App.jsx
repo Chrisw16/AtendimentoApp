@@ -24,10 +24,7 @@ const Playbooks   = lazy(() => import('./pages/Playbooks'));
 const Qualidade   = lazy(() => import('./pages/Qualidade'));
 const Saude       = lazy(() => import('./pages/Saude'));
 const Clientes    = lazy(() => import('./pages/Clientes'));
-const Ocorrencias = lazy(() => import('./pages/Ocorrencias'));
-const OrdensServico = lazy(() => import('./pages/OrdensServico'));
 const Cobertura   = lazy(() => import('./pages/Cobertura'));
-const MonitorRede = lazy(() => import('./pages/MonitorRede'));
 const Configuracoes = lazy(() => import('./pages/Configuracoes'));
 const PromptsIA     = lazy(() => import('./pages/PromptsIA'));
 const ChatTeste     = lazy(() => import('./pages/ChatTeste'));
@@ -105,10 +102,7 @@ function AppLayout() {
               <Route path="/saude"        element={<AdminRoute><Saude /></AdminRoute>} />
               <Route path="/analytics"    element={<AdminRoute><Analytics /></AdminRoute>} />
               <Route path="/clientes"     element={<Clientes />} />
-              <Route path="/ocorrencias"  element={<Ocorrencias />} />
-              <Route path="/ordens"       element={<OrdensServico />} />
               <Route path="/cobertura"    element={<Cobertura />} />
-              <Route path="/rede"         element={<AdminRoute><MonitorRede /></AdminRoute>} />
               <Route path="/configuracoes" element={<AdminRoute><Configuracoes /></AdminRoute>} />
               <Route path="/prompts-ia"     element={<AdminRoute><PromptsIA /></AdminRoute>} />
               <Route path="*"             element={<SmartRedirect />} />
