@@ -58,6 +58,7 @@ export default function ConversaCard({ conv, ativa, agenteId, filas, onSelect, o
   const souEu   = conv.agente_id && conv.agente_id === agenteId;
   const podeAtender = conv.status === 'aguardando';
   const temAcoes    = conv.status !== 'encerrada';
+  const temMeta     = !!(conv.fila_nome || esp || conv.agente_nome || conv.nao_lidas > 0);
 
   return (
     <div className={[styles.item, ativa && styles.itemAtivo, temAcoes && styles.comAcoes]
@@ -80,7 +81,10 @@ export default function ConversaCard({ conv, ativa, agenteId, filas, onSelect, o
           <span className={styles.hora}>{fmtHora(conv.atualizado)}</span>
         </span>
 
-        <span className={styles.row}>
+        {/* A linha do meio só existe se tiver o que mostrar: renderizada vazia
+            ela roubava uma altura de linha de cada cartão, e com cinco grupos
+            abertos isso é meia tela de espaço em branco. */}
+        {temMeta && <span className={styles.row}>
           {conv.fila_nome && (
             <span className={styles.setor} title={`Setor: ${conv.fila_nome}`}>
               <span className={styles.setorBolinha}
@@ -105,7 +109,7 @@ export default function ConversaCard({ conv, ativa, agenteId, filas, onSelect, o
           {conv.nao_lidas > 0 && (
             <span className={styles.badge}>{conv.nao_lidas > 9 ? '9+' : conv.nao_lidas}</span>
           )}
-        </span>
+        </span>}
 
         <span className={styles.row}>
           <span className={styles.preview}>{conv.ultima_mensagem || '—'}</span>
