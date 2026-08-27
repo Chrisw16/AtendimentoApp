@@ -49,7 +49,10 @@ chatRouter.get('/conversas', asyncHandler(async (req, res) => {
   const agora = Date.now();
   const enriched = conversas.map(c => ({
     ...c,
-    urgencia: calcularUrgencia(c.aguardando_desde, c.prioridade),
+    // O 3º argumento é a FILA: sem ele a listagem usava o SLA padrão 5/15 para
+    // todo mundo, enquanto `/chat/fila` e `transferir-fila` usavam o SLA da
+    // fila. A mesma conversa aparecia "crítica" numa tela e "ok" na outra.
+    urgencia: calcularUrgencia(c.aguardando_desde, c.prioridade, c),
   }));
 
   res.json({ conversas: enriched, modo: modo?.valor || 'bot' });

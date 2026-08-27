@@ -12,6 +12,12 @@ const CONVERSA_FIELDS = [
   // o nome de novo. Quem usar CONVERSA_FIELDS precisa dos DOIS leftJoin.
   'filas.nome as fila_nome',
   'filas.cor as fila_cor',
+  // `nivelUrgencia` lê `sla.atencao_min`/`critico_min` — com estes nomes. Sem
+  // eles a listagem caía no SLA padrão 5/15 para todas as filas, e a MESMA
+  // conversa aparecia "crítica" no Chat e "ok" na tela de Fila. `/chat/fila`
+  // já aliasava assim; era só a listagem que não.
+  'filas.sla_atencao_min as atencao_min',
+  'filas.sla_critico_min as critico_min',
 ];
 
 export const conversaRepo = {
@@ -28,7 +34,18 @@ export const conversaRepo = {
 
     if (status)   q = q.where('conversas.status', status);
     if (canal)    q = q.where('conversas.canal', canal);
-    if (agenteId) q = q.where('conversas.agente_id', agenteId);
+    // `agente_id = ?` sozinho fazia o agente comum PERDER de vista tudo que já
+    // atendeu: `encerrar()` zera o `agente_id`, então a conversa que ele acabou
+    // de fechar sumia da tela dele no primeiro F5. A Quality AI já resolveu
+    // esta mesma pergunta do mesmo jeito (§FASE 11: "como encerrar zera o
+    // agente_id, o agente é recuperado da última mensagem dele").
+    if (agenteId) {
+      q = q.where(sub => sub
+        .where('conversas.agente_id', agenteId)
+        .orWhereExists(m => m.select(1).from('mensagens')
+          .whereRaw('mensagens.conversa_id = conversas.id')
+          .where('mensagens.agente_id', agenteId)));
+    }
 
     return q;
   },

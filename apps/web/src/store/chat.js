@@ -13,7 +13,11 @@ export const useChatStore = create((set, get) => ({
   upsertConversa: (conv) =>
     set(s => {
       const idx = s.conversas.findIndex(c => c.id === conv.id);
-      if (idx === -1) return { conversas: [conv, ...s.conversas] };
+      // Patch de conversa DESCONHECIDA não vira linha nova. O evento SSE
+      // `mensagem` manda só `{id, ultima_mensagem, atualizado}`; sem esta
+      // guarda ele inseria um item sem `status` e sem `nome` — um cartão
+      // fantasma, que com a lateral agrupada não teria nem grupo.
+      if (idx === -1) return conv?.status ? { conversas: [conv, ...s.conversas] } : {};
       const next = [...s.conversas];
       next[idx] = { ...next[idx], ...conv };
       return { conversas: next };
@@ -51,25 +55,25 @@ export const useChatStore = create((set, get) => ({
       },
     })),
 
-  /* ── FILTROS ──────────────────────────────────────────────── */
-  filtro: 'todas',   // 'todas' | 'ia' | 'aguardando' | 'ativa' | 'encerrada'
-  busca:  '',
+  /* ── BUSCA ────────────────────────────────────────────────── */
+  // O `filtro` de aba morreu com os grupos colapsáveis da lateral: aba mostra
+  // um estado e ESCONDE os outros quatro; grupo mostra os cinco contadores.
+  busca: '',
 
-  setFiltro: (filtro) => set({ filtro }),
-  setBusca:  (busca)  => set({ busca }),
+  setBusca: (busca) => set({ busca }),
 
   /* ── MODO ─────────────────────────────────────────────────── */
   modo: 'bot',   // 'bot' | 'humano'
   setModo: (modo) => set({ modo }),
 
   /* ── COMPUTED ─────────────────────────────────────────────── */
-  conversasFiltradas: () => {
-    const { conversas, filtro, busca } = get();
+  // Só a busca. Agrupar e ORDENAR é de `lib/agruparConversas.js`, que é puro e
+  // testado — aqui ficava um `calcUrgencia` local com limiares próprios
+  // (10/5/2 min) divergentes dos do servidor (5/15, e por fila desde a FASE 5):
+  // a ordem da lista e a cor do cronômetro discordavam.
+  conversasBuscadas: () => {
+    const { conversas, busca } = get();
     let list = conversas;
-
-    if (filtro !== 'todas') {
-      list = list.filter(c => c.status === filtro);
-    }
 
     if (busca.trim()) {
       const q = busca.toLowerCase();
@@ -80,13 +84,7 @@ export const useChatStore = create((set, get) => ({
       );
     }
 
-    return [...list].sort((a, b) => {
-      // Urgência primeiro
-      const urgA = calcUrgencia(a);
-      const urgB = calcUrgencia(b);
-      if (urgA !== urgB) return urgA - urgB;
-      return new Date(b.atualizado || 0) - new Date(a.atualizado || 0);
-    });
+    return list;
   },
 
   /* ── RESPOSTAS RÁPIDAS ────────────────────────────────────── */
@@ -94,11 +92,3 @@ export const useChatStore = create((set, get) => ({
   setRespostasRapidas: (rr) => set({ respostasRapidas: rr }),
 }));
 
-function calcUrgencia(conv) {
-  if (conv.status !== 'aguardando') return 99;
-  const min = Math.floor((Date.now() - new Date(conv.aguardando_desde || 0)) / 60000);
-  if (conv.prioridade >= 2 || min >= 10) return 0;  // crítico
-  if (min >= 5)  return 1;  // alto
-  if (min >= 2)  return 2;  // médio
-  return 3;                 // baixo
-}

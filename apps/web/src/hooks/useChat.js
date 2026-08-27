@@ -175,7 +175,7 @@ export function useChat() {
 
   return {
     ...store,
-    conversasFiltradas: store.conversasFiltradas(),
+    conversasBuscadas: store.conversasBuscadas(),
     selecionarConversa,
     enviarMensagem,
     assumir,

@@ -69,6 +69,8 @@
   --font-body:     'Plus Jakarta Sans', sans-serif;
   --font-mono:     'JetBrains Mono', monospace;
 
+  /* 10px é o tamanho do rótulo de badge/etiqueta, e estava cru em ~15 lugares. */
+  --text-2xs:   10px;
   --text-xs:    11px;
   --text-sm:    12px;
   --text-base:  13px;
@@ -101,6 +103,10 @@
   --shadow-md:  0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
   --shadow-lg:  0 10px 32px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.04);
   --shadow-brand: 0 4px 16px rgba(32, 80, 184, 0.20);
+
+  /* Fundo de modal e gaveta. A casa oscilava entre .45, .5 e rgba(0,0,0,.6);
+     .45 é o valor da maioria (Filas, Knowledge, Playbooks, Qualidade). */
+  --overlay: rgba(15, 23, 42, 0.45);
 
   /* ── TRANSIÇÕES ─────────────────────────────────────────── */
   --ease:       cubic-bezier(0.16, 1, 0.3, 1);

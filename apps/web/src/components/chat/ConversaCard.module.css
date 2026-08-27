@@ -1,0 +1,217 @@
+/* Cartão de conversa da lateral. Extraído do `ConversaItem` que morava dentro
+   de ConversaList.jsx, agora com setor, dono e ação primária. */
+
+.item {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  padding: 9px 10px;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease);
+  position: relative;
+}
+.item:hover { background: var(--bg-overlay); }
+
+.itemAtivo {
+  background: var(--accent-muted);
+  border-left-color: var(--accent);
+}
+.itemAtivo:hover { background: var(--accent-muted); }
+
+/* ── AVATAR ── */
+.avatar {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  /* Era uma paleta de 5 tons quase pretos (#1a3a2a…) do tema escuro antigo,
+     com `color: var(--text-primary)` #111827 por cima: texto invisível. */
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--bg-surface);
+}
+.dotIa      { background: var(--status-ia); }
+.dotWaiting { background: var(--status-waiting); }
+.dotActive  { background: var(--status-active); }
+.dotClosed  { background: var(--status-closed); }
+
+/* ── CONTEÚDO ── */
+.content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nome {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hora { font-size: var(--text-2xs); color: var(--text-tertiary); flex-shrink: 0; }
+
+.preview {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── ETIQUETA DE SETOR ──
+   A cor vem de `filas.cor`, que é escolha livre do operador no banco. Ela
+   entra só na bolinha e no texto; fundo e borda ficam neutros, senão o cartão
+   teria três vermelhos diferentes ao lado do cronômetro de SLA. */
+.setor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  max-width: 45%;
+  padding: 1px 6px 1px 4px;
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.setorBolinha {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  background: var(--text-tertiary);
+}
+
+/* ── DONO ── */
+.dono {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.donoEu { color: var(--accent); }
+
+/* ── CRONÔMETRO DE ESPERA ── */
+.espera {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.esperaAtencao { background: var(--warning-bg); color: var(--warning); }
+.esperaCritico { background: var(--danger-bg);  color: var(--danger); }
+
+.badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── AÇÕES ──
+   O `.item` é um <button>; estes ficam por cima em position:absolute para não
+   aninhar botão dentro de botão (HTML inválido e o clique interno vaza). */
+.acoes {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.atender {
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--brand-orange);
+  color: var(--text-inverse);
+  font-family: inherit;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease);
+}
+.atender:hover:not(:disabled) { background: var(--brand-orange-dim); }
+.atender:disabled { opacity: .6; cursor: default; }
+
+.menuBtn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease),
+              color var(--duration-fast) var(--ease);
+}
+.item:hover .menuBtn,
+.menuBtn[aria-expanded='true'] { opacity: 1; }
+.menuBtn:hover { color: var(--accent); background: var(--bg-surface); border-color: var(--border); }
+
+/* Espaço para as ações não cobrirem a prévia da mensagem. */
+.comAcoes .preview { padding-right: 74px; }
