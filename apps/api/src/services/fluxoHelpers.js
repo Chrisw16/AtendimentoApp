@@ -170,11 +170,15 @@ export function montarFichaColetada(contexto = {}) {
       (typeof v === 'string' || typeof v === 'number') &&
       String(v).trim() !== '')
     .map(([k, v]) => `${k}: ${v}`);
-  if (!linhas.length) return '';
+  // A ordem de salvar vinha DENTRO da lista — ou seja, só aparecia depois de a
+  // IA já ter salvo algo. No primeiro dado, que é quando importa, o prompt não
+  // dizia nada, e ela respondia "já anotei" sem chamar tool nenhuma.
+  const ordem = 'Sempre que o cliente informar um dado (nome, cpf, data de nascimento, email, celular, endereço, cidade, plano, vencimento...), chame a ferramenta salvar_dado NO MESMO turno. Dizer que anotou sem chamar a ferramenta NÃO guarda nada.';
+  if (!linhas.length) return ordem;
   return [
     '## DADOS JÁ COLETADOS (memória — NUNCA re-pergunte)',
     ...linhas,
-    'Estes dados já foram coletados nesta conversa. NUNCA pergunte de novo por eles. Se faltar algum dado que não está na lista acima, pergunte e salve com a ferramenta salvar_dado.',
+    'Estes dados já foram coletados nesta conversa. NUNCA pergunte de novo por eles. ' + ordem,
   ].join('\n');
 }
 
@@ -192,4 +196,36 @@ export function normalizarData(valor) {
   mm = mm.padStart(2, '0');
   if (yy.length === 2) yy = (Number(yy) <= 30 ? '20' : '19') + yy;   // pivô 30 p/ ano de 2 dígitos
   return `${yy}-${mm}-${dd}`;
+}
+
+// Menu: o cliente DIGITA. Comparar `inp.toLowerCase() === label.toLowerCase()`
+// exigia os emojis e a pontuação do rótulo — "Quero conhecer" não casava com
+// "🆕 Quero conhecer! 😊" e caía na porta `saida`; sem ela ligada, o motor
+// escolhe a primeira aresta qualquer e o cliente vai para um ramo arbitrário.
+// Tira acento, emoji e pontuação e colapsa espaço. Vazio nunca casa (rótulo só
+// de emoji normaliza para "") — quem chama filtra.
+export function normalizarEscolha(texto) {
+  return String(texto ?? '')
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// `cfg.tools_ativas` SUBSTITUI a lista padrão — então todo nó escrito antes da
+// FASE 7 perdeu `buscar_conhecimento` em silêncio, e uma IA sem base inventa
+// procedimento. Pelo mesmo motivo que `salvar_dado` já era incondicional
+// (memória não se desliga por config de nó), a base também não se desliga.
+// `concluir_etapa_playbook` continua condicionada ao procedimento ativo: tool
+// que só sabe responder "não há procedimento" compete com a tool certa.
+export const TOOLS_SEMPRE_ATIVAS = ['salvar_dado', 'buscar_conhecimento'];
+
+export function filtrarTools(todas, toolsAtivas = [], { playbookAtivo = false } = {}) {
+  return todas
+    .filter(t => toolsAtivas.includes(t.name) || TOOLS_SEMPRE_ATIVAS.includes(t.name))
+    .filter(t => t.name !== 'concluir_etapa_playbook' || playbookAtivo)
+    // Só os campos que a API da Anthropic aceita — os metadados de risco da
+    // FASE 2 (`is_write`, `allowed_in_sandbox`) são nossos e um campo
+    // desconhecido na definição da tool derruba a chamada com 400.
+    .map(({ name, description, input_schema }) => ({ name, description, input_schema }));
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, camposIaResponde, agregarNps, normalizarNomeCampo, montarFichaColetada, CAMPOS_RESERVADOS, normalizarData } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, camposIaResponde, agregarNps, normalizarNomeCampo, montarFichaColetada, CAMPOS_RESERVADOS, normalizarData, normalizarEscolha, filtrarTools } from './fluxoHelpers.js';
 
 test('resolverTipoChamado mapeia tipo "tecnico" para 200 (Reparo)', () => {
   assert.equal(resolverTipoChamado({ tipo: 'tecnico' }), 200);
@@ -190,8 +190,10 @@ test('montarFichaColetada lista escalares flat e ignora objetos/internos/vazios'
   assert.doesNotMatch(bloco, /obs:/);
 });
 
-test('montarFichaColetada devolve string vazia quando não há dados coletados', () => {
-  assert.equal(montarFichaColetada({ cliente: {}, _ia_hist_n1: [] }), '');
+test('montarFichaColetada não lista nada quando não há dados coletados', () => {
+  // Deixou de devolver '' em 2026-08-27: sem dados, o bloco vira só a ORDEM de
+  // usar salvar_dado — ver o teste do buraco de bootstrap mais abaixo.
+  assert.doesNotMatch(montarFichaColetada({ cliente: {}, _ia_hist_n1: [] }), /:/);
 });
 
 // ── normalizarData ──────────────────────────────────────────────
@@ -240,7 +242,9 @@ test('CAMPOS_RESERVADOS contém os objetos aninhados do contexto', () => {
 test('montarFichaColetada ignora chaves reservadas mesmo se escalares', () => {
   const bloco = montarFichaColetada({ cliente: 'Fulano', cidade: 'Natal' });
   assert.match(bloco, /cidade: Natal/);
-  assert.doesNotMatch(bloco, /cliente/);
+  // `/cliente/` cru também casava com a ordem de chamar salvar_dado, que fala
+  // "o cliente informar" — o que a chave reservada não pode virar é uma LINHA.
+  assert.doesNotMatch(bloco, /^cliente: /m);
 });
 
 // ── ia_responde: os dois campos com alias que resolviam em direções contrárias ──
@@ -274,4 +278,64 @@ test('camposIaResponde: instrução vazia na tela apaga a antiga (string vazia �
 test('camposIaResponde: max_turnos inválido cai no default em vez de virar NaN', () => {
   assert.equal(camposIaResponde({ max_turnos: 'abc' }).maxTurnos, 6);
   assert.equal(camposIaResponde({ max_turnos: 0 }).maxTurnos, 6);
+});
+
+// ── normalizarEscolha ───────────────────────────────────────────
+// 2026-08-27, medido no link público de produção: digitar "Quero conhecer"
+// (sem os emojis do rótulo) caiu no ramo do "Já sou cliente" — a comparação era
+// igualdade exata em minúsculas. No WhatsApp o cliente DIGITA, não clica.
+test('normalizarEscolha faz o texto digitado casar com o rótulo do botão', () => {
+  assert.equal(normalizarEscolha('🆕 Quero conhecer! 😊'), normalizarEscolha('quero conhecer'));
+  assert.equal(normalizarEscolha('✅ Já sou cliente'),      normalizarEscolha('ja sou cliente'));
+  assert.equal(normalizarEscolha(' 2ª VIA  de Boleto '),    normalizarEscolha('2a via de boleto'));
+});
+
+test('normalizarEscolha não colapsa opções diferentes nem casa vazio com emoji puro', () => {
+  assert.notEqual(normalizarEscolha('Suporte'), normalizarEscolha('Comercial'));
+  assert.notEqual(normalizarEscolha('plano 600'), normalizarEscolha('plano 850'));
+  assert.equal(normalizarEscolha('🔥🔥'), '');   // rótulo só de emoji vira vazio…
+  assert.equal(normalizarEscolha(''), '');       // …e quem casa vazio é filtrado por quem chama
+});
+
+// ── filtrarTools ────────────────────────────────────────────────
+// 2026-08-27: os nós `ia_responde` de produção têm `tools_ativas` explícito,
+// escrito ANTES da FASE 7/8 — a lista substitui TOOLS_PADRAO inteiro, então
+// `buscar_conhecimento` nunca chegou ao modelo e ela improvisava procedimento.
+// Perguntada, ela listou as 8 tools que tinha; a base não estava entre elas.
+const TOOLS_FAKE = [
+  { name: 'salvar_dado',             description: 'd', input_schema: {}, is_write: true },
+  { name: 'buscar_conhecimento',     description: 'd', input_schema: {} },
+  { name: 'concluir_etapa_playbook', description: 'd', input_schema: {} },
+  { name: 'listar_planos_ativos',    description: 'd', input_schema: {} },
+  { name: 'criar_chamado',           description: 'd', input_schema: {} },
+];
+
+test('filtrarTools mantém a base de conhecimento mesmo com tools_ativas que a omite', () => {
+  const nomes = filtrarTools(TOOLS_FAKE, ['listar_planos_ativos']).map(t => t.name);
+  assert.ok(nomes.includes('buscar_conhecimento'), 'a base não pode ser desligada por config de nó');
+  assert.ok(nomes.includes('salvar_dado'), 'memória idem');
+  assert.ok(!nomes.includes('criar_chamado'), 'o que o nó não pediu continua fora');
+});
+
+test('filtrarTools só oferece concluir_etapa_playbook quando há procedimento ativo', () => {
+  const sem = filtrarTools(TOOLS_FAKE, ['concluir_etapa_playbook']).map(t => t.name);
+  const com = filtrarTools(TOOLS_FAKE, ['concluir_etapa_playbook'], { playbookAtivo: true }).map(t => t.name);
+  assert.ok(!sem.includes('concluir_etapa_playbook'));
+  assert.ok(com.includes('concluir_etapa_playbook'));
+});
+
+test('filtrarTools devolve só os campos que a API da Anthropic aceita', () => {
+  const [t] = filtrarTools(TOOLS_FAKE, ['salvar_dado']);
+  assert.deepEqual(Object.keys(t).sort(), ['description', 'input_schema', 'name']);
+});
+
+// ── montarFichaColetada: o buraco de bootstrap ──────────────────
+// A instrução de usar `salvar_dado` só existia DENTRO do bloco de dados já
+// coletados — ou seja, aparecia depois de a IA já ter salvo algo. No primeiro
+// dado, que é justamente quando importa, o prompt não dizia nada. Medido em
+// produção: 12 turnos, ela respondeu "já anotei" e `contexto` ficou vazio.
+test('montarFichaColetada manda salvar mesmo quando nada foi coletado ainda', () => {
+  const bloco = montarFichaColetada({ cliente: {}, _ia_hist_n1: [] });
+  assert.match(bloco, /salvar_dado/);
+  assert.doesNotMatch(bloco, /DADOS JÁ COLETADOS/, 'sem dados não existe lista para exibir');
 });

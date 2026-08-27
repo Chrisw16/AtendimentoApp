@@ -17,7 +17,7 @@ import {
   // As funções evolutionEnviar* saíram daqui: o envio por canal mora em
   // `canais/evolution.js`, que as recebe por injeção.
 } from './integrations.js';
-import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, camposIaResponde, TOOLS_PADRAO, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS } from './fluxoHelpers.js';
+import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, camposIaResponde, TOOLS_PADRAO, montarFichaColetada, normalizarNomeCampo, CAMPOS_RESERVADOS, normalizarEscolha, filtrarTools } from './fluxoHelpers.js';
 import { dentroDoHorario } from './filasHelpers.js';
 import { criarFilaPorChave } from './filaPorChave.js';
 import { estadoStore, ehUuid } from './estadoStore.js';
@@ -235,10 +235,11 @@ async function processarNo(no, ctx) {
         // Já enviou — processa resposta
         ctx.estado.aguardando = null;
         const inp = ctx.mensagem.texto?.trim() || '';
-        const match = bts.find(b => {
+        const alvo = normalizarEscolha(inp);
+        const match = alvo && bts.find(b => {
           const lbl = typeof b === 'object' ? b.label : b;
           const id  = typeof b === 'object' ? b.id   : b;
-          return inp.toLowerCase() === lbl.toLowerCase() || inp === id;
+          return normalizarEscolha(lbl) === alvo || inp === id;
         });
         const porta = match ? (typeof match === 'object' ? match.id : match.toLowerCase().replace(/\s+/g,'_')) : 'saida';
         return avancar(porta);
@@ -257,7 +258,8 @@ async function processarNo(no, ctx) {
         const inp = ctx.mensagem.texto?.trim() || '';
         // Aceita número digitado (ex: "1", "2") além de título/id
       const num = parseInt(inp) - 1;
-      const match = itens.find(it => inp.toLowerCase() === (it.titulo||'').toLowerCase() || inp === it.id)
+      const alvo = normalizarEscolha(inp);
+      const match = (alvo && itens.find(it => normalizarEscolha(it.titulo) === alvo || inp === it.id))
         || (num >= 0 && num < itens.length ? itens[num] : null);
       return avancar(match ? match.id : 'saida');
       }
@@ -858,18 +860,9 @@ async function processarIAResponde(no, ctx) {
   // ficam fora do default — devem ser ativadas explicitamente em cfg.tools_ativas
   // (ex.: no nó IA Responde do fluxo comercial).
   const toolsAtivas = cfg.tools_ativas || (perfil?.tools?.length ? perfil.tools : TOOLS_PADRAO);
-  // salvar_dado sempre disponível — memória não pode ser desligada por config de nó.
-  // Só os campos que a API da Anthropic aceita — os metadados de risco da FASE 2
-  // (`is_write`, `allowed_in_sandbox`) são nossos e um campo desconhecido na
-  // definição da tool derruba a chamada com 400.
-  const tools = IA_TOOLS
-    .filter(t => toolsAtivas.includes(t.name) || t.name === 'salvar_dado')
-    // FASE 8: sem procedimento ativo, `concluir_etapa_playbook` não tem o que
-    // concluir. Deixá-la na lista convida o modelo a chamá-la e gastar um turno
-    // para receber "nenhum procedimento ativo" — tool inútil na lista é ruído
-    // que compete com a tool certa.
-    .filter(t => t.name !== 'concluir_etapa_playbook' || !!pb)
-    .map(({ name, description, input_schema }) => ({ name, description, input_schema }));
+  // A regra (memória e base de conhecimento são incondicionais, playbook depende
+  // de procedimento ativo) mora em `fluxoHelpers` para ser testável sem banco.
+  const tools = filtrarTools(IA_TOOLS, toolsAtivas, { playbookAtivo: !!pb });
 
   try {
     const ai = await getAnthropicClient({ conversaId: ctx.conversa.id, origem: 'motor', sandbox: ctx.sandbox });
