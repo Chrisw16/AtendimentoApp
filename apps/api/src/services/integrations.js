@@ -7,6 +7,7 @@ import { lerValorKV } from './kvSeguro.js';
 import { normalizarData } from './fluxoHelpers.js';
 import { manutencoesAtivas, manutencaoParaCliente, parseDataSgp, montarBodyChamado,
          mapearRespostaCliente, mapearOnuFttx } from './sgpHelpers.js';
+import { diasAte } from './iaToolsHelpers.js';
 
 // ── CACHE DE CONFIG (5 min) ───────────────────────────────────────
 const cache = new Map();
@@ -274,7 +275,11 @@ export async function promessaPagamento(contrato, extras = {}) {
     httpStatus:    res.status,
     status:        data.status,
     liberado:      data.status === 1,
-    liberado_dias: data.liberado_dias || 3,
+    // O `|| 3` mágico saiu. O que fica no lugar não é um número inventado: é a
+    // aritmética da promessa que NÓS pedimos e o SGP aceitou (`status === 1`)
+    // — `dataPromessa` menos hoje. Quando o SGP diz quantos dias, vale o dele.
+    // Sem nenhum dos dois, é `null`, e quem formata OMITE em vez de chutar.
+    liberado_dias: data.liberado_dias ?? diasAte(dataPromessa),
     protocolo:     data.protocolo || null,
     data_promessa: dataPromessa,
     contratoId:    data.contratoId || contrato,

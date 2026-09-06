@@ -42,7 +42,8 @@ export const PLAYBOOKS = [
     criterios_transferencia: 'o cliente pedir cancelamento, ameaçar órgão de defesa, ou o problema exigir visita agendada.',
     excecoes: 'cabo visivelmente rompido ou queda de energia relatada com clareza dispensam os testes remotos — vá direto ao chamado.',
     etapas: [
-      { titulo: 'Identificar o cliente', obrigatoriedade: 'obrigatoria', tools: ['consultar_cliente'] },
+      { titulo: 'Identificar o cliente', obrigatoriedade: 'obrigatoria', tools: ['identificar_cliente'],
+        descricao: 'Declarava `consultar_cliente`, que é TIPO DE NÓ e não tool — a etapa nunca podia ser marcada por ferramenta.' },
       { titulo: 'Verificar situação do contrato', obrigatoriedade: 'obrigatoria', tools: ['verificar_conexao'] },
       { titulo: 'Verificar manutenção na região', obrigatoriedade: 'obrigatoria', tools: ['consultar_manutencao'],
         descricao: 'Se houver manutenção que afete o cliente, informe a previsão e NÃO abra chamado individual.' },
@@ -75,6 +76,31 @@ export const PLAYBOOKS = [
       { titulo: 'Informar o próximo passo', obrigatoriedade: 'obrigatoria', tools: [] },
     ],
   },
+  {
+    slug: 'financeiro_2via_e_desbloqueio', nome: 'Financeiro — 2ª via e desbloqueio', dominio: 'financeiro',
+    objetivo: 'Resolver a pendência financeira do cliente: entregar o boleto certo, ou liberar o acesso quando cabe.',
+    criterios_sucesso: 'Cliente recebeu boleto e PIX do título correto, ou teve o acesso liberado com o protocolo da promessa, ou soube exatamente o que deve e até quando.',
+    criterios_transferencia: 'o cliente pedir negociação, parcelamento, desconto, troca do dia de vencimento ou cancelamento; contestar um valor que a 2ª via não explica; ou for cliente empresarial.',
+    excecoes: 'quem já tem o boleto em mãos e só quer o PIX não precisa da consulta inteira — mande o copia-e-cola; quem só quer saber quanto deve não precisa receber boleto.',
+    etapas: [
+      { titulo: 'Identificar o cliente', obrigatoriedade: 'obrigatoria', tools: ['identificar_cliente'],
+        descricao: 'Sem CPF e contrato não se fala de valor nenhum — nem para dizer que está em dia.' },
+      { titulo: 'Entender o que o cliente precisa', obrigatoriedade: 'obrigatoria', tools: [],
+        descricao: '2ª via, já pagou e segue bloqueado, dúvida no valor, ou quer saber o vencimento. São conversas diferentes.' },
+      { titulo: 'Consultar os títulos em aberto', obrigatoriedade: 'obrigatoria', tools: ['segunda_via_boleto'],
+        descricao: 'O valor devido vem da ferramenta. Nunca do que o cliente disse, nunca de memória.' },
+      { titulo: 'Entregar boleto e PIX', obrigatoriedade: 'obrigatoria', tools: [],
+        descricao: 'O código PIX vai numa mensagem SÓ dele: no WhatsApp copiar seleciona a mensagem inteira, e código junto com texto é código que não cola.' },
+      { titulo: 'Liberar acesso por promessa', obrigatoriedade: 'condicional', condicao: 'o contrato está suspenso ou reduzido e o cliente diz que já pagou ou vai pagar', tools: ['promessa_pagamento'],
+        descricao: 'A liberação é 1x por mês. Se o sistema recusar, NÃO prometa liberação — diga o que houve.' },
+      { titulo: 'Informar o prazo de normalização', obrigatoriedade: 'condicional', condicao: 'houve liberação', tools: [],
+        descricao: 'Diga por quantos dias o acesso foi liberado e o protocolo que a ferramenta devolveu — se ela não devolveu protocolo, diga isso, não invente um.' },
+      { titulo: 'Registrar problema na fatura', obrigatoriedade: 'condicional', condicao: 'o cliente já pagou e o título continua em aberto, ou contesta o valor cobrado', tools: ['criar_chamado'],
+        descricao: 'Ocorrência tipo 22 (Problema na fatura). Registrar é o que a IA pode fazer; decidir sobre o valor, não.' },
+      { titulo: 'Confirmar com o cliente', obrigatoriedade: 'obrigatoria', tools: [],
+        descricao: 'Perguntar se recebeu, se conseguiu copiar o PIX, se a conexão voltou. Encerrar sem confirmar é o defeito mais comum.' },
+    ],
+  },
 ];
 
 /** §66 — `max_turnos` vem da prática: cadastro comercial ~25, suporte ~12. */
@@ -92,6 +118,13 @@ export const PERFIS_IA = [
     prompt_slug: 'comercial', playbook_slug: 'comercial_venda_residencial',
     goal: 'converter_venda', max_turnos: 25,
     regras_transferencia: 'Transfira se o endereço não tiver cobertura, se pedirem condição fora da tabela ou se for cliente empresarial.',
+  },
+  {
+    slug: 'financeiro', nome: 'Financeiro',
+    descricao: '2ª via, PIX e desbloqueio por promessa de pagamento.',
+    prompt_slug: 'financeiro', playbook_slug: 'financeiro_2via_e_desbloqueio',
+    goal: 'resolver_financeiro', max_turnos: 10,
+    regras_transferencia: 'Transfira quando pedirem negociação, parcelamento, desconto, troca do dia de vencimento ou cancelamento; quando o cliente contestar um valor que a 2ª via não explica; ou quando for cliente empresarial.',
   },
 ];
 
@@ -161,6 +194,36 @@ export const SCORECARDS = [
         instrucao: 'CRÍTICO. Preço divergente da fonte oficial ou promessa de visita/prazo inexistente é violação.' },
     ],
   },
+  {
+    slug: 'financeiro', nome: 'Supervisora Financeiro', perfil: 'financeiro', ativo: false,
+    descricao: 'Auditoria de atendimento financeiro.',
+    criterios: [
+      { id: 'identificacao', nome: 'Identificação do cliente', peso: 2, critico: false,
+        descricao: 'Identificou o cliente e o contrato antes de falar de dinheiro?',
+        instrucao: 'Falar de valor, débito ou vencimento sem identificação por ferramenta é nota mínima — inclusive para dizer que está em dia.' },
+      { id: 'necessidade', nome: 'Entendeu o que o cliente precisava', peso: 2, critico: false,
+        descricao: '2ª via, já pagou e segue bloqueado, dúvida no valor e vencimento são conversas diferentes.',
+        instrucao: 'Mandar boleto para quem só perguntou o vencimento conta contra.' },
+      { id: 'consulta', nome: 'Consultou os títulos por ferramenta', peso: 3, critico: false,
+        descricao: 'O valor devido veio do sistema?',
+        instrucao: 'Baseie-se nas ferramentas EXECUTADAS. Repetir o valor que o cliente disse não é consulta.' },
+      { id: 'entrega', nome: 'Entrega do boleto e do PIX', peso: 3, critico: false,
+        descricao: 'Entregou o boleto do título certo, com PIX utilizável?',
+        instrucao: 'Código PIX colado junto com texto explicativo é código que não cola — avalie se foi entregue de forma usável.' },
+      { id: 'promessa', nome: 'Uso correto da promessa de pagamento', peso: 2, critico: false,
+        descricao: 'Liberou quando cabia, e não prometeu quando o sistema recusou?',
+        instrucao: 'Prometer liberação que o SGP negou é o pior erro desta fila: o cliente desliga achando que voltou. Se não houve caso de promessa, não avalie este critério.' },
+      { id: 'repeticao', nome: 'Não repetiu perguntas', peso: 1, critico: false,
+        descricao: 'Pediu CPF ou contrato que já tinha?',
+        instrucao: 'Pedir o CPF de novo depois de identificar o cliente é falha de atendimento.' },
+      { id: 'clareza', nome: 'Clareza e tom', peso: 2, critico: false,
+        descricao: 'Foi claro sobre o que é devido, até quando e o que acontece depois?',
+        instrucao: 'Cobrança mal explicada gera recontato. Avalie a clareza, não o tamanho.' },
+      { id: 'sem_fonte', nome: 'Informação sem fonte', peso: 3, critico: true,
+        descricao: 'Informou valor, prazo, protocolo ou condição que não veio de ferramenta nesta conversa?',
+        instrucao: 'CRÍTICO. Valor devido, data de liberação, número de protocolo e promessa de desconto ou parcelamento só existem se uma ferramenta os devolveu. Número de protocolo citado sem tool que o tenha devolvido é violação, mesmo que o número pareça plausível.' },
+    ],
+  },
 ];
 
 /**
@@ -213,6 +276,52 @@ export async function semearCatalogos(db) {
       await db('ia_perfis').insert({ ...p, tools: JSON.stringify([]) }).onConflict('slug').ignore();
     }
     conta.perfis = PERFIS_IA.length;
+  }
+
+  return conta;
+}
+
+/**
+ * Semeia SÓ o time financeiro (playbook, perfil e scorecard).
+ *
+ * Por que não chamar `semearCatalogos` de novo numa migration nova: ela insere
+ * TUDO, e o guard é existência, não histórico. Um catálogo que o operador
+ * apagou de propósito entre um deploy e outro seria ressuscitado — e o
+ * CLAUDE.md já registra que a saída certa é arquivar, não apagar. Semear só o
+ * que é novo evita dar a essa regra uma segunda chance de surpreender.
+ *
+ * A contagem é de INSERÇÕES DE VERDADE. `semearCatalogos` devolve
+ * `FILAS.length` mesmo tendo inserido zero, e o operador lê o log do deploy
+ * como confirmação de que semeou.
+ */
+export async function semearFinanceiro(db) {
+  const conta = { playbooks: 0, perfis: 0, scorecards: 0 };
+
+  const pb = PLAYBOOKS.find(p => p.slug === 'financeiro_2via_e_desbloqueio');
+  if (pb && await db.schema.hasTable('playbooks') && !await db('playbooks').where({ slug: pb.slug }).first()) {
+    const { etapas, ...cab } = pb;
+    const [criado] = await db('playbooks').insert({ ...cab, gatilhos: JSON.stringify([]) }).returning('*');
+    await db('playbook_etapas').insert(etapas.map((e, i) => ({
+      playbook_id: criado.id, ordem: i + 1,
+      titulo: e.titulo, descricao: e.descricao || null,
+      obrigatoriedade: e.obrigatoriedade, condicao: e.condicao || null,
+      tools: JSON.stringify(e.tools || []),
+    })));
+    conta.playbooks = 1;
+  }
+
+  const perfil = PERFIS_IA.find(p => p.slug === 'financeiro');
+  if (perfil && await db.schema.hasTable('ia_perfis')) {
+    const r = await db('ia_perfis').insert({ ...perfil, tools: JSON.stringify([]) })
+      .onConflict('slug').ignore().returning('slug');
+    conta.perfis = r.length;
+  }
+
+  const sc = SCORECARDS.find(s => s.slug === 'financeiro');
+  if (sc && await db.schema.hasTable('quality_scorecards')) {
+    const r = await db('quality_scorecards').insert({ ...sc, criterios: JSON.stringify(sc.criterios) })
+      .onConflict('slug').ignore().returning('slug');
+    conta.scorecards = r.length;
   }
 
   return conta;

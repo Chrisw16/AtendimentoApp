@@ -10,7 +10,7 @@ import {
   precadastrarCliente, listarVencimentos,
 } from './integrations.js';
 import { getDb } from '../config/db.js';
-import { formatarBoletoIA } from './iaToolsHelpers.js';
+import { formatarBoletoIA, formatarPromessaIA, formatarChamadoIA } from './iaToolsHelpers.js';
 import { diagnosticoOnu } from './sgpDb.js';
 import { formatarDiagnosticoOnu } from './sgpHelpers.js';
 
@@ -186,6 +186,19 @@ export const IA_TOOLS = [
     allowed_in_sandbox: true,
   },
   {
+    name: 'identificar_cliente',
+    description:
+      'Identifica o assinante pelo CPF ou CNPJ e carrega o contrato dele para o restante do atendimento. '
+      + 'Use assim que o cliente informar o documento. Depois disso NÃO é preciso passar contrato nas outras ferramentas — '
+      + 'elas já saberão de quem se trata. Se o cliente ainda não informou o documento, peça antes de chamar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cpf: { type: 'string', description: 'CPF ou CNPJ que o cliente informou, como ele digitou.' },
+      },
+    },
+  },
+  {
     name: 'salvar_dado',
     description: 'Salva dados que o cliente informou, como variáveis persistentes da conversa. Sempre que o cliente fornecer um dado (nome, cpf, data de nascimento, email, celular, logradouro, numero, bairro, cidade, cep, plano, vencimento, etc.), salve TODOS os dados novos desta mensagem numa ÚNICA chamada. NUNCA pergunte de novo um dado já salvo. Use nomes de campo curtos e sem acento (ex.: cidade, plano, data_nasc).',
     input_schema: {
@@ -268,7 +281,14 @@ async function executarToolInterno(name, input, ctx) {
   // Sandbox (simulação de teste): não executa ações que gravam/alteram dados reais.
   const def = IA_TOOLS.find(t => t.name === name);
   if (ctx?.sandbox && def && !def.allowed_in_sandbox) {
-    return `🧪 [sandbox] A ação "${name}" foi simulada — em produção, executaria de verdade.`;
+    // ⚠️ O texto diz que NÃO há protocolo, com todas as letras. Antes ele
+    // parava em "foi simulada", e foi esse buraco que fez a IA anunciar
+    // `25438-LOS-001` em 27/08 — o número do contrato com um sufixo fabricado.
+    // §68 já listava *protocolo* nominalmente e não bastou: proibir inventar
+    // não fecha um buraco, só o nomeia. A borda é a mesma em produção (SGP
+    // fora, timeout, disjuntor aberto), por isso a frase é explícita.
+    return `🧪 [sandbox] A ação "${name}" foi simulada — em produção, executaria de verdade. `
+      + 'Nenhum protocolo foi gerado: se precisar citar um, diga SANDBOX-SEM-PROTOCOLO. NUNCA invente um número.';
   }
 
   // §118/§119: tool de ESCRITA executada pela IA é ação no mundo real — vai
@@ -283,6 +303,15 @@ async function executarToolInterno(name, input, ctx) {
     // o `salvar_dado`. Aqui só existe para o caso de alguém chamar por fora.
     case 'concluir_etapa_playbook':
       return 'Esta ferramenta só funciona dentro de um atendimento com procedimento ativo.';
+
+    // Tratada DENTRO do motor, como o `salvar_dado`: identificar precisa
+    // escrever em `estado.contexto.cliente` (para as tools seguintes acharem o
+    // contrato) e na LINHA da conversa (para o Cliente 360 achar o vínculo
+    // depois que o fluxo acabar) — e `executarTool(name, input, {cliente,
+    // conversa, sandbox})` não enxerga nenhum dos dois. Aqui só para o caso de
+    // alguém chamar por fora.
+    case 'identificar_cliente':
+      return 'Esta ferramenta só funciona dentro de um atendimento.';
 
     case 'buscar_conhecimento': {
       // Lê a base publicada, registra QUAL artigo sustentou a resposta (§55) e,
@@ -322,9 +351,11 @@ async function executarToolInterno(name, input, ctx) {
         input.conteudo || 'Suporte técnico solicitado via chat',
         { contato_nome: input.contato_nome || ctx?.cliente?.nome, contato_telefone: input.contato_telefone, usuario: 'ia_natalia' }
       ).catch(e => ({ erro: e.message }));
-      if (r?.erro) return `Erro ao abrir chamado: ${r.erro}`;
-      const protocolo = r?.protocolo || r?.id || r?.ocorrencia_id || JSON.stringify(r);
-      return `✅ Chamado aberto com sucesso! Protocolo: *${protocolo}*. O técnico entrará em contato em até 24h úteis.`;
+      // `criarChamado` já resolve o protocolo entre os formatos do SGP e já
+      // calcula `chamado_aberto`. O código anterior ignorava os dois e refazia
+      // a conta com um `|| JSON.stringify(r)` no fim — que punha o corpo cru da
+      // resposta, com o nome do assinante dentro, no lugar do protocolo.
+      return formatarChamadoIA(r);
     }
 
     case 'segunda_via_boleto': {
@@ -334,8 +365,12 @@ async function executarToolInterno(name, input, ctx) {
 
     case 'promessa_pagamento': {
       const r = await promessaPagamento(contrato).catch(e => ({ erro: e.message }));
-      if (r?.erro) return `Erro: ${r.erro}`;
-      return '✅ Acesso liberado! Sua conexão deve ser restabelecida em alguns minutos.';
+      // O retorno inteiro era descartado: o PROTOCOLO (que o prompt financeiro
+      // manda informar — é o convite à invenção) e os DIAS liberados. E a
+      // recusa legítima, que `promessaPagamento` marca em `erro` sempre que
+      // `status !== 1`, chegava ao modelo como `"Erro: ..."`, que ele repassa
+      // ao cliente como se o sistema tivesse quebrado.
+      return formatarPromessaIA(r);
     }
 
     case 'historico_ocorrencias': {

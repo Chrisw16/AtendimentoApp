@@ -21,6 +21,8 @@ import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, campo
 import { dentroDoHorario } from './filasHelpers.js';
 import { criarFilaPorChave } from './filaPorChave.js';
 import { estadoStore, ehUuid } from './estadoStore.js';
+import { extrairDocumento, mapearIdentificacao, patchConversa, resumoParaIA, mesclarCliente } from './identificacaoHelpers.js';
+import { blocoRotas, schemaDirecionamento, validarDestino, idsDeRota, PORTAS_FIXAS } from './roteadorHelpers.js';
 
 // Serializa o processamento por conversa. Sem isto, duas mensagens seguidas do
 // mesmo cliente intercalam nos `await` de SGP/IA e corrompem o estado
@@ -390,53 +392,18 @@ async function processarNo(no, ctx) {
         }
 
         try {
-          // usa consultarClientes — fiel ao erp.js original
-          const data = await consultarClientes(cpf);
-          if (data.erro || !data.contratos?.length) {
+          const r = await identificarNoContexto(ctx, cpf);
+          if (!r.ok) {
             if (tentativas >= (cfg.max_tentativas || 3)) return avancar('max_tentativas');
             ctx.estado.contexto._cpf_tentativas = tentativas;
-            ctx.respostas.push({ tipo: 'texto', texto: cfg.mensagem_erro || data.mensagem || 'CPF não encontrado. Tente novamente.' });
+            ctx.respostas.push({ tipo: 'texto', texto: cfg.mensagem_erro || r.mensagem || 'CPF não encontrado. Tente novamente.' });
             ctx.estado.aguardando = no.id;
             return aguardar();
           }
 
-          // Preenche contexto com o primeiro contrato (mais relevante pela ordenação do SGP)
-          const ct = data.contratos[0];
-          ctx.estado.contexto.cliente = {
-            nome:     data.nome,
-            cpf:      data.cpfcnpj,
-            contrato: String(ct.id),
-            plano:    ct.plano,
-            status:   ct.status,
-            cidade:   ct.cidade || '',
-            email:    data.email || '',
-            fone:     data.fone || '',
-            popId:    ct.popId,
-            titulos_abertos: ct.titulos_abertos,
-            valor_aberto:    ct.valor_aberto,
-          };
           ctx.estado.contexto._cpf_tentativas = 0;
-          ctx.estado.contexto._contratos_sgp = data.contratos;
-
-          // A identificação precisa sobreviver ao FIM da execução do fluxo.
-          // Ela vivia só no blob de `flow_executions`, que é APAGADO quando a
-          // conversa vai para um humano sem a porta `transferido` ligada — ou
-          // seja, o CPF sumia exatamente no momento em que o Cliente 360 e as
-          // ações rápidas passam a existir. O sintoma era o painel abrir sem
-          // contrato e a 2ª via responder "CPF/CNPJ inválido" numa conversa
-          // em que a IA tinha acabado de identificar o assinante.
-          //
-          // As colunas existem desde a migration 001 e nunca eram escritas.
-          if (!ctx.sandbox) {
-            await conversaRepo.atualizar(ctx.conversa.id, {
-              cpf: data.cpfcnpj,
-              contrato_id: String(ct.id),
-              nome: ctx.conversa.nome || data.nome,
-              cidade: ctx.conversa.cidade || ct.cidade || null,
-            }).catch(err => console.error('[Motor] não persistiu identificação:', err.message));
-          }
-
-          if (data.contratos.length > 1) return avancar('multiplos_contratos');
+          // A porta é do NÓ: `identificarNoContexto` não conhece o grafo.
+          if (r.contratos.length > 1) return avancar('multiplos_contratos');
           return avancar('encontrado');
         } catch (err) {
           console.error('[Motor] consultar_cliente:', err.message);
@@ -448,13 +415,12 @@ async function processarNo(no, ctx) {
       const cpfExistente = ctx.estado.contexto.cliente?.cpf;
       if (cpfExistente) {
         try {
-          const data = await consultarClientes(cpfExistente);
-          if (!data.erro && data.contratos?.length) {
-            const ct = data.contratos[0];
-            ctx.estado.contexto.cliente = { ...ctx.estado.contexto.cliente, nome: data.nome, contrato: String(ct.id), plano: ct.plano, status: ct.status, cidade: ct.cidade || '' };
-            ctx.estado.contexto._contratos_sgp = data.contratos;
-            return avancar(data.contratos.length > 1 ? 'multiplos_contratos' : 'encontrado');
-          }
+          // Passa pelo mesmo caminho do ramo principal — inclusive persistindo.
+          // Antes este ramo mesclava 5 campos e NÃO repersistia: uma conversa
+          // que reentrasse no nó ficava com o contexto atualizado e a linha da
+          // conversa com o vínculo velho.
+          const r = await identificarNoContexto(ctx, cpfExistente);
+          if (r.ok) return avancar(r.contratos.length > 1 ? 'multiplos_contratos' : 'encontrado');
         } catch (err) { console.error('[Motor] consultar_cliente (direto):', err.message); }
         return avancar('max_tentativas');
       }
@@ -588,7 +554,23 @@ async function processarNo(no, ctx) {
           if (cfg.mensagem_adimplente) ctx.respostas.push({ tipo: 'texto', texto: cfg.mensagem_adimplente });
           return avancar('adimplente');
         }
-        ctx.estado.contexto.promessa = { dias: data.dias || data.prazo_dias, data: data.data || data.data_limite, protocolo: data.protocolo || data.id };
+        // `promessaPagamento` NÃO lança quando o SGP recusa: ele responde 200
+        // com `status !== 1` e a função devolve `liberado: false`. Este ramo
+        // não lia `liberado`, então o `catch` nunca via a recusa e o nó
+        // anunciava "✅ Promessa registrada!" para uma promessa que não
+        // existiu — e o cliente desligava achando que a conexão ia voltar.
+        //
+        // Os campos também estavam errados: lia `data.dias`/`data.data`, que a
+        // função nunca devolveu. Os nomes são `liberado_dias`/`data_promessa`,
+        // então `{{promessa.data}}` renderizava vazio na mensagem do cliente.
+        if (!data?.liberado) {
+          ctx.estado.contexto.promessa = { motivo: data?.erro || data?.msg || 'liberação não concedida' };
+          const erro = cfg.mensagem_erro
+            || 'Não consegui liberar o acesso agora. Vou te passar para um atendente do Financeiro.';
+          ctx.respostas.push({ tipo: 'texto', texto: interpolar(erro, ctx) });
+          return avancar('erro');
+        }
+        ctx.estado.contexto.promessa = { dias: data.liberado_dias, data: data.data_promessa, protocolo: data.protocolo };
         const msg = interpolar(cfg.mensagem_sucesso || '✅ Promessa registrada!\n📅 Pague até: {{promessa.data}}', ctx);
         ctx.respostas.push({ tipo: 'texto', texto: msg });
         return avancar('sucesso');
@@ -738,8 +720,26 @@ async function processarNo(no, ctx) {
 }
 
 // ── IA RESPONDE — com suporte a tool calls (igual ao sistema de inspiração) ──
-async function processarIAResponde(no, ctx) {
+async function processarIAResponde(no, ctx, opts = {}) {
   const cfg       = no.config || {};
+  // ── MODO RECEPÇÃO (nó `ia_roteador`) ───────────────────────────
+  //
+  // A recepção roda ESTE laço, não um gêmeo. A primeira versão deste trabalho
+  // escrevia um segundo loop agêntico ao lado, e a revisão mostrou que TODOS os
+  // furos graves saíam da duplicação: `salvar_dado` sem tratamento (a IA diz
+  // "anotei" e não grava), os blocos §67/§68/§75 ausentes na porta de entrada,
+  // `getAnthropicClient()` sem `sandbox` fazendo teste virar custo de produção,
+  // e `ia_execucoes` sem registro. Este repositório já pagou caro por catálogos
+  // gêmeos que divergem — a resposta dele sempre foi fonte única, não uma cópia.
+  //
+  // O que muda entre os dois modos é só o VOCABULÁRIO DE SAÍDA: o `ia_responde`
+  // sai por resolvido/transferir/max_turnos; a recepção sai pela rota escolhida
+  // ou por `encerrar`/`nao_entendeu`.
+  const recepcao = opts.modo === 'recepcao';
+  const rotas    = recepcao && Array.isArray(cfg.rotas) ? cfg.rotas : [];
+  const PORTA    = recepcao
+    ? { resolvido: 'encerrar', transferir: 'nao_entendeu', max_turnos: 'nao_entendeu' }
+    : { resolvido: 'resolvido', transferir: 'transferir', max_turnos: 'max_turnos' };
   // Retomada vinda do humano (§13) chega com a mensagem sintética
   // `{texto:'', tipo:'sistema'}`. Sem esta guarda o histórico sai vazio, a
   // Anthropic recusa (`at least one message is required`), o catch devolve
@@ -760,7 +760,7 @@ async function processarIAResponde(no, ctx) {
   // que o perfil — quem configurou o nó estava olhando para aquele ramo.
   const perfil = cfg.perfil ? await carregarPerfil(ctx.db, cfg.perfil) : null;
 
-  const slug      = cfg.contexto || perfil?.prompt_slug || 'outros';
+  const slug      = cfg.contexto || perfil?.prompt_slug || (recepcao ? 'roteador' : 'outros');
   // Fonte única dos dois campos com alias — ver `camposIaResponde`.
   const camposNo  = camposIaResponde(cfg);
   const instrucao = camposNo.instrucao;
@@ -770,6 +770,18 @@ async function processarIAResponde(no, ctx) {
   const toolsUsadas = [];
   const turnosKey = `_ia_turnos_${no.id}`;
   const histKey   = `_ia_hist_${no.id}`;
+  /**
+   * Zera o estado DESTE nó. Chamado em toda saída, porque quem volta a este nó
+   * depois volta para uma visita nova: turnos, histórico da sessão e — na
+   * recepção — a saudação. Sem apagar a saudação, um nó cabeado como "posso
+   * ajudar em mais alguma coisa?" (que é exatamente como o operador cabeou o
+   * `ia_roteador` hoje) ficaria mudo da segunda vez em diante.
+   */
+  const limparNo = () => {
+    ctx.estado.contexto[turnosKey] = 0;
+    ctx.estado.contexto[histKey]   = [];
+    delete ctx.estado.contexto[`_roteador_${no.id}`];
+  };
 
   // Controla turnos
   const turnosUsados = ctx.estado.contexto[turnosKey] || 0;
@@ -779,9 +791,8 @@ async function processarIAResponde(no, ctx) {
     await registrarExecucao(ctx, {
       noId: no.id, perfil, desfecho: 'max_turnos', motivo: 'max_turns', turnos: turnosUsados, tools: [],
     });
-    ctx.estado.contexto[turnosKey] = 0;
-    ctx.estado.contexto[histKey]   = [];
-    return avancar('max_turnos');
+    limparNo();
+    return avancar(PORTA.max_turnos);
   }
 
   // Carrega prompt do banco
@@ -818,6 +829,7 @@ async function processarIAResponde(no, ctx) {
     ctxCliente,
     ficha,
     playbook: pb?.bloco || '',
+    rotas: recepcao ? blocoRotas(rotas) : '',
     // §67/§68/§75 — hierarquia de confiança, o que não se inventa e os
     // guardrails de campo. Entram em TODA execução: são regra de casa, não
     // configuração de nó, e um nó esquecido não pode virar orientação perigosa.
@@ -859,17 +871,34 @@ async function processarIAResponde(no, ctx) {
   // Lista padrão (suporte/atendimento). Tools sensíveis como `precadastrar_cliente`
   // ficam fora do default — devem ser ativadas explicitamente em cfg.tools_ativas
   // (ex.: no nó IA Responde do fluxo comercial).
-  const toolsAtivas = cfg.tools_ativas || (perfil?.tools?.length ? perfil.tools : TOOLS_PADRAO);
+  // ⚠️ A recepção NÃO herda `TOOLS_PADRAO`. Ela é o primeiro nó de toda
+  // conversa, e aquele default traz `reiniciar_onu_acs` (reinicia a ONU do
+  // assinante), `criar_chamado`, `promessa_pagamento` (liberação 1x por mês,
+  // irreversível) e `segunda_via_boleto` — enquanto o prompt dela diz "você não
+  // resolve o problema, você descobre qual é". O roteador antigo rodava com
+  // zero tools; o novo não pode nascer podendo agir no mundo real antes mesmo
+  // de saber com quem fala. `salvar_dado`, `buscar_conhecimento` e
+  // `identificar_cliente` entram pelas sempre-ativas.
+  const PADRAO_RECEPCAO = ['buscar_conhecimento', 'transferir_para_humano', 'encerrar_atendimento'];
+  const padraoDoModo = recepcao ? PADRAO_RECEPCAO : TOOLS_PADRAO;
+  const toolsAtivas = cfg.tools_ativas || (perfil?.tools?.length ? perfil.tools : padraoDoModo);
   // A regra (memória e base de conhecimento são incondicionais, playbook depende
   // de procedimento ativo) mora em `fluxoHelpers` para ser testável sem banco.
   const tools = filtrarTools(IA_TOOLS, toolsAtivas, { playbookAtivo: !!pb });
+  // Construída a cada chamada, e NUNCA guardada em `IA_TOOLS`: aquele array é
+  // um singleton de módulo e `filtrarTools` faz cópia RASA — escrever o `enum`
+  // das rotas dentro dele contaminaria as outras conversas do mesmo lote
+  // (`workerFilas` processa em `Promise.all`), e duas conversas em fluxos
+  // diferentes trocariam a lista de destinos uma da outra.
+  if (recepcao) tools.push(schemaDirecionamento(rotas));
 
   // Sem esta linha não havia como saber, de fora, se o perfil e o procedimento
   // estavam de fato valendo: o motor não logava nada no caminho feliz, e o
   // operador que ligou o perfil na tela não tinha como distinguir "não pegou"
   // de "pegou e o modelo ignorou". Silêncio não é evidência de nada.
   const feitasLog = Array.isArray(pb?.exec?.etapas_feitas) ? pb.exec.etapas_feitas.length : 0;
-  console.log(`[IA] nó=${no.id} perfil=${perfil?.slug || '—'} prompt=${slug}`
+  console.log(`[IA]${recepcao ? ' recepção' : ''} nó=${no.id} perfil=${perfil?.slug || '—'} prompt=${slug}`
+    + (recepcao ? ` rotas=${rotas.length ? rotas.map(r => r.id).join('/') : 'NENHUMA'}` : '')
     + ` playbook=${pb ? `${pb.playbook.slug} ${feitasLog}/${pb.etapas.length}` : '—'}`
     + ` tools=${tools.length}${cfg.tools_ativas ? ' (lista do nó)' : ''}`
     + ` max_turnos=${maxTurnos} turno=${turnosUsados + 1}`);
@@ -880,6 +909,7 @@ async function processarIAResponde(no, ctx) {
     let faladoNoTurno = '';   // tudo que a IA falou neste turno (p/ histórico coerente)
     let transferiu = false;
     let resolveu = false;
+    let destino = null;        // modo recepção: a porta que a IA escolheu
     // §73: o motivo cru que a IA deu; a classificação acontece num lugar só.
     let motivoTransferencia = null;
 
@@ -917,6 +947,114 @@ async function processarIAResponde(no, ctx) {
         const toolResults = [];
 
         for (const tu of toolUses) {
+          // A etapa é dada por cumprida pela tool que a EVIDENCIA (FASE 8), e
+          // isto tem de valer também para as tools tratadas AQUI DENTRO. Ficava
+          // depois do `executarTool` genérico, e os handlers do motor fazem
+          // `continue` — então `salvar_dado` nunca marcava a etapa "Coletar o
+          // endereço" do playbook comercial, que a declara como evidência. O
+          // mesmo teria acontecido com `identificar_cliente` na etapa 1 do
+          // playbook financeiro. Marcar pela CHAMADA (e não pelo sucesso) é o
+          // que já acontecia antes: `executarTool` devolve texto mesmo ao falhar.
+          //
+          // `identificar_cliente` fica FORA daqui: para ela o sucesso é
+          // conhecido no próprio handler, e marcar pela chamada poria
+          // `[x] Identificar o cliente` no prompt do turno seguinte com o
+          // contexto vazio — num playbook cuja etapa 2 diz "sem CPF e contrato
+          // não se fala de valor nenhum". Ela marca lá embaixo, no `if (r.ok)`.
+          if (pb?.exec && tu.name !== 'identificar_cliente') {
+            const { registrarTool } = await import('./playbook.js');
+            pb.exec = await registrarTool(pb.exec, pb.etapas, tu.name).catch(() => pb.exec);
+          }
+          // `identificar_cliente` é tratada aqui pelo mesmo motivo do
+          // `salvar_dado`: precisa escrever em `estado.contexto.cliente` (para
+          // as tools seguintes acharem o contrato sem o modelo ter de repassar
+          // o número) e na LINHA da conversa — e `executarTool` não vê nem um
+          // nem outro.
+          if (tu.name === 'identificar_cliente') {
+            let conteudo;
+            if (ctx.sandbox) {
+              // ⚠️ No sandbox ela RECUSA. O link público de teste não pede
+              // login (`/teste/<token>`) e roda o motor de verdade contra o
+              // SGP: uma tool que devolve a ficha ao modelo — que por sua vez
+              // fala com um visitante anônimo — transforma o link num oráculo
+              // CPF→assinante e contorna, por um canal novo, a correção de
+              // 27/08. Teto declarado: a identificação por IA só se valida em
+              // conversa real, como o rastreamento de playbook.
+              console.log('[IA] Executando tool: identificar_cliente (motor) → recusada no sandbox');
+              conteudo = 'Ferramenta indisponível no modo de teste. Siga o atendimento sem identificar o cliente.';
+            } else {
+              // O fallback para o documento já conhecido só vale quando a IA
+              // NÃO passou um: com `input.cpf` presente mas ilegível, cair no
+              // CPF anterior faria a tool responder "Cliente identificado:
+              // Fulano" para um número que ninguém validou.
+              const doc = tu.input?.cpf
+                ? extrairDocumento(tu.input.cpf)
+                : (ctx.estado.contexto.cliente?.cpf || ctx.conversa.cpf);
+              if (!doc && tu.input?.cpf) {
+                conteudo = 'O documento informado está incompleto. Peça ao cliente que repita o CPF ou CNPJ completo.';
+              } else if (!doc) {
+                conteudo = 'Nenhum CPF ou CNPJ foi informado ainda. Peça o documento ao cliente antes de chamar esta ferramenta.';
+              } else {
+                const r = await identificarNoContexto(ctx, doc).catch(e => ({ ok: false, mensagem: e.message }));
+                // ⚠️ O "não encontrei" não pode mandar duvidar do número: esta
+                // tool chega ao nó COMERCIAL pelas sempre-ativas, e lá o normal
+                // é o documento ser de quem ainda NÃO é assinante. "Confirme o
+                // número com o cliente" fazia a IA re-perguntar um CPF correto
+                // exatamente onde o pré-cadastro deveria seguir.
+                conteudo = r.ok
+                  ? resumoParaIA(r.cliente, r.contratos)
+                  : `Este documento não tem contrato no sistema.${r.mensagem ? ` (${r.mensagem})` : ''}`
+                    + ' Se for um cliente NOVO, siga com o pré-cadastro — não peça o documento de novo.'
+                    + ' Se ele afirma ser assinante, peça que confirme o número.';
+                // Só o DESFECHO no log: o CPF é o dado que a FASE 0 tirou dos
+                // logs de integração, e `redigirTexto` é cinto de segurança,
+                // não licença para imprimir.
+                // Mesmo prefixo das outras: o CLAUDE.md define
+                // `[IA] Executando tool:` como A sonda de produção ("o que não
+                // aparece ali não foi executado"). Uma tool tratada dentro do
+                // motor não pode escapar dela — senão a sonda passa a mentir
+                // por omissão. Só o desfecho, nunca o CPF.
+                console.log(`[IA] Executando tool: identificar_cliente (motor) → ${r.ok ? `contrato ${r.cliente.contrato}, ${r.contratos.length} no documento` : 'não encontrado'}`);
+                if (r.ok) {
+                  // A etapa do playbook é marcada AQUI, e só no sucesso.
+                  if (pb?.exec) {
+                    const { registrarTool } = await import('./playbook.js');
+                    pb.exec = await registrarTool(pb.exec, pb.etapas, tu.name).catch(() => pb.exec);
+                  }
+                  // Leitura, mas com trilha: a mesma consulta feita pelo
+                  // Cliente 360 gera `audit_log`, e aqui o alcance é maior —
+                  // qualquer turno de qualquer agente, com o documento vindo da
+                  // fala do cliente.
+                  const { auditar } = await import('./auditoria.js');
+                  auditar({ actorType: 'ai', actorId: 'identificar_cliente', action: 'identificacao_por_cpf',
+                            resource: `contrato:${r.cliente.contrato}`, conversaId: ctx.conversa.id });
+                }
+              }
+            }
+            toolsUsadas.push(tu.name);
+            toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: conteudo });
+            continue;
+          }
+          // Modo recepção: a saída do nó. Vem por TOOL e não pela tag `<rota>`
+          // que o classificador antigo lia do texto — num agente que conversa,
+          // o cliente digitaria `<rota>financeiro</rota>` e o parser obedeceria.
+          // `tool_use` é um canal que a fala do cliente não alcança, e o destino
+          // ainda é validado contra as rotas do nó.
+          if (recepcao && tu.name === 'direcionar_atendimento') {
+            const escolhido = validarDestino(tu.input?.destino, rotas);
+            console.log(`[IA] Executando tool: direcionar_atendimento (motor) → ${escolhido || `RECUSADO (${tu.input?.destino})`}`);
+            if (escolhido) destino = escolhido;
+            toolsUsadas.push(tu.name);
+            toolResults.push({
+              type: 'tool_result', tool_use_id: tu.id,
+              content: escolhido
+                ? `✓ Encaminhado para "${escolhido}". Se ainda não se despediu do cliente, faça isso agora em uma frase curta.`
+                // `idsDeRota` e não `rotas.map(r => r.id)`: é a lista que o
+                // `enum` de fato aceita (sem vazias, sem repetidas, normalizadas).
+                : `Destino inválido. Escolha um destes: ${[...idsDeRota(rotas), ...PORTAS_FIXAS].join(', ')}.`,
+            });
+            continue;
+          }
           // salvar_dado é tratada aqui (não no executarTool) porque precisa mutar
           // o estado do fluxo, que o executarTool(name,input,{cliente,conversa,sandbox}) não vê.
           if (tu.name === 'salvar_dado') {
@@ -969,13 +1107,6 @@ async function processarIAResponde(no, ctx) {
             sandbox: ctx.sandbox,
           }).catch(e => `Erro ao executar ${tu.name}: ${e.message}`);
 
-          // A etapa é dada por cumprida pela tool que a EVIDENCIA, não pelo que
-          // a IA diz ter feito — é o único sinal que a auditoria pode conferir.
-          if (pb?.exec) {
-            const { registrarTool } = await import('./playbook.js');
-            pb.exec = await registrarTool(pb.exec, pb.etapas, tu.name).catch(() => pb.exec);
-          }
-
           // Detecta ações especiais
           if (typeof result === 'string' && result.startsWith('__TRANSFERIR__')) {
             transferiu = true;
@@ -1026,39 +1157,58 @@ async function processarIAResponde(no, ctx) {
         no, perfil, pb, toolsUsadas, motivo: motivoTransferencia,
         turnos: turnosUsados + 1, historico: ctx.estado.contexto[histKey],
       });
-      ctx.estado.contexto[turnosKey] = 0;
-      ctx.estado.contexto[histKey]   = [];
-      return avancar('transferir');
+      limparNo();
+      return avancar(PORTA.transferir);
     }
     if (resolveu) {
       await registrarExecucao(ctx, {
         noId: no.id, perfil, desfecho: 'resolvido', motivo: null,
         turnos: turnosUsados + 1, tools: toolsUsadas,
       });
-      ctx.estado.contexto[turnosKey] = 0;
-      ctx.estado.contexto[histKey]   = [];
-      return avancar('resolvido');
+      limparNo();
+      return avancar(PORTA.resolvido);
     }
 
-    // Heurística de roteamento pelo texto (fallback)
-    const lwr = texto.toLowerCase();
+    // Modo recepção: a IA escolheu o destino. Vem DEPOIS de transferiu/resolveu
+    // porque `transferir_para_humano` e `encerrar_atendimento`, se o operador as
+    // ligar no nó, são intenções mais fortes do que uma rota.
+    if (destino) {
+      // Sempre `roteado`, nunca `resolvido` — nem quando o destino é
+      // `encerrar`. `conversa_fatos.desfecho_ia` pega a ÚLTIMA execução da
+      // conversa: um cliente que diz "oi" e "obrigado, era só isso" na recepção
+      // entraria como resolução da IA e barateria o `custo_por_resolvido`. É a
+      // mesma família do KPI que era ~100% por construção e que a FASE 12
+      // consertou. Encaminhar não é resolver.
+      await registrarExecucao(ctx, {
+        noId: no.id, perfil, desfecho: 'roteado',
+        motivo: destino, turnos: turnosUsados + 1, tools: toolsUsadas,
+      });
+      limparNo();
+      return avancar(destino);
+    }
+
+    // Heurística de roteamento pelo texto (fallback).
+    //
+    // ⚠️ Desligada na recepção: o trabalho dela é justamente falar sobre
+    // encaminhar e perguntar se pode ajudar em algo mais, então ela sairia do
+    // nó pelo texto que ela mesma escreveu, sem ter escolhido destino nenhum.
+    // Ela já tem canal próprio de saída, com `enum` validado.
+    const lwr = recepcao ? '' : texto.toLowerCase();
     if (lwr.includes('transferir') || lwr.includes('atendente humano')) {
       await registrarHandoff(ctx, {
         no, perfil, pb, toolsUsadas, motivo: texto,
         turnos: turnosUsados + 1, historico: ctx.estado.contexto[histKey],
       });
-      ctx.estado.contexto[turnosKey] = 0;
-      ctx.estado.contexto[histKey]   = [];
-      return avancar('transferir');
+      limparNo();
+      return avancar(PORTA.transferir);
     }
     if (lwr.includes('mais alguma coisa') || lwr.includes('foi um prazer') || lwr.includes('até mais')) {
       await registrarExecucao(ctx, {
         noId: no.id, perfil, desfecho: 'resolvido', motivo: null,
         turnos: turnosUsados + 1, tools: toolsUsadas,
       });
-      ctx.estado.contexto[turnosKey] = 0;
-      ctx.estado.contexto[histKey]   = [];
-      return avancar('resolvido');
+      limparNo();
+      return avancar(PORTA.resolvido);
     }
 
   } catch (err) {
@@ -1067,7 +1217,10 @@ async function processarIAResponde(no, ctx) {
       noId: no.id, perfil, desfecho: 'erro', motivo: 'tool_failure', turnos: turnosUsados, tools: toolsUsadas,
     });
     ctx.respostas.push({ tipo: 'texto', texto: 'Desculpe, ocorreu um erro. Tente novamente em instantes.' });
-    return avancar('transferir');
+    // Era a única saída que não limpava o nó: turnos e histórico sobreviviam ao
+    // erro, e agora a saudação da recepção sobreviveria junto.
+    limparNo();
+    return avancar(PORTA.transferir);
   }
 
   return aguardar();
@@ -1077,67 +1230,58 @@ async function processarIAResponde(no, ctx) {
 async function processarIARoteador(no, ctx) {
   const cfg   = no.config || {};
   const rotas = Array.isArray(cfg.rotas) ? cfg.rotas : [];
-  const roteadorKey = `_roteador_${no.id}`;
+  const saudouKey = `_roteador_${no.id}`;
 
-  // Envia mensagem inicial e aguarda (só na primeira vez)
-  if (cfg.mensagem && !ctx.estado.contexto[roteadorKey]) {
+  // Saudação da recepção: manda e espera. Uma vez por VISITA ao nó.
+  //
+  // A flag é apagada por `limparNo()`, junto com turnos e histórico, em toda
+  // saída do nó — e não posta em `false` logo depois de classificar, como
+  // fazia o classificador antigo. `false` é falsy: a condição voltava a valer
+  // no turno seguinte e a saudação era reenviada no meio da mesma visita.
+  // Apagar na saída é o que dá o comportamento certo nos dois usos do nó:
+  // recepção cumprimenta uma vez, e um nó cabeado como "posso ajudar em mais
+  // alguma coisa?" volta a perguntar quando a conversa retorna a ele.
+  if (cfg.mensagem && !ctx.estado.contexto[saudouKey]) {
     ctx.respostas.push({ tipo: 'texto', texto: interpolar(cfg.mensagem, ctx) });
-    ctx.estado.contexto[roteadorKey] = true;
+    ctx.estado.contexto[saudouKey] = true;
     ctx.estado.aguardando = no.id;
     return aguardar();
   }
-  // Limpa flag para próxima execução
-  ctx.estado.contexto[roteadorKey] = false;
 
-  const texto = ctx.mensagem.texto || '';
-
-  // ── Detecta despedida antes de chamar IA (economiza chamada API)
-  // Idêntico ao sistema de inspiração
-  const isDespedida = /^(obrigad|valeu|vlw|não|nao|tchau|encerr|até|flw|ok|certo|tudo|fechou?|nada|por enquanto|por ora)[^\w]*/i
-    .test(texto.trim());
-  if (isDespedida) return avancar('encerrar');
-
-  if (!rotas.length) return avancar('nao_entendeu');
-
-  // ── Monta prompt XML estruturado (idêntico ao sistema de inspiração)
-  const rotasDesc = rotas.map(r =>
-    `- "${r.id}": ${r.label || r.id}${r.descricao ? ` (${r.descricao})` : ''}`
-  ).join('\n');
-
-  const system = `Você é um classificador de intenções. Analise a mensagem e escolha UMA das rotas.
-
-Rotas disponíveis:
-${rotasDesc}
-- "encerrar": cliente quer encerrar, disse obrigado, tchau ou não precisa de mais nada
-- "nao_entendeu": nenhuma rota se encaixa
-
-Responda APENAS com a tag XML abaixo, sem texto adicional:
-<rota>id_da_rota_escolhida</rota>`;
-
-  try {
-    const ai = await getAnthropicClient();
-    const response = await ai.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 30,
-      system,
-      messages:   [{ role: 'user', content: texto }],
-    });
-
-    const rawText  = (response.content[0]?.text || '').trim();
-    // Extrai tag XML — mais robusto que texto puro
-    const xmlMatch = rawText.match(/<rota>([\s\S]*?)<\/rota>/);
-    const portaRaw = xmlMatch ? xmlMatch[1].trim() : rawText;
-    const portaIA  = portaRaw.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40);
-
-    const idsValidos = [...rotas.map(r => r.id), 'nao_entendeu', 'encerrar'];
-    const porta = idsValidos.includes(portaIA) ? portaIA : 'nao_entendeu';
-
-    ctx.estado.contexto.roteador_intencao = porta;
-    return avancar(porta);
-  } catch (err) {
-    console.error('[Motor] ia_roteador:', err.message);
+  // Sem rota configurada o nó não tem para onde mandar ninguém — mas isto vem
+  // DEPOIS da saudação: um nó com mensagem e sem rota deve cumprimentar e então
+  // seguir pela porta, não ficar mudo. Antes ele caía em `nao_entendeu` depois
+  // de gastar uma chamada de API; agora nem chama.
+  if (!rotas.length) {
+    ctx.estado.aguardando = null;
+    delete ctx.estado.contexto[saudouKey];
     return avancar('nao_entendeu');
   }
+
+  // Chegar aqui no MEIO do turno, sem saudação própria, e com outro nó já tendo
+  // falado com o cliente neste turno: a mensagem dele já foi respondida, e
+  // responder de novo gasta uma chamada de API e manda duas falas seguidas.
+  //
+  // ⚠️ O sinal é `ctx.respostas.length`, que é DO TURNO — não `estado.aguardando`,
+  // que é persistido. Com `aguardando` a máquina alternava: `processarIAResponde`
+  // nunca escreve nesse campo, então ele voltava a `null` a cada turno e o nó
+  // engolia a mensagem do cliente sim, outra não. Num fluxo `inicio → ia_roteador`
+  // (a recepção de verdade, sem `cfg.mensagem`, porque quem cumprimenta é o
+  // próprio agente) a PRIMEIRA fala do cliente não recebia resposta nenhuma.
+  if (!cfg.mensagem && ctx.estado.aguardando !== no.id && ctx.respostas.length) {
+    ctx.estado.aguardando = no.id;
+    return aguardar();
+  }
+  ctx.estado.aguardando = null;
+
+  // O laço é o MESMO do `ia_responde` — ver o comentário do modo recepção lá.
+  // O que este nó tem de próprio (rotas, saudação, portas) está acima.
+  const r = await processarIAResponde(no, ctx, { modo: 'recepcao' });
+  // O laço compartilhado não conhece `estado.aguardando` (o `ia_responde` vive
+  // sem ele: quem o retoma é o `noAtual`). A recepção precisa do campo para
+  // saber, no turno seguinte, que a pausa foi DELA.
+  if (r?.tipo === 'aguardar_input') ctx.estado.aguardando = no.id;
+  return r;
 }
 
 // ── IA DIRETA (sem fluxo ativo) ───────────────────────────────────
@@ -1416,6 +1560,39 @@ async function verificarHorario(db, fila = null) {
 }
 
 /** Perfil de IA (§66). Só os ATIVOS — perfil desligado não deve orientar nada. */
+/**
+ * Identifica o assinante e grava o vínculo nos DOIS lugares que importam.
+ *
+ * Existe porque agora há dois caminhos que identificam: o nó `consultar_cliente`
+ * e a tool `identificar_cliente` que a IA chama. Duplicar significaria que um
+ * dos dois esqueceria de persistir em `conversas` — e "identificar sem
+ * persistir" é o defeito que a FASE 6 fechou em 22/08: a IA identificava, a
+ * conversa ia para a fila, o blob do fluxo era apagado, e o Cliente 360 abria
+ * sem contrato enquanto a 2ª via respondia "CPF/CNPJ inválido".
+ *
+ * O que fica FORA daqui, de propósito, porque é do nó e não da identificação:
+ * o contador de tentativas, as portas (`encontrado`/`multiplos_contratos`/
+ * `max_tentativas`), as mensagens configuráveis e a pausa por `aguardar_input`.
+ */
+async function identificarNoContexto(ctx, documento) {
+  const data = await consultarClientes(documento);
+  if (data?.erro || !data?.contratos?.length) {
+    return { ok: false, mensagem: data?.mensagem || null };
+  }
+
+  const cliente = mapearIdentificacao(data);
+  ctx.estado.contexto.cliente        = mesclarCliente(ctx.estado.contexto.cliente, cliente);
+  ctx.estado.contexto._contratos_sgp = data.contratos;
+
+  // `ehUuid` além do gate de sandbox: `conversaRepo.atualizar` não tem guarda
+  // própria e um id sintético (`share:<uuid>`) estoura 22P02 no Postgres.
+  if (!ctx.sandbox && ehUuid(ctx.conversa.id)) {
+    await conversaRepo.atualizar(ctx.conversa.id, patchConversa(ctx.conversa, data, cliente))
+      .catch(err => console.error('[Motor] não persistiu identificação:', err.message));
+  }
+  return { ok: true, cliente, contratos: data.contratos };
+}
+
 async function carregarPerfil(db, slug) {
   const p = await db('ia_perfis').where({ slug, ativo: true }).first().catch(() => null);
   if (!p) console.warn(`[Motor] perfil de IA "${slug}" não existe ou está inativo — seguindo com a config do nó`);
