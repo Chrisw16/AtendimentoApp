@@ -3,7 +3,7 @@ title: Provedor e modelo de IA globais — escolher qualidade × preço
 type: task
 created: 2026-09-05
 last_updated: 2026-09-05
-status: planned
+status: done
 priority: p1
 knowledge_refs: ["systems/maxxi/components/ia-tool-calling", "systems/maxxi/telas/configuracao"]
 related: ["[[IA e Tool Calling]]", "[[FASE 9 — AI Runtime V1]]", "[[Configurações]]"]
@@ -12,6 +12,10 @@ tags: [work, task, ia, configuracao, pendente]
 ---
 
 # Provedor e modelo de IA globais
+
+> **Entregue em 2026-09-06.** Este é o levantamento da véspera; o registro da
+> entrega, com o que a revisão e a verificação das APIs mudaram, está em
+> [[2026-09-06_provedor-e-modelo-de-ia]].
 
 **Pedido pelo operador em 2026-09-05.** Ainda **não implementado** — esta página
 existe para o pedido não se perder e para registrar o que já foi levantado.

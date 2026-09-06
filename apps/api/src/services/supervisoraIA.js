@@ -12,7 +12,6 @@
 
 import { getDb }     from '../config/db.js';
 import { broadcast, sendToAgente } from './sseManager.js';
-import { getAnthropicClient } from './integrations.js';
 
 // ── PALAVRAS-CHAVE DE FRUSTRAÇÃO (detecção instantânea, sem IA) ──
 const PALAVRAS_FRUSTRACAO = [
@@ -179,17 +178,16 @@ async function _gerarSugestaoResposta(conversa, mensagem, nivel) {
       .map(m => `${m.origem === 'cliente' ? 'Cliente' : 'Atendente'}: ${m.texto || ''}`)
       .join('\n');
 
-    const ai = await getAnthropicClient();
-    const res = await ai.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 200,
+    const { gerar } = await import('./llm/index.js');
+    const res = await gerar({
+      maxTokens: 200,
       system: `Você é a Supervisora IA da NetGo Internet. Sua função é auxiliar atendentes humanos.
 O cliente está ${nivel === 'critico' ? 'em estado crítico (mencionou órgãos reguladores ou ações legais)' : 'frustrado'}.
 Gere UMA sugestão curta e empática de resposta para o atendente usar (ou adaptar).
 A sugestão deve: reconhecer o problema, pedir desculpas quando apropriado, e oferecer solução concreta.
 Responda APENAS com a sugestão, sem prefixos ou explicações. Máximo 3 linhas.`,
       messages: [{ role: 'user', content: `Conversa:\n${conversa_str}\n\nÚltima mensagem do cliente: "${mensagem.texto}"` }],
-    });
+    }, { conversaId: conversa.id, origem: 'supervisora' });
 
     const sugestao = res.content[0]?.text?.trim();
     if (!sugestao) return;
@@ -221,16 +219,15 @@ export async function analisarConversaEncerrada(convId) {
     const clienteMsgs = msgs.filter(m => m.origem === 'cliente').map(m => m.texto || '').join(' | ');
     if (!clienteMsgs.trim()) return;
 
-    const ai  = await getAnthropicClient();
-    const res = await ai.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 150,
+    const { gerar } = await import('./llm/index.js');
+    const res = await gerar({
+      maxTokens: 150,
       system: `Analise esta conversa de suporte de internet e responda APENAS com XML:
 <sentimento>positivo|neutro|negativo</sentimento>
 <topico>boleto|suporte|cancelamento|comercial|reclamacao|outros</topico>
 <resumo>Resumo em 1 frase do que o cliente precisava e como foi resolvido</resumo>`,
       messages: [{ role: 'user', content: `Mensagens do cliente: ${clienteMsgs}` }],
-    });
+    }, { conversaId: convId, origem: 'supervisora' });
 
     const text     = res.content[0]?.text || '';
     const sentimento = text.match(/<sentimento>([\s\S]*?)<\/sentimento>/)?.[1]?.trim();

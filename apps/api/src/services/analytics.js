@@ -99,13 +99,20 @@ export async function iaETools({ dias: d = 30 } = {}) {
     ...l,
     chamadas: Number(l.chamadas), erros: Number(l.erros),
     tokens_in: Number(l.tokens_in) || 0, tokens_out: Number(l.tokens_out) || 0,
-    custo: custoDeTokens(
-      { modelo: l.nome, tokensIn: l.tokens_in, tokensOut: l.tokens_out }, cfg.precos_llm),
+    // Provedor que não devolve `usage` deixa tokens NULL; `sum` de nulls é null e
+    // `Number(null)||0` viraria custo ZERO com preço configurado — "a IA é de
+    // graça". Chamadas sem tokens = custo desconhecido, não zero.
+    custo: l.tokens_in == null && l.tokens_out == null && Number(l.chamadas) > 0
+      ? null
+      : custoDeTokens({ modelo: l.nome, tokensIn: l.tokens_in, tokensOut: l.tokens_out }, cfg.precos_llm),
   }));
 
   const resolvidos = Number(desfechos.find(d2 => d2.desfecho === 'resolvido')?.n) || 0;
   const custoTotal = llmComCusto.reduce((s, l) => s + (l.custo ?? 0), 0);
-  const semPreco = llmComCusto.some(l => l.custo === null);
+  // Dois motivos diferentes para custo `null`, e a tela precisa saber qual:
+  // "configure os preços" e "o provedor não devolveu tokens" pedem ações opostas.
+  const semTokens = llmComCusto.some(l => l.tokens_in == null && l.tokens_out == null && l.chamadas > 0);
+  const semPreco  = llmComCusto.some(l => l.custo === null && !(l.tokens_in == null && l.tokens_out == null));
 
   return {
     dias: dias(d),
@@ -120,6 +127,7 @@ export async function iaETools({ dias: d = 30 } = {}) {
     // Um custo por resolvido com preço faltando seria menor que o real.
     custo_por_resolvido: semPreco || !resolvidos ? null : Number((custoTotal / resolvidos).toFixed(4)),
     precos_configurados: !semPreco,
+    tokens_desconhecidos: semTokens,
   };
 }
 

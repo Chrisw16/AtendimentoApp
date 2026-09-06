@@ -9,7 +9,6 @@ import { mensagemRepo }   from '../repositories/mensagemRepository.js';
 import { broadcast }      from './sseManager.js';
 import { resolverPrompt } from './promptService.js';
 import {
-  getAnthropicClient,
   consultarClientes, segundaViaBoleto, promessaPagamento,
   criarChamado, verificarConexao, listarPlanos, consultarManutencao,
   sgpBuscarCliente, sgpBuscarBoletos, sgpVerificarStatus,
@@ -728,7 +727,7 @@ async function processarIAResponde(no, ctx, opts = {}) {
   // escrevia um segundo loop agêntico ao lado, e a revisão mostrou que TODOS os
   // furos graves saíam da duplicação: `salvar_dado` sem tratamento (a IA diz
   // "anotei" e não grava), os blocos §67/§68/§75 ausentes na porta de entrada,
-  // `getAnthropicClient()` sem `sandbox` fazendo teste virar custo de produção,
+  // `getAnthropicClient()` (hoje `gerar()`) sem `sandbox` fazendo teste virar custo de produção,
   // e `ia_execucoes` sem registro. Este repositório já pagou caro por catálogos
   // gêmeos que divergem — a resposta dele sempre foi fonte única, não uma cópia.
   //
@@ -904,7 +903,12 @@ async function processarIAResponde(no, ctx, opts = {}) {
     + ` max_turnos=${maxTurnos} turno=${turnosUsados + 1}`);
 
   try {
-    const ai = await getAnthropicClient({ conversaId: ctx.conversa.id, origem: 'motor', sandbox: ctx.sandbox });
+    const { gerar, resolver } = await import('./llm/index.js');
+    // Resolve aqui só para LOGAR de onde veio a escolha; `gerar` resolve de novo
+    // (mesma resposta) — é o que deixa o operador distinguir "não pegou" de
+    // "pegou e o modelo respondeu mal", a lição do perfil e do playbook.
+    const escolha = await resolver({ provedor, modelo });
+    console.log(`[IA] provedor=${escolha.provedor} modelo=${escolha.modelo} (${escolha.origem}) temperatura=${Number.isFinite(temperatura) ? temperatura : '—'}`);
     let texto = '';
     let faladoNoTurno = '';   // tudo que a IA falou neste turno (p/ histórico coerente)
     let transferiu = false;
@@ -918,13 +922,13 @@ async function processarIAResponde(no, ctx, opts = {}) {
     let loopCount = 0;
 
     while (loopCount++ < 5) {
-      const res = await ai.messages.create({
-        model:      modelo || 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
-        system,
-        tools,
-        messages:   loopMessages,
-      });
+      // A resposta vem SEMPRE no formato de blocos da Anthropic — o adapter
+      // traduz quando o provedor é outro. Por isso o laço abaixo, que lê
+      // `stop_reason` e `content[]`, não mudou uma linha com a troca de provedor.
+      const res = await gerar(
+        { system, messages: loopMessages, tools, provedor: escolha.provedor, modelo: escolha.modelo, temperatura, maxTokens: 1024 },
+        { conversaId: ctx.conversa.id, origem: 'motor', sandbox: ctx.sandbox },
+      );
 
       // Verifica stop reason
       if (res.stop_reason === 'end_turn') {
@@ -1290,7 +1294,7 @@ async function processarIADireta(conversa, mensagemCliente) {
   const hist = await obterHistorico(conversa.id, db);
 
   // Usa o prompt 'outros' como fallback quando não há fluxo ativo
-  const { system, modelo, temperatura } = await resolverPrompt('outros', {
+  const { system, modelo, provedor, temperatura } = await resolverPrompt('outros', {
     nome:     conversa.nome,
     telefone: conversa.telefone,
   });
@@ -1301,14 +1305,11 @@ async function processarIADireta(conversa, mensagemCliente) {
   ].filter(m => m.content);
 
   try {
-    const ai = await getAnthropicClient();
-    const response = await ai.messages.create({
-      model:       modelo || 'claude-haiku-4-5-20251001',
-      max_tokens:  1024,
-      temperature: temperatura,
-      system,
-      messages,
-    });
+    const { gerar } = await import('./llm/index.js');
+    const response = await gerar(
+      { system, messages, provedor, modelo, temperatura, maxTokens: 1024 },
+      { conversaId: conversa.id, origem: 'motor' },
+    );
     const texto = response.content.find(b => b.type === 'text')?.text;
     if (texto) await enviarResposta(conversa, { tipo: 'texto', texto }, conversa.canal_instancia || conversa.canal || 'default');
   } catch (err) {

@@ -3,7 +3,7 @@ import { invalidateConfigCache } from '../services/integrations.js';
 import { invalidateSgpDbPool, diagnosticoOnu } from '../services/sgpDb.js';
 import { formatarDiagnosticoOnu } from '../services/sgpHelpers.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.js';
-import { asyncHandler } from '../middlewares/errorHandler.js';
+import { asyncHandler, HttpError } from '../middlewares/errorHandler.js';
 import { auditar, ipDe } from '../services/auditoria.js';
 import { lerValorKV, mascararConfig, mascarar, ehSecreta, valorParaGravar } from '../services/kvSeguro.js';
 import { getDb } from '../config/db.js';
@@ -15,6 +15,9 @@ const CHAVES_PUBLICAS = [
   'prompt_ia', 'saudacao', 'horario', 'mensagem_fora_hora',
   'modo', 'horario_ativo', 'notificacoes',
   'anthropic_api_key', 'openai_api_key', 'sgp_url', 'sgp_token', 'sgp_app',
+  // Provedor e modelo GLOBAIS de IA + as chaves dos provedores novos.
+  'ia_provedor', 'ia_modelo',
+  'deepseek_api_key', 'gemini_api_key', 'groq_api_key', 'openrouter_api_key',
   'evolution_url', 'evolution_key', 'telegram_bot_token', 'nome_empresa',
   'sgpdb_host', 'sgpdb_port', 'sgpdb_name', 'sgpdb_user', 'sgpdb_password',
 ];
@@ -37,6 +40,27 @@ sysconfigRouter.get('/', asyncHandler(async (req, res) => {
 sysconfigRouter.put('/', asyncHandler(async (req, res) => {
   const db = getDb();
   const updates = Object.entries(req.body).filter(([k]) => CHAVES_PUBLICAS.includes(k));
+
+  // Escolher um provedor cuja chave não existe derrubaria 100% do atendimento
+  // com um clique: todo turno de IA lançaria "chave não configurada", o cliente
+  // leria "ocorreu um erro" e cairia na fila humana. "Falha honesta" é para
+  // provedor fora do ar, não para uma tela de configuração. A chave pode vir no
+  // MESMO corpo (valor real, não máscara) ou já estar no banco.
+  const provedorNovo = String(req.body.ia_provedor || '').trim();
+  if (provedorNovo) {
+    const { PROVEDORES } = await import('../services/llm/index.js');
+    const def = PROVEDORES[provedorNovo];
+    if (!def) throw new HttpError(400, `Provedor de IA desconhecido: "${provedorNovo}".`);
+    const noCorpo = String(req.body[def.chave] || '');
+    const temNoCorpo = noCorpo && !noCorpo.includes('•');
+    const noBanco = temNoCorpo ? null : await db('sistema_kv').where({ chave: def.chave }).first();
+    if (!temNoCorpo && !noBanco?.valor) {
+      throw new HttpError(400, `Para usar ${def.nome} é preciso salvar a chave de API dele junto ou antes.`);
+    }
+    if (!String(req.body.ia_modelo || '').trim()) {
+      throw new HttpError(400, `Escolha também o modelo de ${def.nome}.`);
+    }
+  }
   const gravadas = [];
   let semSegredo = false;
   for (const [chave, valor] of updates) {
@@ -80,6 +104,44 @@ sysconfigRouter.get('/:chave', asyncHandler(async (req, res) => {
   // Mesma regra do GET agregado: credencial sai mascarada por esta rota também,
   // senão bastaria pedir pelo nome para contornar o mascaramento.
   res.json({ valor: ehSecreta(req.params.chave) && valor ? mascarar(valor) : valor });
+}));
+
+// ── CATÁLOGO DE PROVEDORES E MODELOS ──────────────────────────────────────
+// Uma fonte só: a tela lê daqui em vez de ter a própria lista (a de Prompts IA
+// tinha `gpt-4o-mini` hardcoded — modelo que já saiu de linha). Junto vai o
+// que está valendo hoje (global resolvido), para a tela mostrar "herdando de".
+sysconfigRouter.get('/ia/catalogo', asyncHandler(async (req, res) => {
+  const { PROVEDORES, CATALOGO, PRECOS_REFERENCIA, resolver } = await import('../services/llm/index.js');
+  const provedores = Object.entries(PROVEDORES).map(([id, p]) => ({ id, nome: p.nome, chave: p.chave }));
+  res.json({ provedores, catalogo: CATALOGO, precos_referencia: PRECOS_REFERENCIA, global: await resolver({}) });
+}));
+
+// ── TESTE DE PROVEDOR DE IA ───────────────────────────────────────────────
+//
+// Uma chamada mínima ao provedor/modelo escolhidos, com a chave que está NO
+// BANCO (não a do formulário — o que se testa é o que vai rodar). Sem isto o
+// operador só descobre chave errada ou modelo inexistente quando um cliente
+// escreve e a IA responde "ocorreu um erro". O erro volta normalizado pelo
+// `llm/index.js`, então a tela diz "credencial inválida" e não um stack do SDK.
+sysconfigRouter.post('/ia/testar', authMiddleware, adminMiddleware, asyncHandler(async (req, res) => {
+  const { provedor = null, modelo = null } = req.body || {};
+  const { gerar, resolver } = await import('../services/llm/index.js');
+  const escolha = await resolver({ provedor, modelo });
+  const t0 = Date.now();
+  // Só os NOMES no audit: nunca a chave, nunca a resposta.
+  auditar({ actorType: 'human', actorId: req.agente.id, action: 'ia_provedor_testado',
+            after: { provedor: escolha.provedor, modelo: escolha.modelo }, ip: ipDe(req) });
+  try {
+    const r = await gerar(
+      { system: 'Responda apenas: ok', messages: [{ role: 'user', content: 'teste' }],
+        provedor: escolha.provedor, modelo: escolha.modelo, temperatura: 0, maxTokens: 8 },
+      { origem: 'teste_config', sandbox: true },   // teste não é custo de atendimento
+    );
+    const texto = (r.content || []).filter(b => b.type === 'text').map(b => b.text).join('').slice(0, 60);
+    res.json({ ok: true, ...escolha, ms: Date.now() - t0, resposta: texto, tokens: r.usage || null });
+  } catch (err) {
+    res.status(200).json({ ok: false, ...escolha, ms: Date.now() - t0, erro: err.message, status: err.status ?? null });
+  }
 }));
 
 // ── ROTA DE TESTE DE TOOLS SGP ────────────────────────────────────────────

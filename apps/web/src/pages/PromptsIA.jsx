@@ -15,16 +15,10 @@ const SLUG_ICONS = {
 // Slugs que têm configuração de modelo/provedor/temperatura
 const SLUGS_COM_MODELO = ['roteador','financeiro','suporte','comercial','faq','outros'];
 
-const MODELOS = {
-  anthropic: [
-    { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',  desc: 'Rápido e barato' },
-    { id: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6', desc: 'Mais potente'     },
-  ],
-  openai: [
-    { id: 'gpt-4o-mini', label: 'GPT-4o Mini', desc: 'Rápido, barato'  },
-    { id: 'gpt-4o',      label: 'GPT-4o',      desc: 'Mais potente'    },
-  ],
-};
+// A lista de modelos vem da API (`/sysconfig/ia/catalogo`) — uma fonte só. A
+// lista que morava aqui tinha `gpt-4o-mini` e `claude-sonnet-4-6`, modelos que já
+// saíram de linha, e não sabia dos outros quatro provedores.
+const ICONE_PROV = { anthropic: '🟣', openai: '🟢', deepseek: '🔵', gemini: '🔷', groq: '🟠', openrouter: '⚪' };
 
 const PLACEHOLDERS = [
   { tag: '[REGRAS]',           desc: 'Injeta as regras absolutas automaticamente'   },
@@ -336,6 +330,10 @@ function PerfisIA() {
 
   const { data: perfis = [] } = useQuery({ queryKey: ['ia-perfis'], queryFn: () => api.get('/ia/perfis') });
   const { data: prompts = [] } = useQuery({ queryKey: ['prompts-ia'], queryFn: () => api.get('/prompts') });
+  const { data: cat } = useQuery({ queryKey: ['ia-catalogo'], queryFn: () => api.get('/sysconfig/ia/catalogo') });
+  const provedores = cat?.provedores || [];
+  const catalogo   = cat?.catalogo   || {};
+  const globalIA   = cat?.global     || null;
   const { data: playbooks = [] } = useQuery({ queryKey: ['playbooks'], queryFn: () => api.get('/playbooks') });
   const invalidar = () => qc.invalidateQueries({ queryKey: ['ia-perfis'] });
 
@@ -464,8 +462,10 @@ export default function PromptsIA() {
 
   function apply(p) {
     setEditText(p.conteudo || '');
-    setEditProv(p.provedor || 'anthropic');
-    setEditModel(p.modelo  || 'claude-haiku-4-5-20251001');
+    // Vazio = HERDA o global de Configurações. Preencher aqui com o padrão faria
+    // todo prompt parecer um override e o global nunca seria alcançado.
+    setEditProv(p.provedor || '');
+    setEditModel(p.modelo  || '');
     setEditTemp(Number(p.temperatura ?? 0.3));
   }
 
@@ -524,11 +524,8 @@ export default function PromptsIA() {
   }
 
   function fmtModel(m) {
-    return (m || '')
-      .replace('claude-haiku-4-5-20251001', 'Haiku 4.5')
-      .replace('claude-sonnet-4-6', 'Sonnet 4.6')
-      .replace('gpt-4o-mini', 'GPT-4o Mini')
-      .replace('gpt-4o', 'GPT-4o');
+    // O id inteiro é a verdade; nomes bonitos moram no catálogo da API.
+    return (m || '').replace(/-\d{8}$/, '');
   }
 
   return (
@@ -712,7 +709,7 @@ export default function PromptsIA() {
                     <span className={styles.promptNome}>{p.nome}</span>
                     {SLUGS_COM_MODELO.includes(p.slug) && (
                       <span className={styles.promptModel}>
-                        {p.provedor === 'anthropic' ? '🟣' : '🟢'} {fmtModel(p.modelo)}
+                        {p.provedor ? `${ICONE_PROV[p.provedor] || '⚙️'} ${fmtModel(p.modelo)}` : '↩ herda'}
                       </span>
                     )}
                   </div>
@@ -762,21 +759,25 @@ export default function PromptsIA() {
                       onChange={e => {
                         const prov = e.target.value;
                         setEditProv(prov);
-                        setEditModel(MODELOS[prov][0].id);
+                        setEditModel(prov ? (catalogo[prov]?.[0]?.id || '') : '');
                         setDirty(true);
                       }}>
-                      <option value="anthropic">🟣 Anthropic</option>
-                      <option value="openai">🟢 OpenAI</option>
+                      <option value="">↩ Herdar de Configurações{globalIA ? ` (${globalIA.provedor} · ${globalIA.modelo})` : ''}</option>
+                      {provedores.map(pv => <option key={pv.id} value={pv.id}>{ICONE_PROV[pv.id] || '⚙️'} {pv.nome}</option>)}
                     </select>
                   </div>
                   <div className={styles.modelField} style={{ flex: 2 }}>
                     <label className={styles.modelLabel}>Modelo</label>
-                    <select className={styles.select} value={editModel}
-                      onChange={e => { setEditModel(e.target.value); setDirty(true); }}>
-                      {(MODELOS[editProv] || []).map(m => (
-                        <option key={m.id} value={m.id}>{m.label} — {m.desc}</option>
+                    {/* Texto livre com sugestões: provedor lança modelo toda semana e o
+                        operador não pode depender de deploy para usar um novo. */}
+                    <input className={styles.select} list={`modelos-${editProv || 'x'}`} value={editModel} disabled={!editProv}
+                      placeholder={editProv ? 'digite ou escolha um modelo' : 'herdando de Configurações'}
+                      onChange={e => { setEditModel(e.target.value); setDirty(true); }}/>
+                    <datalist id={`modelos-${editProv || 'x'}`}>
+                      {(catalogo[editProv] || []).map(m => (
+                        <option key={m.id} value={m.id}>{m.nome} — US$ {m.preco.in}/{m.preco.out} por 1M tokens</option>
                       ))}
-                    </select>
+                    </datalist>
                   </div>
                   <div className={styles.modelField}>
                     <label className={styles.modelLabel}>Temperatura ({editTemp.toFixed(1)})</label>
@@ -812,7 +813,7 @@ export default function PromptsIA() {
                   )}
                   <button
                     className={styles.btnSave}
-                    onClick={() => saveMut.mutate({ conteudo: editText, provedor: editProv, modelo: editModel, temperatura: editTemp })}
+                    onClick={() => saveMut.mutate({ conteudo: editText, provedor: editProv || null, modelo: editModel || null, temperatura: editTemp })}
                     disabled={saveMut.isPending || !dirty}>
                     <Save size={13}/>
                     {saveMut.isPending ? 'Salvando...' : 'Salvar'}
