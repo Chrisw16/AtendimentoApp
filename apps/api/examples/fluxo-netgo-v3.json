@@ -1,0 +1,519 @@
+{
+  "nome": "Atendimento NetGo — v3 (recepção por IA)",
+  "_comment": "Proposta de 2026-09-06. Importe pelo botão 📂 Importar do editor. Cada nó de IA só aponta o PERFIL: prompt, procedimento, tools e limite de turnos vêm de Configurações → Perfis de IA. Ver examples/prompts-netgo-v3.md.",
+  "nodes": [
+    {
+      "id": "inicio",
+      "tipo": "inicio",
+      "config": {},
+      "posX": 0,
+      "posY": 300
+    },
+    {
+      "id": "recepcao",
+      "tipo": "ia_roteador",
+      "config": {
+        "rotas": [
+          {
+            "id": "suporte",
+            "label": "Suporte técnico",
+            "descricao": "Internet sem funcionar, lenta, caindo, luz vermelha no equipamento, Wi-Fi fraco, senha do Wi-Fi, qualquer problema técnico. Inclui \"já paguei e não voltou\" quando o cliente diz que o pagamento foi há mais de 1 hora."
+          },
+          {
+            "id": "financeiro",
+            "label": "Financeiro",
+            "descricao": "Boleto, 2ª via, PIX, fatura, valor, vencimento, pagamento que acabou de fazer e quer liberar o acesso, promessa de pagamento, comprovante."
+          },
+          {
+            "id": "comercial",
+            "label": "Comercial",
+            "descricao": "Ainda não é cliente e quer conhecer planos, preço, cobertura ou contratar; cliente que quer trocar de plano, upgrade ou instalar num outro endereço."
+          }
+        ]
+      },
+      "posX": 260,
+      "posY": 300
+    },
+    {
+      "id": "cpf_sup",
+      "tipo": "consultar_cliente",
+      "config": {
+        "pergunta": "Pra eu localizar seu cadastro, me passa seu CPF ou CNPJ? 🙂",
+        "mensagem_erro": "Não encontrei cadastro com esse documento. 😕 Confere os números e manda de novo? Se não der certo, te passo pra um atendente.",
+        "max_tentativas": 3
+      },
+      "posX": 560,
+      "posY": 60
+    },
+    {
+      "id": "status_sup",
+      "tipo": "verificar_status",
+      "config": {},
+      "posX": 820,
+      "posY": 60
+    },
+    {
+      "id": "ia_suporte",
+      "tipo": "ia_responde",
+      "config": {
+        "perfil": "suporte"
+      },
+      "posX": 1100,
+      "posY": 0
+    },
+    {
+      "id": "msg_suspenso",
+      "tipo": "enviar_texto",
+      "config": {
+        "texto": "{{cliente.nome}}, vi aqui que seu contrato consta com *pendência financeira* e o acesso está limitado — é por isso que a internet não funciona. Vou te passar pro financeiro pra resolver agora. 👇"
+      },
+      "posX": 1100,
+      "posY": 160
+    },
+    {
+      "id": "msg_status_humano",
+      "tipo": "enviar_texto",
+      "config": {
+        "texto": "{{cliente.nome}}, seu contrato consta como *{{cliente.status}}*. Vou te passar pra um atendente ver isso com você. 🙂\nProtocolo: *{{protocolo}}*"
+      },
+      "posX": 1100,
+      "posY": 340
+    },
+    {
+      "id": "msg_humano_sup",
+      "tipo": "enviar_texto",
+      "config": {
+        "texto": "Vou te passar pra um atendente do suporte técnico. Só um instante 🙂\nProtocolo: *{{protocolo}}*"
+      },
+      "posX": 1380,
+      "posY": 120
+    },
+    {
+      "id": "transf_sup",
+      "tipo": "transferir_agente",
+      "config": {
+        "fila": "suporte_tecnico",
+        "msg_fora": "Nossa equipe está fora do horário de atendimento agora. É só mandar mensagem de novo dentro do horário que a gente continua por aqui — seu protocolo é *{{protocolo}}*."
+      },
+      "posX": 1640,
+      "posY": 120
+    },
+    {
+      "id": "cpf_fin",
+      "tipo": "consultar_cliente",
+      "config": {
+        "pergunta": "Pra eu localizar seu cadastro, me passa seu CPF ou CNPJ? 🙂",
+        "mensagem_erro": "Não encontrei cadastro com esse documento. 😕 Confere os números e manda de novo? Se não der certo, te passo pra um atendente.",
+        "max_tentativas": 3
+      },
+      "posX": 560,
+      "posY": 420
+    },
+    {
+      "id": "ia_financeiro",
+      "tipo": "ia_responde",
+      "config": {
+        "perfil": "financeiro"
+      },
+      "posX": 1100,
+      "posY": 420
+    },
+    {
+      "id": "msg_humano_fin",
+      "tipo": "enviar_texto",
+      "config": {
+        "texto": "Vou te passar pra um atendente do financeiro. Só um instante 🙂\nProtocolo: *{{protocolo}}*"
+      },
+      "posX": 1380,
+      "posY": 480
+    },
+    {
+      "id": "transf_fin",
+      "tipo": "transferir_agente",
+      "config": {
+        "fila": "financeiro",
+        "msg_fora": "Nossa equipe está fora do horário de atendimento agora. É só mandar mensagem de novo dentro do horário que a gente continua por aqui — seu protocolo é *{{protocolo}}*."
+      },
+      "posX": 1640,
+      "posY": 480
+    },
+    {
+      "id": "ia_comercial",
+      "tipo": "ia_responde",
+      "config": {
+        "perfil": "comercial"
+      },
+      "posX": 560,
+      "posY": 700
+    },
+    {
+      "id": "msg_humano_com",
+      "tipo": "enviar_texto",
+      "config": {
+        "texto": "Vou te passar pra um atendente da equipe comercial. Só um instante 🙂\nProtocolo: *{{protocolo}}*"
+      },
+      "posX": 1380,
+      "posY": 760
+    },
+    {
+      "id": "transf_com",
+      "tipo": "transferir_agente",
+      "config": {
+        "fila": "comercial",
+        "msg_fora": "Nossa equipe está fora do horário de atendimento agora. É só mandar mensagem de novo dentro do horário que a gente continua por aqui — seu protocolo é *{{protocolo}}*."
+      },
+      "posX": 1640,
+      "posY": 760
+    },
+    {
+      "id": "msg_humano_geral",
+      "tipo": "enviar_texto",
+      "config": {
+        "texto": "Vou te passar pra um atendente da nossa equipe. Só um instante 🙂\nProtocolo: *{{protocolo}}*"
+      },
+      "posX": 560,
+      "posY": 940
+    },
+    {
+      "id": "transf_geral",
+      "tipo": "transferir_agente",
+      "config": {
+        "msg_fora": "Nossa equipe está fora do horário de atendimento agora. É só mandar mensagem de novo dentro do horário que a gente continua por aqui — seu protocolo é *{{protocolo}}*."
+      },
+      "posX": 820,
+      "posY": 940
+    },
+    {
+      "id": "mais_algo",
+      "tipo": "enviar_botoes",
+      "config": {
+        "corpo": "Posso ajudar em algo mais?",
+        "botoes": [
+          {
+            "id": "sim",
+            "label": "✅ Sim"
+          },
+          {
+            "id": "nao",
+            "label": "Não"
+          }
+        ]
+      },
+      "posX": 1920,
+      "posY": 300
+    },
+    {
+      "id": "nps",
+      "tipo": "nps_inline",
+      "config": {
+        "pergunta": "Antes de ir: de 1 a 5, como foi o atendimento? ⭐",
+        "escala": 5
+      },
+      "posX": 2180,
+      "posY": 300
+    },
+    {
+      "id": "fim",
+      "tipo": "encerrar",
+      "config": {
+        "mensagem": "Obrigado por falar com a NetGo! 💙 Seu protocolo é *{{protocolo}}*."
+      },
+      "posX": 2440,
+      "posY": 300
+    },
+    {
+      "id": "fim_fora",
+      "tipo": "encerrar",
+      "config": {},
+      "posX": 1920,
+      "posY": 600
+    },
+    {
+      "id": "aviso_ctr_sup",
+      "tipo": "definir_variavel",
+      "config": {
+        "variavel": "contratos_aviso",
+        "valor": "este CPF tem mais de um contrato — chame identificar_cliente para ver a lista e confirme com o cliente de qual contrato ele fala, antes de qualquer consulta"
+      },
+      "posX": 560,
+      "posY": 180
+    },
+    {
+      "id": "aviso_ctr_fin",
+      "tipo": "definir_variavel",
+      "config": {
+        "variavel": "contratos_aviso",
+        "valor": "este CPF tem mais de um contrato — chame identificar_cliente para ver a lista e confirme com o cliente de qual contrato ele fala, antes de qualquer consulta"
+      },
+      "posX": 820,
+      "posY": 540
+    },
+    {
+      "id": "motivo_fin",
+      "tipo": "definir_variavel",
+      "config": {
+        "variavel": "motivo_contato",
+        "valor": "Relato à recepção: {{motivo_contato}}. O contrato consta com pendência financeira (acesso {{cliente.status}}) — o cliente já foi avisado disso e encaminhado ao financeiro para regularizar."
+      },
+      "posX": 1100,
+      "posY": 240
+    }
+  ],
+  "edges": [
+    {
+      "from": "inicio",
+      "to": "recepcao",
+      "port": "saida"
+    },
+    {
+      "from": "recepcao",
+      "to": "cpf_sup",
+      "port": "suporte"
+    },
+    {
+      "from": "recepcao",
+      "to": "cpf_fin",
+      "port": "financeiro"
+    },
+    {
+      "from": "recepcao",
+      "to": "ia_comercial",
+      "port": "comercial"
+    },
+    {
+      "from": "recepcao",
+      "to": "msg_humano_geral",
+      "port": "nao_entendeu"
+    },
+    {
+      "from": "recepcao",
+      "to": "fim",
+      "port": "encerrar"
+    },
+    {
+      "from": "cpf_sup",
+      "to": "status_sup",
+      "port": "encontrado"
+    },
+    {
+      "from": "cpf_sup",
+      "to": "aviso_ctr_sup",
+      "port": "multiplos_contratos"
+    },
+    {
+      "from": "cpf_sup",
+      "to": "msg_humano_sup",
+      "port": "max_tentativas"
+    },
+    {
+      "from": "status_sup",
+      "to": "ia_suporte",
+      "port": "ativo"
+    },
+    {
+      "from": "status_sup",
+      "to": "msg_suspenso",
+      "port": "suspenso"
+    },
+    {
+      "from": "status_sup",
+      "to": "msg_suspenso",
+      "port": "reduzido"
+    },
+    {
+      "from": "status_sup",
+      "to": "msg_status_humano",
+      "port": "inativo"
+    },
+    {
+      "from": "status_sup",
+      "to": "msg_status_humano",
+      "port": "cancelado"
+    },
+    {
+      "from": "status_sup",
+      "to": "msg_status_humano",
+      "port": "novo"
+    },
+    {
+      "from": "status_sup",
+      "to": "msg_status_humano",
+      "port": "inviabilidade"
+    },
+    {
+      "from": "msg_suspenso",
+      "to": "motivo_fin",
+      "port": "saida"
+    },
+    {
+      "from": "msg_status_humano",
+      "to": "transf_sup",
+      "port": "saida"
+    },
+    {
+      "from": "ia_suporte",
+      "to": "mais_algo",
+      "port": "resolvido"
+    },
+    {
+      "from": "ia_suporte",
+      "to": "msg_humano_sup",
+      "port": "transferir"
+    },
+    {
+      "from": "ia_suporte",
+      "to": "msg_humano_sup",
+      "port": "max_turnos"
+    },
+    {
+      "from": "msg_humano_sup",
+      "to": "transf_sup",
+      "port": "saida"
+    },
+    {
+      "from": "transf_sup",
+      "to": "fim_fora",
+      "port": "fora_horario"
+    },
+    {
+      "from": "transf_sup",
+      "to": "mais_algo",
+      "port": "transferido"
+    },
+    {
+      "from": "cpf_fin",
+      "to": "ia_financeiro",
+      "port": "encontrado"
+    },
+    {
+      "from": "cpf_fin",
+      "to": "aviso_ctr_fin",
+      "port": "multiplos_contratos"
+    },
+    {
+      "from": "cpf_fin",
+      "to": "msg_humano_fin",
+      "port": "max_tentativas"
+    },
+    {
+      "from": "ia_financeiro",
+      "to": "mais_algo",
+      "port": "resolvido"
+    },
+    {
+      "from": "ia_financeiro",
+      "to": "msg_humano_fin",
+      "port": "transferir"
+    },
+    {
+      "from": "ia_financeiro",
+      "to": "msg_humano_fin",
+      "port": "max_turnos"
+    },
+    {
+      "from": "msg_humano_fin",
+      "to": "transf_fin",
+      "port": "saida"
+    },
+    {
+      "from": "transf_fin",
+      "to": "fim_fora",
+      "port": "fora_horario"
+    },
+    {
+      "from": "transf_fin",
+      "to": "mais_algo",
+      "port": "transferido"
+    },
+    {
+      "from": "ia_comercial",
+      "to": "mais_algo",
+      "port": "resolvido"
+    },
+    {
+      "from": "ia_comercial",
+      "to": "msg_humano_com",
+      "port": "transferir"
+    },
+    {
+      "from": "ia_comercial",
+      "to": "msg_humano_com",
+      "port": "max_turnos"
+    },
+    {
+      "from": "msg_humano_com",
+      "to": "transf_com",
+      "port": "saida"
+    },
+    {
+      "from": "transf_com",
+      "to": "fim_fora",
+      "port": "fora_horario"
+    },
+    {
+      "from": "transf_com",
+      "to": "mais_algo",
+      "port": "transferido"
+    },
+    {
+      "from": "msg_humano_geral",
+      "to": "transf_geral",
+      "port": "saida"
+    },
+    {
+      "from": "transf_geral",
+      "to": "fim_fora",
+      "port": "fora_horario"
+    },
+    {
+      "from": "transf_geral",
+      "to": "mais_algo",
+      "port": "transferido"
+    },
+    {
+      "from": "mais_algo",
+      "to": "recepcao",
+      "port": "sim"
+    },
+    {
+      "from": "mais_algo",
+      "to": "nps",
+      "port": "nao"
+    },
+    {
+      "from": "mais_algo",
+      "to": "recepcao",
+      "port": "saida"
+    },
+    {
+      "from": "nps",
+      "to": "fim",
+      "port": "promotor"
+    },
+    {
+      "from": "nps",
+      "to": "fim",
+      "port": "neutro"
+    },
+    {
+      "from": "nps",
+      "to": "fim",
+      "port": "detrator"
+    },
+    {
+      "from": "aviso_ctr_sup",
+      "to": "status_sup",
+      "port": "saida"
+    },
+    {
+      "from": "aviso_ctr_fin",
+      "to": "ia_financeiro",
+      "port": "saida"
+    },
+    {
+      "from": "motivo_fin",
+      "to": "ia_financeiro",
+      "port": "saida"
+    }
+  ]
+}

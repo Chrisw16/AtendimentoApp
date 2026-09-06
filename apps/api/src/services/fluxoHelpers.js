@@ -234,8 +234,13 @@ export const TOOLS_SEMPRE_ATIVAS = ['salvar_dado', 'buscar_conhecimento', 'ident
 
 export function filtrarTools(todas, toolsAtivas = [], { playbookAtivo = false } = {}) {
   return todas
-    .filter(t => toolsAtivas.includes(t.name) || TOOLS_SEMPRE_ATIVAS.includes(t.name))
-    .filter(t => t.name !== 'concluir_etapa_playbook' || playbookAtivo)
+    // `concluir_etapa_playbook` acompanha o PROCEDIMENTO, não a lista: com
+    // playbook ativo ela entra mesmo que `perfil.tools`/`cfg.tools_ativas` a
+    // omitam — toda lista explícita omite, e sem ela nenhuma etapa
+    // conversacional marca e nenhum playbook conclui. Sem playbook, sai.
+    .filter(t => t.name === 'concluir_etapa_playbook'
+      ? playbookAtivo
+      : toolsAtivas.includes(t.name) || TOOLS_SEMPRE_ATIVAS.includes(t.name))
     // Só os campos que a API da Anthropic aceita — os metadados de risco da
     // FASE 2 (`is_write`, `allowed_in_sandbox`) são nossos e um campo
     // desconhecido na definição da tool derruba a chamada com 400.

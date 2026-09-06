@@ -20,8 +20,8 @@ import { resolverTipoChamado, avaliarNps, montarSystemPrompt, camposLista, campo
 import { dentroDoHorario } from './filasHelpers.js';
 import { criarFilaPorChave } from './filaPorChave.js';
 import { estadoStore, ehUuid } from './estadoStore.js';
-import { extrairDocumento, mapearIdentificacao, patchConversa, resumoParaIA, mesclarCliente } from './identificacaoHelpers.js';
-import { blocoRotas, schemaDirecionamento, validarDestino, idsDeRota, PORTAS_FIXAS } from './roteadorHelpers.js';
+import { extrairDocumento, mapearIdentificacao, patchConversa, resumoParaIA, mesclarCliente, falaEhDocumento } from './identificacaoHelpers.js';
+import { blocoRotas, schemaDirecionamento, validarDestino, idsDeRota, resumirMotivoContato, PORTAS_FIXAS } from './roteadorHelpers.js';
 
 // Serializa o processamento por conversa. Sem isto, duas mensagens seguidas do
 // mesmo cliente intercalam nos `await` de SGP/IA e corrompem o estado
@@ -694,6 +694,20 @@ async function processarNo(no, ctx) {
           if (!ctx.sandbox) await ctx.db('satisfacao').insert({ conversa_id: ctx.conversa.id, nota, escala, canal: ctx.conversa.canal }).catch(() => {});
           return avancar(aval.porta);
         }
+        // Resposta que não é nota ("muito bom", "ok"): repergunta UMA vez com a
+        // instrução explícita; na segunda, segue pela porta `neutro` SEM gravar
+        // nota. Antes ficava em `aguardar()` calado — a conversa pendurava
+        // aberta no painel até o TTL de 2 h e o `encerrar` seguinte nunca rodava.
+        // ponytail: `neutro` faz de porta "sem nota"; porta própria obrigaria a
+        // religar todo fluxo existente.
+        const chaveNps = `_nps_tentativas_${no.id}`;
+        if ((ctx.estado.contexto[chaveNps] || 0) >= 1) {
+          delete ctx.estado.contexto[chaveNps];
+          return avancar('neutro');
+        }
+        ctx.estado.contexto[chaveNps] = 1;
+        const teto = parseInt(cfg.escala, 10) === 5 ? 5 : 10;
+        ctx.respostas.push({ tipo: 'texto', texto: `Responda só com o número, de 1 a ${teto}. 🙂` });
         ctx.estado.aguardando = no.id;
         return aguardar();
       }
@@ -806,6 +820,10 @@ async function processarIAResponde(no, ctx, opts = {}) {
     .join('\n');
 
   // Ficha de dados já coletados (reinjetada todo turno para a IA não re-perguntar).
+  // Recepção em visita nova (histórico do nó vazio): o motivo do contato
+  // anterior não pode entrar na ficha — o agente leria "NUNCA re-pergunte:
+  // motivo_contato: internet caiu" e encaminharia sem ouvir o cliente.
+  if (recepcao && !(ctx.estado.contexto[histKey]?.length)) delete ctx.estado.contexto.motivo_contato;
   const ficha = montarFichaColetada(ctx.estado.contexto);
 
   // FASE 8: o procedimento oficial entra no prompt TODO TURNO, com as etapas já
@@ -814,7 +832,14 @@ async function processarIAResponde(no, ctx, opts = {}) {
   const { prepararParaIA } = await import('./playbook.js');
   const slugPlaybook = cfg.playbook || perfil?.playbook_slug || null;
   const pb = slugPlaybook
-    ? await prepararParaIA(slugPlaybook, { conversaId: ctx.conversa.id, sandbox: ctx.sandbox }).catch(err => {
+    ? await prepararParaIA(slugPlaybook, {
+        conversaId: ctx.conversa.id, sandbox: ctx.sandbox,
+        // A etapa "Identificar o cliente" (evidência: `identificar_cliente`)
+        // nunca marcava quando quem identificou foi o NÓ `consultar_cliente`
+        // antes da IA — o fluxo de produção é assim, e o suporte ficava em
+        // "← VOCÊ ESTÁ AQUI" na etapa 1 para sempre (0/9 em toda execução).
+        jaIdentificado: !!ctx.estado.contexto.cliente?.contrato,
+      }).catch(err => {
         console.error('[Playbook] falhou, seguindo sem procedimento:', err.message);
         return null;
       })
@@ -857,7 +882,13 @@ async function processarIAResponde(no, ctx, opts = {}) {
     video: '[o cliente enviou um vídeo]',
     doc: '[o cliente enviou um documento]',
   };
-  const falaCliente = ctx.mensagem.texto || MARCADOR_MIDIA[ctx.mensagem.tipo] || '';
+  // Entrar no nó no MESMO turno em que o `consultar_cliente` identificou faz a
+  // primeira fala do cliente ser o CPF cru — que entraria em `_ia_hist_*` e, de
+  // lá, nas `ultimas_mensagens` do handoff (que não deve carregar documento).
+  // A ficha já traz o cliente; a fala vira um marcador.
+  const falaCliente = falaEhDocumento(ctx.mensagem.texto, ctx.estado.contexto.cliente?.cpf)
+    ? '[o cliente informou o CPF/CNPJ e já está identificado]'
+    : (ctx.mensagem.texto || MARCADOR_MIDIA[ctx.mensagem.tipo] || '');
 
   const histSessao = ctx.estado.contexto[histKey] || [];
   const messages   = [
@@ -1047,7 +1078,21 @@ async function processarIAResponde(no, ctx, opts = {}) {
           if (recepcao && tu.name === 'direcionar_atendimento') {
             const escolhido = validarDestino(tu.input?.destino, rotas);
             console.log(`[IA] Executando tool: direcionar_atendimento (motor) → ${escolhido || `RECUSADO (${tu.input?.destino})`}`);
-            if (escolhido) destino = escolhido;
+            if (escolhido) {
+              destino = escolhido;
+              // O agente de destino começa sabendo o que o cliente já contou
+              // aqui: o histórico da recepção é por nó e não atravessa a
+              // aresta, e sem isto o suporte abria com "me conta o que está
+              // acontecendo?" para quem acabou de contar (medido 2026-09-01).
+              // Determinístico de propósito — pedir à IA que chame `salvar_dado`
+              // antes de encaminhar é a garantia que o CLAUDE.md já mediu falhar.
+              // Sobrescreve: a recepção é revisitada ("posso ajudar em algo
+              // mais?" → sim), e o motivo da visita anterior mandaria o
+              // financeiro "ir direto" num boleto quando o cliente agora relatou
+              // queda. A visita nova zera o campo antes de ler a ficha.
+              const motivo = resumirMotivoContato(loopMessages);
+              if (motivo) ctx.estado.contexto.motivo_contato = motivo;
+            }
             toolsUsadas.push(tu.name);
             toolResults.push({
               type: 'tool_result', tool_use_id: tu.id,

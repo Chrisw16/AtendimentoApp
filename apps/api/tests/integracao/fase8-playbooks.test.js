@@ -232,4 +232,33 @@ describe('FASE 8 — Playbook Engine', { skip: motivoSkip() }, () => {
       assert.equal(p.exec.versao, 1);
     });
   });
+
+  // ── 2026-09-06: o NÓ identificou, a etapa da tool tem de valer ─────
+  describe('jaIdentificado', () => {
+    const ETAPAS = [
+      { ordem: 1, titulo: 'Identificar o cliente', obrigatoriedade: 'obrigatoria', tools: JSON.stringify(['identificar_cliente']) },
+      { ordem: 2, titulo: 'Verificar conexão',     obrigatoriedade: 'obrigatoria', tools: JSON.stringify(['verificar_conexao']) },
+    ];
+    const feitas = (exec) => typeof exec.etapas_feitas === 'string' ? JSON.parse(exec.etapas_feitas) : (exec.etapas_feitas || []);
+
+    test('cliente identificado pelo nó consultar_cliente marca a etapa de identificar_cliente antes de montar o bloco', async () => {
+      const pb   = await criar({ etapas: ETAPAS });
+      const conv = await criarConversa(db, {});
+      const p    = await pbs.prepararParaIA(pb.slug, { conversaId: conv.id, jaIdentificado: true });
+      assert.equal(feitas(p.exec).length, 1);
+      assert.match(p.bloco, /\[x\][^\n]*Identificar o cliente/);
+      // repetir no turno seguinte é no-op, não duplica
+      const p2 = await pbs.prepararParaIA(pb.slug, { conversaId: conv.id, jaIdentificado: true });
+      assert.equal(feitas(p2.exec).length, 1);
+    });
+
+    test('sem identificação prévia nada é marcado — e no sandbox não há execução', async () => {
+      const pb   = await criar({ etapas: ETAPAS });
+      const conv = await criarConversa(db, {});
+      const p    = await pbs.prepararParaIA(pb.slug, { conversaId: conv.id });
+      assert.equal(feitas(p.exec).length, 0);
+      const sb = await pbs.prepararParaIA(pb.slug, { conversaId: conv.id, sandbox: true, jaIdentificado: true });
+      assert.equal(sb.exec, null);
+    });
+  });
 });

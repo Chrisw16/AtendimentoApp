@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { idsDeRota, blocoRotas, schemaDirecionamento, validarDestino, PORTAS_FIXAS } from './roteadorHelpers.js';
+import { idsDeRota, blocoRotas, schemaDirecionamento, validarDestino, resumirMotivoContato, PORTAS_FIXAS } from './roteadorHelpers.js';
 
 /** As rotas que o operador de fato configurou no nó de recepção (lidas do banco). */
 const ROTAS = [
@@ -114,5 +114,39 @@ describe('validarDestino — a fronteira de confiança', () => {
 
   test('PORTAS_FIXAS é o contrato com o editor e o validador', () => {
     assert.deepEqual(PORTAS_FIXAS, ['nao_entendeu', 'encerrar']);
+  });
+});
+
+describe('resumirMotivoContato', () => {
+  test('junta o que o cliente disse à recepção, na ordem, e ignora o que não é fala dele', () => {
+    const hist = [
+      { role: 'user', content: 'oi' },
+      { role: 'assistant', content: 'Oi! Em que posso ajudar?' },
+      { role: 'user', content: 'minha internet   caiu\nontem à noite' },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'x', name: 'direcionar_atendimento', input: {} }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', content: '✓' }] },
+    ];
+    assert.equal(resumirMotivoContato(hist), 'oi | minha internet caiu ontem à noite');
+  });
+
+  test('corta no teto com reticências — o campo vai para o system prompt de TODO turno seguinte', () => {
+    const longa = 'a'.repeat(400);
+    const r = resumirMotivoContato([{ role: 'user', content: longa }], 100);
+    assert.equal(r.length, 100);
+    assert.ok(r.endsWith('…'));
+  });
+
+  test('redige CPF, telefone e e-mail que o cliente digitou — a ficha já carrega o documento no lugar certo', () => {
+    const r = resumirMotivoContato([{ role: 'user', content: 'meu cpf é 111.444.777-35, celular 84988776644, mail joao@x.com, quero o boleto' }]);
+    assert.doesNotMatch(r, /111\.444\.777-35|11144477735/);
+    assert.doesNotMatch(r, /84988776644/);
+    assert.doesNotMatch(r, /joao@x\.com/);
+    assert.match(r, /quero o boleto$/);
+    assert.doesNotMatch(resumirMotivoContato([{ role: 'user', content: '11144477735' }]), /11144477735/);
+  });
+
+  test('sem fala nenhuma devolve vazio (e vazio não entra na ficha)', () => {
+    assert.equal(resumirMotivoContato([]), '');
+    assert.equal(resumirMotivoContato(undefined), '');
   });
 });

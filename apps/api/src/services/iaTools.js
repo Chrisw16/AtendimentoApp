@@ -34,12 +34,12 @@ export const IA_TOOLS = [
   },
   {
     name: 'criar_chamado',
-    description: 'Abre chamado técnico. Use SEMPRE que não resolver o problema. Informe o protocolo ao cliente. Tipos: 200=Reparo, 3=MudSenhaWifi, 14=RelocRoteador, 13=MudEndereco, 23=MudPlano, 22=ProbFatura, 5=Outros.',
+    description: 'Abre chamado técnico no SGP. Use quando o diagnóstico não resolver. Informe ao cliente o protocolo EXATO que a ferramenta devolver. O id do tipo de ocorrência é o que o seu prompt indica (varia por provedor).',
     input_schema: {
       type: 'object',
       properties: {
         contrato:         { type: 'string',  description: 'ID do contrato' },
-        ocorrenciatipo:   { type: 'integer', description: 'Tipo: 200=Reparo, 3=MudSenha, 14=RelocRoteador, 13=MudEndereco, 23=MudPlano, 22=ProbFatura, 5=Outros' },
+        ocorrenciatipo:   { type: 'integer', description: 'Id do tipo de ocorrência indicado no seu prompt (ex.: o de Reparo para problema de conexão)' },
         conteudo:         { type: 'string',  description: 'Descrição detalhada do problema' },
         contato_nome:     { type: 'string',  description: 'Nome do cliente' },
         contato_telefone: { type: 'string',  description: 'Telefone para contato' },
@@ -125,7 +125,7 @@ export const IA_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        cidade: { type: 'string', description: 'Filtrar planos por cidade — opcional. Ex: "Natal", "Macaíba", "São Miguel do Gostoso".' },
+        cidade: { type: 'string', description: 'Filtrar planos por cidade — opcional. Ex: "Natal", "Macaíba".' },
       },
     },
   },
@@ -136,7 +136,7 @@ export const IA_TOOLS = [
   },
   {
     name: 'precadastrar_cliente',
-    description: 'Cadastra um novo cliente PF (Pessoa Física) no SGP via pré-cadastro. Use APENAS no contexto comercial, depois de coletar TODOS os dados obrigatórios e confirmar com o cliente. Planos Natal/Macaíba/SGA: Essencial=12, Avançado=13, Premium=16. São Miguel do Gostoso: Essencial=30, Avançado=29, Premium=28. POPs: Macaíba/Natal=1, São Miguel=3, São Gonçalo=4. Portadores: Natal/Macaíba/SGA=16, São Miguel=18.',
+    description: 'Cadastra um novo cliente PF (Pessoa Física) no SGP via pré-cadastro. Use APENAS no contexto comercial, depois de coletar TODOS os dados obrigatórios e confirmar com o cliente. O plano_id vem SEMPRE do retorno de listar_planos_ativos nesta conversa (os ids mudam por instância — nunca use um de memória). POP e portador são detectados pela cidade.',
     input_schema: {
       type: 'object',
       properties: {
@@ -152,7 +152,7 @@ export const IA_TOOLS = [
         cidade:          { type: 'string',  description: 'Cidade. Define automaticamente pop_id e portador_id se não forem passados.' },
         cep:             { type: 'string',  description: 'CEP (com ou sem formatação)' },
         pontoreferencia: { type: 'string',  description: 'Ponto de referência — opcional' },
-        plano_id:        { type: 'integer', description: 'ID do plano escolhido (ver descrição da tool)' },
+        plano_id:        { type: 'integer', description: 'plano_id devolvido por listar_planos_ativos para o plano que o cliente escolheu' },
         vencimento_id:   { type: 'integer', description: 'ID do vencimento — pergunte ao cliente o melhor dia' },
         pop_id:          { type: 'integer', description: 'Opcional. Auto-detectado pela cidade quando omitido.' },
         portador_id:     { type: 'integer', description: 'Opcional. Auto-detectado pela cidade quando omitido.' },
@@ -215,7 +215,7 @@ export const IA_TOOLS = [
   },
   {
     name: 'transferir_para_humano',
-    description: 'Transfere para atendente humano. Use APENAS quando o cliente pedir explicitamente.',
+    description: 'Transfere para atendente humano. Use quando o cliente pedir, quando ele estiver irritado, ou quando o pedido sair do seu escopo (cancelamento, negociação, visita técnica, empresa). Antes de chamar, diga ao cliente em uma frase que vai passar para um atendente.',
     input_schema: {
       type: 'object',
       properties: {
