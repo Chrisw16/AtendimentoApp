@@ -13,53 +13,22 @@
  * fazer busca com full-text nativo — um método que ninguém implementa e ninguém
  * chama é pior que a ausência dele: parece capacidade e não é.
  */
-import { getAnthropicClient } from './integrations.js';
-
-const MODELO_PADRAO = 'claude-haiku-4-5-20251001';
-
-/** Erro normalizado: quem chama não precisa saber a forma do erro do SDK. */
-export class LLMError extends Error {
-  constructor(mensagem, { status = null, causa = null } = {}) {
-    super(mensagem);
-    this.name = 'LLMError';
-    this.status = status;
-    this.causa = causa;
-  }
-}
-
-function normalizar(err) {
-  const status = err?.status || err?.response?.status || null;
-  if (status === 429)  return new LLMError('Limite de requisições do provedor atingido.', { status, causa: err });
-  if (status === 401)  return new LLMError('Credencial da IA inválida ou ausente.', { status, causa: err });
-  if (status >= 500)   return new LLMError('Provedor de IA indisponível.', { status, causa: err });
-  return new LLMError(err?.message || 'Falha ao chamar a IA.', { status, causa: err });
-}
+import { gerar, LLMError } from './llm/index.js';
+export { LLMError };
 
 /**
- * Uma passada no modelo. Devolve a resposta CRUA do provedor porque o laço
- * agêntico do motor lê `content[]` bloco a bloco — embrulhar aqui obrigaria a
- * reescrever o laço, e a regra desta fase é evoluir, não reescrever.
+ * Uma passada no modelo. Devolve a resposta no formato de blocos da Anthropic
+ * (o adapter traduz quando o provedor é outro) porque o laço agêntico do motor
+ * lê `content[]` bloco a bloco. Provedor e modelo vêm de `llm/index.js`:
+ * prompt → global (Configurações) → padrão.
  */
 export async function generate({
-  system, messages, tools = null, modelo = MODELO_PADRAO,
+  system, messages, tools = null, provedor = null, modelo = null,
   temperatura = 0.3, maxTokens = 1024,
   // FASE 12: quem chama diz de onde veio, para o custo ter dono.
   conversaId = null, origem = 'gateway', sandbox = false,
 } = {}) {
-  if (!messages?.length) throw new LLMError('Nenhuma mensagem para enviar ao modelo.');
-  const ai = await getAnthropicClient({ conversaId, origem, sandbox });
-  try {
-    return await ai.messages.create({
-      model: modelo,
-      max_tokens: maxTokens,
-      temperature: temperatura,
-      ...(system ? { system } : {}),
-      ...(tools?.length ? { tools } : {}),
-      messages,
-    });
-  } catch (err) {
-    throw normalizar(err);
-  }
+  return gerar({ system, messages, tools, provedor, modelo, temperatura, maxTokens }, { conversaId, origem, sandbox });
 }
 
 /** Só o texto — para quem não quer saber de blocos. */
@@ -75,7 +44,7 @@ export async function generateTexto(opts) {
  * "responda só X ou Y" às vezes responde "acho que X", e um classificador que
  * devolve texto livre contamina tudo que depende dele.
  */
-export async function classify({ texto, opcoes, instrucao = '', modelo = MODELO_PADRAO } = {}) {
+export async function classify({ texto, opcoes, instrucao = '', provedor = null, modelo = null } = {}) {
   if (!opcoes?.length) throw new LLMError('classify sem opções.');
   const system = [
     instrucao || 'Classifique a mensagem em UMA das categorias.',
@@ -84,7 +53,7 @@ export async function classify({ texto, opcoes, instrucao = '', modelo = MODELO_
 
   const bruto = await generateTexto({
     system, messages: [{ role: 'user', content: String(texto || '') }],
-    modelo, temperatura: 0, maxTokens: 12,
+    provedor, modelo, temperatura: 0, maxTokens: 12,
   });
 
   const limpo = bruto.toLowerCase().replace(/[^a-z_0-9]/g, '');

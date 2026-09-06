@@ -57,7 +57,7 @@ async function getTiposOcorrencia() {
  * Resolve o prompt de um slug injetando os placeholders e o contexto do cliente.
  * @param {string} slug — ex: 'suporte', 'financeiro', 'faq'
  * @param {object} clienteCtx — { nome, cpf, contrato, plano, status, cidade, telefone }
- * @returns {{ system: string, modelo: string, provedor: string, temperatura: number }}
+ * @returns {{ system: string, modelo: string, provedor: string, temperatura: number }} — modelo/provedor vazios quando o prompt herda o global
  */
 export async function resolverPrompt(slug, clienteCtx = {}) {
   const [promptRow, regrasRow, estiloRow, planos, tipos] = await Promise.all([
@@ -70,9 +70,15 @@ export async function resolverPrompt(slug, clienteCtx = {}) {
 
   // Fallback se o slug não existir no banco
   const conteudo = promptRow?.conteudo || `Você é um assistente de atendimento da NetGo Internet. Seja cordial e objetivo.`;
-  const modelo      = promptRow?.modelo      || 'claude-haiku-4-5-20251001';
-  const provedor    = promptRow?.provedor    || 'anthropic';
-  const temperatura = Number(promptRow?.temperatura ?? 0.3);
+  // CRU, sem preencher padrão: quem decide provedor/modelo é `llm/index.js`
+  // (prompt → global de Configurações → padrão). Preencher aqui fazia todo
+  // prompt parecer um override e a configuração global nunca ser alcançada.
+  const modelo      = promptRow?.modelo   || '';
+  const provedor    = promptRow?.provedor || '';
+  // null quando a coluna é null: o adapter omite o campo e vale o default do
+  // PROVEDOR. Um `?? 0.3` aqui e outro no gateway faziam o default do provedor
+  // ser inalcançável por dois caminhos diferentes.
+  const temperatura = promptRow?.temperatura == null ? null : Number(promptRow.temperatura);
 
   // Substitui placeholders
   let system = conteudo

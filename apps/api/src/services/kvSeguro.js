@@ -120,6 +120,9 @@ export function ehMascara(valor) {
  */
 export const CHAVES_SECRETAS = new Set([
   'anthropic_api_key', 'openai_api_key', 'sgp_token',
+  // Provedores de IA além dos dois originais (2026-09-06). Toda chave de
+  // provedor é credencial: mascarada no GET, ignorada no PUT quando vem com `•`.
+  'deepseek_api_key', 'gemini_api_key', 'groq_api_key', 'openrouter_api_key',
   'evolution_key', 'telegram_bot_token', 'sgpdb_password',
 ]);
 

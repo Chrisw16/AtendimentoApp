@@ -111,6 +111,13 @@ export default function Configuracoes() {
   const [notifs,       setNotifs]       = useState({ nova_conversa: true, fila_longa: true, equip_offline: false, os_agendada: false });
   const [anthropicKey, setAnthropicKey] = useState('');
   const [openaiKey,    setOpenaiKey]    = useState('');
+  const [deepseekKey,  setDeepseekKey]  = useState('');
+  const [geminiKey,    setGeminiKey]    = useState('');
+  const [groqKey,      setGroqKey]      = useState('');
+  const [openrouterKey, setOpenrouterKey] = useState('');
+  const [iaProvedor,   setIaProvedor]   = useState('');
+  const [iaModelo,     setIaModelo]     = useState('');
+  const [testeIA,      setTesteIA]      = useState(null);
   const [sgpUrl,       setSgpUrl]       = useState('');
   const [sgpApp,       setSgpApp]       = useState('');
   const [sgpToken,     setSgpToken]     = useState('');
@@ -139,6 +146,12 @@ export default function Configuracoes() {
     setNotifs(     kv.notificacoes        || { nova_conversa: true, fila_longa: true, equip_offline: false, os_agendada: false });
     setAnthropicKey(kv.anthropic_api_key  || '');
     setOpenaiKey(   kv.openai_api_key     || '');
+    setDeepseekKey( kv.deepseek_api_key   || '');
+    setGeminiKey(   kv.gemini_api_key     || '');
+    setGroqKey(     kv.groq_api_key       || '');
+    setOpenrouterKey(kv.openrouter_api_key || '');
+    setIaProvedor(  kv.ia_provedor        || '');
+    setIaModelo(    kv.ia_modelo          || '');
     setSgpUrl(      kv.sgp_url            || '');
     setSgpApp(      kv.sgp_app            || '');
     setSgpToken(    kv.sgp_token          || '');
@@ -166,6 +179,8 @@ export default function Configuracoes() {
     nome_empresa: nomeEmpresa, prompt_ia: promptIA, saudacao,
     horario, mensagem_fora_hora: msgFora, notificacoes: notifs,
     anthropic_api_key: anthropicKey, openai_api_key: openaiKey,
+    deepseek_api_key: deepseekKey, gemini_api_key: geminiKey, groq_api_key: groqKey, openrouter_api_key: openrouterKey,
+    ia_provedor: iaProvedor, ia_modelo: iaModelo,
     sgp_url: sgpUrl, sgp_app: sgpApp, sgp_token: sgpToken,
     sgpdb_host: sgpdbHost, sgpdb_port: sgpdbPort, sgpdb_name: sgpdbName,
     sgpdb_user: sgpdbUser, sgpdb_password: sgpdbPass,
@@ -179,9 +194,22 @@ export default function Configuracoes() {
   }));
 
   // Status das integrações
+  const { data: cat } = useQuery({ queryKey: ['ia-catalogo'], queryFn: () => api.get('/sysconfig/ia/catalogo') });
+  const catalogo   = cat?.catalogo   || {};
+  const provedores = cat?.provedores || [];
+  const chaves = { anthropic: anthropicKey, openai: openaiKey, deepseek: deepseekKey, gemini: geminiKey, groq: groqKey, openrouter: openrouterKey };
+  const provedorEfetivo = iaProvedor || cat?.global?.provedor || 'anthropic';
+  const testarIA = async () => {
+    setTesteIA({ andamento: true });
+    try { setTesteIA(await api.post('/sysconfig/ia/testar', { provedor: iaProvedor || null, modelo: iaModelo || null })); }
+    catch (e) { setTesteIA({ ok: false, erro: e.message }); }
+  };
   const integStatus = {
-    anthropic: anthropicKey ? 'ok' : 'off',
-    openai:    openaiKey    ? 'ok' : 'off',
+    // Só a chave do provedor EM USO conta como alerta: com seis provedores, quatro
+    // chaves vazias fariam a aba gritar para sempre.
+    anthropic: anthropicKey ? 'ok' : (provedorEfetivo === 'anthropic' ? 'off' : 'pending'),
+    openai:    openaiKey    ? 'ok' : (provedorEfetivo === 'openai'    ? 'off' : 'pending'),
+    outros:    chaves[provedorEfetivo] ? 'ok' : (['anthropic','openai'].includes(provedorEfetivo) ? 'ok' : 'off'),
     sgp:       sgpUrl && sgpToken && sgpApp ? 'ok' : (sgpUrl || sgpToken || sgpApp) ? 'pending' : 'off',
     evolution: evoUrl && evoKey   ? 'ok' : evoUrl || evoKey   ? 'pending' : 'off',
     telegram:  tgToken ? 'ok' : 'off',
@@ -357,11 +385,64 @@ export default function Configuracoes() {
         {tab === 'integracoes' && (
           <div className={styles.panelInteg}>
 
+            {/* Modelo de IA — a escolha global */}
+            <IntegrationCard title="Modelo de IA — qualidade × preço" color="#2050B8" status={chaves[provedorEfetivo] ? 'ok' : 'off'}
+              logo={<span style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>IA</span>}>
+              <p className={styles.integDesc}>
+                Qual IA atende por padrão em <strong>todos</strong> os nós de IA e na recepção. Cada prompt (aba Prompts IA)
+                pode escolher outro modelo; em branco, herda daqui. Sem nada configurado vale <code>anthropic · claude-haiku-4-5-20251001</code>.
+              </p>
+              <div className={styles.fieldRow}>
+                <div className={styles.field} style={{ flex: 1 }}>
+                  <label className={styles.fieldLabel}>Provedor</label>
+                  <select className={styles.input} value={iaProvedor} onChange={e => { setIaProvedor(e.target.value); setIaModelo(catalogo[e.target.value]?.[0]?.id || ''); setTesteIA(null); }}>
+                    <option value="">Padrão (Anthropic — Claude Haiku 4.5)</option>
+                    {provedores.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                  </select>
+                </div>
+                <div className={styles.field} style={{ flex: 2 }}>
+                  <label className={styles.fieldLabel}>Modelo</label>
+                  <input className={styles.input} list="ia-modelos-global" value={iaModelo} disabled={!iaProvedor}
+                    placeholder={iaProvedor ? 'digite ou escolha' : 'claude-haiku-4-5-20251001'}
+                    onChange={e => { setIaModelo(e.target.value); setTesteIA(null); }}/>
+                  <datalist id="ia-modelos-global">
+                    {(catalogo[iaProvedor] || []).map(m => <option key={m.id} value={m.id}>{m.nome} — US$ {m.preco.in}/{m.preco.out} por 1M</option>)}
+                  </datalist>
+                </div>
+              </div>
+              {iaProvedor && (catalogo[iaProvedor] || []).length > 0 && (
+                <div style={{ fontSize: 12, lineHeight: 1.55, margin: '4px 0 8px', color: 'var(--text-2, #555)' }}>
+                  {(catalogo[iaProvedor] || []).map(m => (
+                    <div key={m.id} style={{ padding: '3px 0', borderTop: '1px solid var(--border, #eee)' }}>
+                      <code style={{ fontSize: 11 }}>{m.id}</code> · <strong>US$ {m.preco.in} / {m.preco.out}</strong> por 1M tokens (entrada/saída, ref. {cat?.precos_referencia}) — {m.nota}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className={styles.fieldHint} style={{ color: '#B45309' }}>
+                ⚠️ O prompt enviado ao provedor carrega dados do assinante (CPF, nome, contrato, ficha). Ao escolher um provedor —
+                em especial modelos <strong>gratuitos</strong>, cujos termos costumam permitir uso dos dados para treino — você está
+                enviando esses dados a um terceiro. Modelos pequenos e gratuitos também erram tool calling com frequência: servem para conversa, não para o suporte que consulta o SGP.
+              </p>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
+                <button type="button" className={styles.btnSecondary || styles.input} style={{ width: 'auto', padding: '6px 14px', cursor: 'pointer' }}
+                  onClick={testarIA} disabled={testeIA?.andamento}>
+                  {testeIA?.andamento ? 'Testando…' : 'Testar credencial e modelo'}
+                </button>
+                {testeIA && !testeIA.andamento && (
+                  <span style={{ fontSize: 12, color: testeIA.ok ? '#16A34A' : '#DC2626' }}>
+                    {testeIA.ok ? `✓ ${testeIA.provedor} · ${testeIA.modelo} respondeu em ${testeIA.ms} ms` : `✗ ${testeIA.erro}`}
+                  </span>
+                )}
+              </div>
+              <p className={styles.fieldHint}>O teste usa a chave que está <strong>salva</strong>. Salve antes de testar uma chave nova.</p>
+            </IntegrationCard>
+
             {/* Anthropic */}
             <IntegrationCard title="Anthropic — Claude" color="#8B5CF6" status={integStatus.anthropic}
               logo={<span style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>A</span>}>
               <p className={styles.integDesc}>
-                Usado pelos nós <strong>IA Responde</strong> e <strong>IA Roteador</strong> nos fluxos automáticos.
+                O provedor padrão do produto. Usado quando o Modelo de IA acima está em "Padrão" ou em Anthropic.
                 Obtenha sua chave em <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-blue)' }}>console.anthropic.com</a>
               </p>
               <ApiKeyField label="API Key" badge="Recomendado"
@@ -374,13 +455,29 @@ export default function Configuracoes() {
             <IntegrationCard title="OpenAI — GPT" color="#10B981" status={integStatus.openai}
               logo={<span style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>AI</span>}>
               <p className={styles.integDesc}>
-                Opcional. Utilizado quando o modelo <strong>GPT-4o-mini</strong> for selecionado em um nó de IA.
+                Usado quando o Modelo de IA acima (ou um prompt específico) apontar para a OpenAI.
                 Obtenha em <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-blue)' }}>platform.openai.com</a>
               </p>
               <ApiKeyField label="API Key" badge="Opcional"
                 value={openaiKey} onChange={setOpenaiKey}
                 placeholder="sk-proj-..."
-                hint="Deixe em branco para usar apenas o Claude (Anthropic)."/>
+                hint="Deixe em branco se não usar a OpenAI."/>
+            </IntegrationCard>
+
+            {/* Outros provedores — um cartão, quatro chaves */}
+            <IntegrationCard title="DeepSeek · Gemini · Groq · OpenRouter" color="#0EA5E9" status={integStatus.outros}
+              logo={<span style={{ color: '#fff', fontWeight: 700, fontSize: 11 }}>+4</span>}>
+              <p className={styles.integDesc}>
+                Chaves dos demais provedores. Só a do provedor <strong>escolhido</strong> acima precisa estar preenchida.
+                DeepSeek: <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-blue)' }}>platform.deepseek.com</a> ·
+                Gemini: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-blue)' }}>aistudio.google.com</a> ·
+                Groq: <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-blue)' }}>console.groq.com</a> ·
+                OpenRouter: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-blue)' }}>openrouter.ai</a>
+              </p>
+              <ApiKeyField label="DeepSeek API Key" value={deepseekKey} onChange={setDeepseekKey} placeholder="sk-..." hint="Muito barato; thinking desligado automaticamente para atendimento."/>
+              <ApiKeyField label="Gemini API Key" value={geminiKey} onChange={setGeminiKey} placeholder="AIza..." hint="Endpoint compatível com OpenAI, em beta pelo Google."/>
+              <ApiKeyField label="Groq API Key" value={groqKey} onChange={setGroqKey} placeholder="gsk_..." hint="Rápido e barato (GPT-OSS). Os Llama/Qwen do Groq foram retirados em 08/2026."/>
+              <ApiKeyField label="OpenRouter API Key" value={openrouterKey} onChange={setOpenrouterKey} placeholder="sk-or-..." hint="Acesso a modelos gratuitos (50 req/dia sem créditos) e a Llama/Qwen pagos."/>
             </IntegrationCard>
 
             {/* SGP */}
