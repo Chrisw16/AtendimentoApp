@@ -336,4 +336,16 @@ Verificado no banco de produção logo após a 029 subir:
 
 ## Suítes
 
-**589 testes puros** (eram 527) e **290 de integração** (eram 278).
+**589 testes puros** (eram 527) e **297 de integração** (eram 278).
+
+O `recepcao-roteador.test.js` prova contra Postgres o que a revisão achou de
+mais grave: que a **primeira fala do cliente é respondida** num fluxo
+`inicio → ia_roteador`. E prova o vocabulário de saída de graça — sem
+credencial de IA no banco de teste, o turno cai no `catch`, e a recepção tem de
+sair por `nao_entendeu`, não por `transferir`.
+
+⚠️ **Teto declarado: a conversa de ponta a ponta com o modelo NÃO foi
+exercitada.** O nó `ia_roteador` está só no fluxo "Teste", que não tem
+`share_token` — e criar um seria expor uma URL sem login à produção. O laço é o
+mesmo do `ia_responde`, que roda em produção há semanas, mas *"a IA de fato
+conversa, identifica e encaminha"* só se prova falando com ela.
