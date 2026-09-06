@@ -122,3 +122,19 @@ export function mesclarCliente(anterior, novo) {
   const mesmo = anterior?.cpf && novo?.cpf && anterior.cpf === novo.cpf;
   return mesmo ? { ...anterior, ...util } : { ...(anterior?.cpf ? {} : (anterior || {})), ...util };
 }
+
+/**
+ * A fala do cliente é SÓ o documento com que ele acabou de ser identificado?
+ *
+ * Acontece sempre que o `ia_responde` entra no mesmo turno em que o nó
+ * `consultar_cliente` identificou: a "primeira fala" que a IA recebe são os
+ * 11 dígitos. Eles iriam para o histórico do nó e, de lá, para as
+ * `ultimas_mensagens` do handoff — que a FASE 9 decidiu não carregar CPF.
+ */
+export function falaEhDocumento(texto, cpf) {
+  const t = String(texto ?? '').trim();
+  const d = t.replace(/\D/g, '');
+  const c = String(cpf ?? '').replace(/\D/g, '');
+  if (!d || !c || d !== c) return false;
+  return /^[\d.\-\/\s]+$/.test(t);
+}

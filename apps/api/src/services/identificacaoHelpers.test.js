@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { extrairDocumento, mapearIdentificacao, patchConversa, resumoParaIA, mesclarCliente } from './identificacaoHelpers.js';
+import { extrairDocumento, mapearIdentificacao, patchConversa, resumoParaIA, mesclarCliente, falaEhDocumento } from './identificacaoHelpers.js';
 
 /** Espelha a saída de `sgpHelpers.mapearRespostaCliente` — com os segredos dentro. */
 const DATA = {
@@ -198,5 +198,21 @@ describe('resumoParaIA — multi-contrato legível', () => {
   test('plano e status juntos ficam num parêntese só', () => {
     const r = lista([{ id: 1, plano: 'A', status: 'ativo' }, { id: 2 }]);
     assert.match(r, /1 \(A, ativo\)/);
+  });
+});
+
+describe('falaEhDocumento', () => {
+  test('a fala que é só o documento do cliente identificado, com ou sem pontuação, é reconhecida', () => {
+    assert.equal(falaEhDocumento('111.444.777-35', '11144477735'), true);
+    assert.equal(falaEhDocumento(' 11144477735 ', '111.444.777-35'), true);
+  });
+  test('documento de OUTRA pessoa, ou frase que contém o documento, não é marcador', () => {
+    assert.equal(falaEhDocumento('11144477735', '07070310447'), false);
+    assert.equal(falaEhDocumento('meu cpf é 111.444.777-35', '11144477735'), false);
+  });
+  test('sem fala ou sem cliente identificado devolve false', () => {
+    assert.equal(falaEhDocumento('', '11144477735'), false);
+    assert.equal(falaEhDocumento('11144477735', undefined), false);
+    assert.equal(falaEhDocumento(undefined, undefined), false);
   });
 });

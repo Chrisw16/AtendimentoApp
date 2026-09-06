@@ -23,6 +23,8 @@
  * está lendo a conversa inteira, não um prefixo de string.
  */
 
+import { redigirTexto } from './mascarar.js';
+
 /** Portas que o motor emite além das rotas configuradas no nó. */
 export const PORTAS_FIXAS = ['nao_entendeu', 'encerrar'];
 
@@ -61,7 +63,7 @@ export function blocoRotas(rotas = []) {
   return [
     'DESTINOS DISPONÍVEIS (use a ferramenta direcionar_atendimento para escolher UM):',
     ...linhas,
-    '- "nao_entendeu": o cliente pediu um atendente humano, ou o assunto não é de nenhum destino acima',
+    '- "nao_entendeu": o assunto não é de nenhum destino acima. Para pedido de atendente, cliente irritado ou cancelamento, chame transferir_para_humano com o motivo — ela registra o resumo para quem vai atender',
     '- "encerrar": o cliente se despediu, agradeceu ou disse que não precisa de mais nada',
   ].join('\n');
 }
@@ -102,4 +104,28 @@ export function validarDestino(valor, rotas = []) {
   const id = normalizarId(valor);
   if (!id) return null;
   return [...idsDeRota(rotas), ...PORTAS_FIXAS].includes(id) ? id : null;
+}
+
+/**
+ * O que o cliente disse À RECEPÇÃO, para o agente de destino não pedir que ele
+ * repita. Medido em produção (2026-09-01): o cliente contava o problema, era
+ * encaminhado, e o suporte abria com "me conta o que está acontecendo?" — o
+ * histórico da recepção é por nó (`_ia_hist_<id>`) e não atravessa a aresta.
+ *
+ * Vai para `estado.contexto.motivo_contato`, que a ficha (`montarFichaColetada`)
+ * reinjeta em todo turno seguinte — por isso há teto, e por isso o documento
+ * que o cliente digitou é mascarado: a ficha já carrega o CPF no campo certo, e
+ * repeti-lo em texto livre é PII a mais no prompt sem ganho nenhum (a redação é a do log, `redigirTexto`).
+ */
+export function resumirMotivoContato(mensagens = [], teto = 300) {
+  const falas = (Array.isArray(mensagens) ? mensagens : [])
+    .filter(m => m?.role === 'user' && typeof m.content === 'string')
+    .map(m => m.content.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    // A MESMA redação do log (CPF/CNPJ, telefone, e-mail): o campo vai para o
+    // system prompt de todo turno seguinte e para o handoff — a ficha já
+    // carrega o documento no lugar certo, repeti-lo em texto livre é PII a mais.
+    .map(t => redigirTexto(t));
+  const texto = falas.join(' | ');
+  return texto.length > teto ? texto.slice(0, teto - 1) + '…' : texto;
 }

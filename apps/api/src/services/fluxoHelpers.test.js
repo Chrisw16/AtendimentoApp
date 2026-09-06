@@ -339,3 +339,10 @@ test('montarFichaColetada manda salvar mesmo quando nada foi coletado ainda', ()
   assert.match(bloco, /salvar_dado/);
   assert.doesNotMatch(bloco, /DADOS JÁ COLETADOS/, 'sem dados não existe lista para exibir');
 });
+
+test('filtrarTools entrega concluir_etapa_playbook com procedimento ativo MESMO fora da lista — perfil.tools explícito omitia e nenhum playbook concluía', () => {
+  const nomes = filtrarTools(TOOLS_FAKE, ['listar_planos_ativos'], { playbookAtivo: true }).map(t => t.name);
+  assert.ok(nomes.includes('concluir_etapa_playbook'));
+  const sem = filtrarTools(TOOLS_FAKE, ['listar_planos_ativos', 'concluir_etapa_playbook'], { playbookAtivo: false }).map(t => t.name);
+  assert.ok(!sem.includes('concluir_etapa_playbook'));
+});

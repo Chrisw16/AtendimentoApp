@@ -94,7 +94,7 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 
 **Dev (sem Docker):** precisa Postgres 16 + Redis 7 + Node 20. Em `apps/api`: `cp .env.example .env`, `npm install`, `npm run seed`, `npm run dev`. Em `apps/web`: `npm install`, `npm run dev`.
 
-**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps) — **635 testes puros**, rodam em qualquer máquina sem serviço nenhum. `motorFluxo.js` **não é importável em teste** (puxa `config/db.js` → Knex no topo e as deps não ficam instaladas localmente); por isso toda lógica testável vive em **módulos puros** ao lado dele — escreva o teste primeiro (TDD):
+**Testes:** `cd apps/api && npm test` (runner nativo `node --test`, zero deps) — **645 testes puros**, rodam em qualquer máquina sem serviço nenhum. `motorFluxo.js` **não é importável em teste** (puxa `config/db.js` → Knex no topo e as deps não ficam instaladas localmente); por isso toda lógica testável vive em **módulos puros** ao lado dele — escreva o teste primeiro (TDD):
 - `fluxoHelpers.js` — resolução de campos editor↔motor + escala NPS.
 - `roteadorHelpers.js` — **as decisões do agente de recepção**: quais rotas o nó tem, o bloco que o modelo lê, o `enum` da tool de saída e a validação do destino (a fronteira de confiança).
 - `identificacaoHelpers.js` — **identificar um assinante**: o que vira `contexto.cliente`, o patch que vai para a linha da conversa, a mescla que não apaga campo preenchido, e **o resumo curado que a IA pode ver** (a ficha carrega senha de PPPoE, do Wi-Fi e da Central).
@@ -112,7 +112,7 @@ docker-compose exec api npm run seed   # migrations + dados iniciais
 - `motorLoop.js` — o loop do motor extraído como função pura (`executarLoop`). ⚠️ **Divergiu na FASE 1**: o laço real virou assíncrono na persistência (`await estados.set/delete` num `finally`, grafo congelado, `fim({manter})`). Este arquivo — e o `motorSimulador.js` que roda sobre ele — espelham o laço **pré-FASE-1**. "Espelho byte-a-byte" hoje vale só para a travessia (qual nó vem depois), não para o ciclo de vida da execução.
 - `motorSimulador.js` (+`.cli.js`) — **simulador** de conversa multi-turno sobre o `executarLoop` (passo a passo, detecta concluido/travado/perdido/aguardando). `node src/services/motorSimulador.cli.js <fluxo.json> [cenario.json]`.
 
-**Testes de integração** (`apps/api/tests/integracao/`, `npm run test:integracao`) — **306 testes**, provam o que só o banco/Redis provam: dedup por `external_id`, SSE cruzando instâncias, migrations replay-safe, os **critérios de aceite do motor persistente** (§14), os **14 critérios da FASE 4** (`fase4-filas.test.js`) os **critérios da FASE 5** (`fase5-filas-atendimento.test.js`: claim atômico de duas assunções simultâneas, supervisor tomando conversa, Flow Execution sobrevivendo à troca de fila) e os da **RECEPÇÃO** (`recepcao-roteador.test.js`: a primeira fala do cliente é respondida, a saudação não se repete no meio da visita mas volta na visita seguinte, e o erro sai por `nao_entendeu` — a porta que o `ia_responde` não usa) e os da **FASE 6** (`fase6-cliente360.test.js`: PII mascarada no payload, SGP fora do ar não derruba o painel, histórico não vaza entre clientes sem telefone). É o único lugar onde o `motorFluxo.js` roda de verdade num teste (`DATABASE_URL` está posta, então ele importa). **Não há Docker nesta máquina**; o Postgres é nativo (`brew install postgresql@16`). Eles se **pulam** sem as envs, então `npm test` segue verde em qualquer lugar:
+**Testes de integração** (`apps/api/tests/integracao/`, `npm run test:integracao`) — **311 testes**, provam o que só o banco/Redis provam: dedup por `external_id`, SSE cruzando instâncias, migrations replay-safe, os **critérios de aceite do motor persistente** (§14), os **14 critérios da FASE 4** (`fase4-filas.test.js`) os **critérios da FASE 5** (`fase5-filas-atendimento.test.js`: claim atômico de duas assunções simultâneas, supervisor tomando conversa, Flow Execution sobrevivendo à troca de fila) e os da **RECEPÇÃO** (`recepcao-roteador.test.js`: a primeira fala do cliente é respondida, a saudação não se repete no meio da visita mas volta na visita seguinte, e o erro sai por `nao_entendeu` — a porta que o `ia_responde` não usa) e os da **FASE 6** (`fase6-cliente360.test.js`: PII mascarada no payload, SGP fora do ar não derruba o painel, histórico não vaza entre clientes sem telefone). É o único lugar onde o `motorFluxo.js` roda de verdade num teste (`DATABASE_URL` está posta, então ele importa). **Não há Docker nesta máquina**; o Postgres é nativo (`brew install postgresql@16`). Eles se **pulam** sem as envs, então `npm test` segue verde em qualquer lugar:
 ```bash
 DATABASE_URL_TEST='postgres://maxxi:maxxi_dev_pass@127.0.0.1:5432/maxxi_v2_test' \
 REDIS_URL_TEST='redis://127.0.0.1:6380' npm run test:integracao
@@ -521,6 +521,23 @@ prompt, com catálogo de preços datado, botão de teste de credencial e
 provedores e o laço do motor não mudou. Detalhe em
 [brain/work/tasks/2026-09-06_provedor-e-modelo-de-ia.md](brain/work/tasks/2026-09-06_provedor-e-modelo-de-ia.md).
 
-Pendências de produto: rodar um atendimento real pelo WhatsApp (volume segue ~zero); destravar o deploy; parametrizar o acoplamento NetGo para revenda.
+**Revisão do fluxo e dos prompts em 2026-09-06** — lido direto do banco de
+produção: a base de conhecimento **nunca foi consultada** (`knowledge_uso` = 0),
+os três perfis rodam com `tools = []` (o comercial sem `listar_planos_ativos`
+nem `precadastrar_cliente`), cada nó de IA carrega DUAS personas (aba + nó,
+8–10 mil tokens por chamada), `[REGRAS]` manda usar quatro tools que não
+existem, e o playbook de suporte fica em 0/9 porque quem identifica é o nó,
+não a tool. A proposta está em
+[apps/api/examples/fluxo-netgo-v3.json](apps/api/examples/fluxo-netgo-v3.json)
+(recepção por IA, validador 0/0) e
+[apps/api/examples/prompts-netgo-v3.md](apps/api/examples/prompts-netgo-v3.md)
+(prompts curtos, perfis com tools, ordem de ativação). No código: a recepção
+grava `estado.contexto.motivo_contato` ao encaminhar (o agente seguinte não
+pergunta de novo o que o cliente já contou), a etapa "Identificar o cliente"
+é marcada quando o nó identificou (`prepararParaIA({jaIdentificado})`), e o
+seletor de modelo do nó saiu (o motor nunca leu `cfg.modelo`), `concluir_etapa_playbook` entra com playbook ativo mesmo fora de `perfil.tools`/`cfg.tools_ativas` (toda lista explícita a omitia e nenhum playbook concluía), o CPF cru não entra mais no histórico da IA quando o nó identificou no mesmo turno (`falaEhDocumento`), e o `nps_inline` repergunta uma vez e segue por `neutro` em vez de travar a conversa. Detalhe em
+[brain/work/tasks/2026-09-06_revisao-fluxo-e-prompts.md](brain/work/tasks/2026-09-06_revisao-fluxo-e-prompts.md).
+
+Pendências de produto: aplicar a proposta acima (é dado de produção — prompts, perfis, playbook, fluxo — e só o operador aplica); rodar um atendimento real pelo WhatsApp (volume segue ~zero); parametrizar o acoplamento NetGo para revenda.
 
 > **Branch `dev`** tem 21 commits (WhatsApp via QR Code, de outro programador) que **não estão no `main`** e nunca foram deployados. Decisão de 2026-08-21: deixar de lado por ora.

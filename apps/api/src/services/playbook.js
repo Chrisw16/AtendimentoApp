@@ -101,7 +101,7 @@ export async function concluirEtapa(exec, etapas, referencia) {
  * procedimentos com conversas que nunca existiram, e é esse histórico que a
  * auditoria vai ler. O prompt sai igual — só o registro não acontece.
  */
-export async function prepararParaIA(slug, { conversaId = null, sandbox = false } = {}) {
+export async function prepararParaIA(slug, { conversaId = null, sandbox = false, jaIdentificado = false } = {}) {
   const carregado = await carregar(slug, { permitirTeste: sandbox });
   if (!carregado) return null;
   const { playbook, etapas } = carregado;
@@ -110,7 +110,11 @@ export async function prepararParaIA(slug, { conversaId = null, sandbox = false 
     return { playbook, etapas, exec: null, bloco: formatarParaPrompt(playbook, etapas, []) };
   }
 
-  const exec = await obterExecucao(conversaId, playbook);
+  const aberta = await obterExecucao(conversaId, playbook);
+  // Cliente já identificado ao entrar (pelo nó `consultar_cliente` ou pela
+  // recepção): a etapa que `identificar_cliente` evidencia está cumprida.
+  // `marcar` deduplica, então repetir a cada turno é no-op depois da primeira.
+  const exec = jaIdentificado ? await registrarTool(aberta, etapas, 'identificar_cliente') : aberta;
   return {
     playbook, etapas, exec,
     bloco: formatarParaPrompt(playbook, etapas, normalizarFeitas(exec.etapas_feitas)),

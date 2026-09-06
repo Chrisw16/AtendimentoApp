@@ -436,12 +436,14 @@ function PropsPanel({ node, onChange, onDelete }) {
                   </div>
                 )}
               </Fld>
-              <Fld label="Modelo">
-                <select value={cfg.modelo||'haiku'} onChange={e=>set('modelo',e.target.value)} style={{...IS,cursor:'pointer'}}>
-                  <option value="haiku">⚡ Claude Haiku — rápido</option>
-                  <option value="sonnet">🧠 Claude Sonnet — capaz</option>
-                </select>
-              </Fld>
+              {/* Não há seletor de modelo aqui de propósito: o motor nunca leu
+                  `cfg.modelo`. O select que existia gravava "sonnet" no nó e o
+                  turno rodava no modelo global — a tela dizia uma coisa e o
+                  log `[IA] provedor=… modelo=…` outra. Provedor e modelo vêm do
+                  prompt (aba Prompts IA) ou de Configurações → IA. */}
+              <div style={{fontSize:10.5,color:'rgba(255,255,255,.45)',lineHeight:1.5,padding:'2px 0 8px'}}>
+                Provedor e modelo vêm do prompt do contexto (aba <b>Prompts IA</b>) ou de <b>Configurações → IA</b>; este nó não escolhe modelo.
+              </div>
               <Fld label="Máx. turnos" hint="Cada troca cliente↔IA conta. Cadastro comercial precisa de ~25. Após este número → porta max_turnos.">
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   {/* Vazio = herda. O `6` de antes era o default do INPUT, não o
