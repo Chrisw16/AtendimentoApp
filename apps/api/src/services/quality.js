@@ -19,11 +19,24 @@ import {
   padroesRecorrentes, avaliacaoValida,
 } from './qualityHelpers.js';
 
-/** Scorecard ativo do perfil; sem ele não há o que auditar. */
+/**
+ * Scorecard ativo do perfil; sem ele não há o que auditar.
+ *
+ * ⚠️ O `||` anterior nunca caía no segundo ramo: um query builder do knex é
+ * SEMPRE truthy (é um thenable, não uma promessa resolvida), então o fallback
+ * era código morto e a primeira consulta ia ao banco de qualquer jeito.
+ */
 export async function scorecardDe(perfil) {
   const db = getDb();
-  return db('quality_scorecards').where({ perfil, ativo: true }).first()
-      || db('quality_scorecards').where({ ativo: true }).first();
+  return (await db('quality_scorecards').where({ perfil, ativo: true }).first())
+      // ⚠️ O fallback é explicitamente `suporte`, não "qualquer um ativo".
+      // Aquele `where({ativo:true}).first()` sem `ORDER BY` nunca tinha rodado
+      // (era o ramo morto do `||`); vivo, ele faria uma fila sem scorecard
+      // homônimo — `suporte_n2`, `vendas`, ou `financeiro` enquanto ninguém
+      // ativar o novo, que nasce desligado — ser auditada pelo scorecard que o
+      // Postgres devolvesse primeiro. Auditar com os critérios errados é pior
+      // que não auditar: vira injustiça numa avaliação de gente.
+      ?? (await db('quality_scorecards').where({ perfil: 'suporte', ativo: true }).first());
 }
 
 /**
@@ -156,7 +169,12 @@ export async function auditar(conversa, { origem = 'automatica', scorecard = nul
     ? (await db('filas').where({ id: conversa.fila_id }).first().catch(() => null))?.slug
     : null;
 
-  const sc = scorecard || await scorecardDe(perfil === 'comercial' ? 'comercial' : 'suporte');
+  // O ternário anterior só conhecia dois perfis: uma conversa da fila
+  // Financeiro era auditada pelo scorecard de SUPORTE — critérios de RADIUS,
+  // ONU e reteste, num atendimento de boleto. Scorecard novo que a tela mostra
+  // e o backend ignora é a família do `agentes.permissoes` que nunca decidiu
+  // nada. O slug da fila É o perfil; o fallback continua sendo suporte.
+  const sc = scorecard || await scorecardDe(perfil || 'suporte');
   if (!sc) return { erro: 'sem_scorecard' };
   if (!(sc.criterios || []).length) return { erro: 'scorecard_vazio' };
 

@@ -33,7 +33,7 @@ export function avaliarNps(notaRaw, escala) {
 
 // ia_responde: o editor salva a instrução extra em cfg.instrucao (o motor lia cfg.prompt).
 // Compõe o system prompt na ordem: base + instrução específica + dados do cliente + ficha + regras de tool.
-export function montarSystemPrompt({ systemBase, instrucao, ctxCliente, ficha, playbook, runtime, regrasTools } = {}) {
+export function montarSystemPrompt({ systemBase, instrucao, ctxCliente, ficha, playbook, rotas, runtime, regrasTools } = {}) {
   return [
     systemBase || instrucao,
     instrucao && systemBase ? `\nInstrução específica: ${instrucao}` : '',
@@ -42,6 +42,10 @@ export function montarSystemPrompt({ systemBase, instrucao, ctxCliente, ficha, p
     // FASE 8: o procedimento vem DEPOIS da ficha e ANTES das regras de tool —
     // ele diz o que fazer, e as regras dizem como operar as ferramentas.
     playbook ? `\n${playbook}` : '',
+    // Recepção (`ia_roteador`): os destinos vêm do NÓ, não do prompt editável.
+    // Um operador que apagasse a lista do prompt da tela deixaria o agente sem
+    // saber para onde pode mandar ninguém.
+    rotas ? `\n${rotas}` : '',
     // FASE 9: hierarquia de confiança, anti-alucinação e guardrails vêm por
     // ÚLTIMO antes das regras de tool — é a posição de maior aderência num
     // system prompt longo, e são as regras que não podem ser contornadas.
@@ -218,7 +222,15 @@ export function normalizarEscolha(texto) {
 // (memória não se desliga por config de nó), a base também não se desliga.
 // `concluir_etapa_playbook` continua condicionada ao procedimento ativo: tool
 // que só sabe responder "não há procedimento" compete com a tool certa.
-export const TOOLS_SEMPRE_ATIVAS = ['salvar_dado', 'buscar_conhecimento'];
+// `identificar_cliente` entra aqui pelo MESMO argumento de memória e base de
+// conhecimento: nó esquecido não pode virar IA que não sabe com quem fala. Todo
+// nó `ia_responde` escrito antes da FASE 7 tem `cfg.tools_ativas` explícito, e
+// essa lista SUBSTITUI o padrão — foi assim que `buscar_conhecimento` morreu em
+// silêncio. Deixar a identificação no padrão significaria que ela chegaria
+// exatamente aos nós que não precisam dela, e a nenhum dos que precisam.
+// É leitura, e o CPF vem do cliente na própria conversa: mesma exposição que o
+// nó `consultar_cliente` sempre teve.
+export const TOOLS_SEMPRE_ATIVAS = ['salvar_dado', 'buscar_conhecimento', 'identificar_cliente'];
 
 export function filtrarTools(todas, toolsAtivas = [], { playbookAtivo = false } = {}) {
   return todas
