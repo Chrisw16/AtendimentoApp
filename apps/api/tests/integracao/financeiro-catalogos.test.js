@@ -25,12 +25,15 @@ describe('FINANCEIRO — os catálogos chegam ao banco', { skip: motivoSkip() },
     const { semearCatalogos } = await import('../../src/dadosIniciais.js');
     const prompts = await import('../../src/migrations/versions/005_prompts_ia.js');
     const fin     = await import('../../src/migrations/versions/029_catalogos_financeiro.js');
+    const scs     = await import('../../src/migrations/versions/030_scorecards_faltantes.js');
     const log = console.log; console.log = () => {};
     try {
       await semearCatalogos(db);
       await prompts.up(db);
       await fin.up(db);
       await fin.up(db);            // duas vezes: semear de novo não duplica
+      await scs.up(db);
+      await scs.up(db);
     } finally { console.log = log; }
   });
   after(async () => { await db?.destroy?.(); });
@@ -96,6 +99,16 @@ describe('FINANCEIRO — os catálogos chegam ao banco', { skip: motivoSkip() },
     } finally {
       await db('quality_scorecards').where({ slug: 'financeiro' }).update({ ativo: false });
     }
+  });
+
+  test('os TRÊS scorecards existem — não só o do financeiro', async () => {
+    // Medido em produção em 2026-09-05: existia UM. A 022 semeia os catálogos e
+    // a 023 cria `quality_scorecards`; quando a 022 rodou a tabela não existia,
+    // `semearCatalogos` pulou o bloco pelo `hasTable` e nada voltou para
+    // semear. Tela de Quality abrindo com um scorecard só, e nada acusando —
+    // o mesmo defeito que a 022 foi criada para resolver.
+    const slugs = (await db('quality_scorecards').select('slug')).map(s2 => s2.slug).sort();
+    assert.deepEqual(slugs, ['comercial', 'financeiro', 'suporte']);
   });
 
   test('a fila e a categoria de conhecimento do financeiro continuam de pé', async () => {

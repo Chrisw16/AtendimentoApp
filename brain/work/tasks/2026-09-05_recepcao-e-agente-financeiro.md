@@ -311,6 +311,29 @@ até alguém publicá-los.
 - **Repontar a aresta `saida` do `menu_cliente`** (P0: "internet caiu" devolve
   boleto) — é dado de fluxo no banco de produção, não código.
 
+## O que o deploy revelou — e que nenhuma leitura de código acharia
+
+Verificado no banco de produção logo após a 029 subir:
+
+- ⚠️ **Os scorecards de suporte e comercial NUNCA existiram**
+  (`count(*) FROM quality_scorecards` = 1, e o único era o financeiro que a 029
+  acabara de inserir). A **022** semeia os catálogos e a **023** cria a tabela:
+  quando a 022 rodou, `quality_scorecards` não existia, e o `hasTable` que
+  protege cada bloco — para migration que falha não derrubar o boot — pulou o
+  bloco **em silêncio**. É o defeito que a 022 foi criada para resolver,
+  repetido uma casa adiante. Corrigido pela **030**, e agora há teste de
+  integração exigindo os três.
+- **O operador já tinha criado um perfil `financeiro` à mão**, com
+  `playbook_slug` VAZIO e `max_turnos: 25`. O `onConflict(...).ignore()` fez o
+  certo: o dele ficou. Consequência a comunicar, não a corrigir por conta
+  própria — o perfil dele não aponta para procedimento nenhum.
+- **Existem agora DOIS playbooks financeiros**: o dele (`financeiro`, 2 etapas,
+  sem tool declarada em nenhuma — então nenhuma etapa pode ser evidenciada) e o
+  desta entrega (`financeiro_2via_e_desbloqueio`, 8 etapas). Escolher entre os
+  dois é decisão de quem opera.
+- **Os prompts foram tratados como planejado**: `financeiro` preservado com a
+  referência corrigida (`identificar_cliente`), `roteador` substituído.
+
 ## Suítes
 
-**589 testes puros** (eram 527) e **288 de integração** (eram 278).
+**589 testes puros** (eram 527) e **290 de integração** (eram 278).
