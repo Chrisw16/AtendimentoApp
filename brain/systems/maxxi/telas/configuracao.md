@@ -30,9 +30,20 @@ Lista/CRUD dos fluxos de chatbot + o **editor visual** (`@xyflow/react`): paleta
 
 Ativa/desativa e configura credenciais de 6 canais (whatsapp [meta/evolution], telegram, widget, email, voip, sms) com campos condicionais. `GET /api/canais`, `PUT /api/canais/:tipo` (upsert por tipo). **Integração:** os [[Canais e Webhooks|webhooks]] consomem essa config (ex.: token do Telegram em `canais.config`); algumas credenciais também vivem em `sistema_kv`. Mostra a URL do webhook Evolution de produção.
 
+## Configurações → Integrações de IA — o modelo global (2026-09-06)
+
+Cartão **"Modelo de IA — qualidade × preço"**: provedor (Anthropic, OpenAI,
+DeepSeek, Gemini, Groq, OpenRouter), modelo (texto livre com sugestões, preço em
+USD/1M com data de referência e nota honesta sobre tool calling), quatro chaves
+novas (`deepseek/gemini/groq/openrouter_api_key`, mascaradas), botão **Testar
+credencial e modelo** (`POST /sysconfig/ia/testar`, usa a chave SALVA) e aviso
+de que o prompt leva dados do assinante ao provedor. Salvar provedor sem a chave
+dele é **400** — derrubaria 100% do atendimento. Vazio = `anthropic ·
+claude-haiku-4-5-20251001`. Ver [[2026-09-06_provedor-e-modelo-de-ia]].
+
 ## Prompts IA (`/prompts-ia`) — cérebro da IA
 
-Edita os 8 prompts da IA (regras/estilo/roteador/financeiro/suporte/comercial/faq/outros) + catálogo das 15 tools + um **testador de tools SGP**. `GET/PUT /api/prompts`, `/:slug/restaurar`, `POST /api/sysconfig/tools/test`. **Integração:** os prompts (tabela `prompts_ia`) são consumidos pelo `promptService` no nó `ia_responde` ([[IA com Tool Calling]]); placeholders `[PLANOS]`/`[TIPOS_OCORRENCIA]` são resolvidos a partir de `planos`/`sistema_kv`; o testador chama o SGP real ([[Integração SGP]]).
+Edita os 8 prompts da IA (regras/estilo/roteador/financeiro/suporte/comercial/faq/outros) — cada um com **provedor/modelo próprios ou "↩ Herdar de Configurações"** (NULL = herança; desde 2026-09-06 o catálogo vem de `GET /sysconfig/ia/catalogo`, não de lista na tela) e `temperatura` **honrada** — + catálogo das 18 tools + um **testador de tools SGP**. `GET/PUT /api/prompts`, `/:slug/restaurar`, `POST /api/sysconfig/tools/test`. **Integração:** os prompts (tabela `prompts_ia`) são consumidos pelo `promptService` no nó `ia_responde` ([[IA com Tool Calling]]); placeholders `[PLANOS]`/`[TIPOS_OCORRENCIA]` são resolvidos a partir de `planos`/`sistema_kv`; o testador chama o SGP real ([[Integração SGP]]).
 
 ## Configurações (`/configuracoes`) — o painel-mãe
 

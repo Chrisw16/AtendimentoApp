@@ -466,7 +466,7 @@ que divergiu e os tetos assumidos.
 | **12** — Conversation Events + Analytics | ✅ 2026-08-22 |
 | **13** — Observabilidade e hardening | ✅ 2026-08-22 |
 
-## Estado do produto (2026-09-05)
+## Estado do produto (2026-09-06)
 
 **Escopo enxugado em 2026-08-26:** saíram **Ocorrências**, **Ordens de Serviço** e **Monitor de Rede** — GoCHAT é atendimento, o ERP é o SGP. A aba **Clientes** virou o **histórico de contato** (view `clientes_contato`, migration 028). Detalhe nas regras não-óbvias acima e em [brain/work/tasks/2026-08-26_remocao-erp-e-clientes-historico.md](brain/work/tasks/2026-08-26_remocao-erp-e-clientes-historico.md).
 

@@ -99,7 +99,7 @@ mentiria. É o mesmo argumento com que a FASE 12 recusou um event store. O que f
 
 **Automação/IA:**
 - `fluxos` — grafo do editor: `dados` jsonb (`{nodes, edges}`, formato atual) + `nos`/`conexoes` (legado), `ativo` (só um por vez), `gatilho`, `publicado`/`versao`. Consumido pelo [[Motor de Fluxo]].
-- `prompts_ia` — prompts editáveis em runtime: `slug` (regras/estilo/roteador/financeiro/suporte/comercial/faq/outros), `conteudo`, `padrao` (para restaurar), `provedor`/`modelo`/`temperatura`. Ver [[IA com Tool Calling]].
+- `prompts_ia` — prompts editáveis em runtime: `slug` (regras/estilo/roteador/financeiro/suporte/comercial/faq/outros), `conteudo`, `padrao` (para restaurar), `provedor`/`modelo` (**NULL = herda o global de `sistema_kv.ia_provedor`/`ia_modelo`**; a 031 anulou o par que a 005 gravava e tirou o default das colunas) /`temperatura` (honrada desde 2026-09-06). Ver [[IA com Tool Calling]].
 - `planos` — catálogo comercial local que espelha o SGP: `plano_id_sgp` (vai no precadastro), `nome`, `valor`, `velocidade`, `cidade`. Alimenta a tool `listar_planos_ativos`.
 - `sistema_kv` — key-value de configuração: **guarda as credenciais de integração** (`sgp_url/app/token`, `evolution_url/key`, `anthropic_api_key`, `telegram_bot_token`...), além de `modo` (bot/humano), `horario`, `planos_texto`, `tipos_ocorrencia`. Ver risco em [[Auth e Segurança]].
 

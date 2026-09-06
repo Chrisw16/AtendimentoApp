@@ -45,9 +45,19 @@ São três campos com papéis distintos (fonte de confusão comum):
 - **Catálogo:** lista **read-only** das tools (referência: nome, categoria, endpoint SGP, params, status Ativo/Requer-config). É uma lista **fixa no front** (`TOOLS_CATALOG`), espelho manual do `iaTools.js` — e só renderiza as categorias Diagnóstico/Atendimento/Financeiro, **escondendo as tools Comercial** (pré-cadastro, listar planos/vencimentos).
 - **Testar Tools:** testador manual — escolhe a tool, preenche params e roda `POST /sysconfig/tools/test` (executa **de verdade** no SGP). As marcadas com ⚠️ (`criar_chamado`/`promessa_pagamento`/`precadastrar_cliente`) **gravam dados reais** — é o equivalente manual ao gate de sandbox dos [[Testes de Fluxo]].
 
-## `ia_roteador` — classificador de intenção
+## `ia_roteador` — agente de RECEPÇÃO (desde 2026-09-05)
 
-`processarIARoteador` classifica a mensagem em uma rota. Detecta despedida por regex **antes** de chamar a API (economia). Claude responde `<rota>id</rota>` (XML, `max_tokens 30`); valida contra as rotas configuradas + `nao_entendeu`/`encerrar`.
+Era um classificador one-shot (`max_tokens 30`, sem tools, sem histórico) que
+lia `<rota>id</rota>` do texto e tinha uma regex de despedida que casava
+**prefixo** — `"não consigo acessar"` saía por `encerrar` antes de qualquer IA.
+Hoje **delega ao laço do `ia_responde`**: `processarIAResponde(no, ctx, { modo:
+'recepcao' })`. A única diferença é o vocabulário de saída (`PORTA`:
+`resolvido→encerrar`, `transferir→nao_entendeu`, `max_turnos→nao_entendeu`), a
+tool `direcionar_atendimento` (schema construído por chamada, `enum` = rotas do
+nó) e o bloco de rotas no prompt. Ganha de graça memória, base de conhecimento,
+`identificar_cliente`, os blocos §67/§68/§75, telemetria e `ia_execucoes`. A
+saída é por **tool**, não por tag: o cliente podia digitar `<rota>encerrar</rota>`.
+Registro: [[2026-09-05_recepcao-e-agente-financeiro]].
 
 ## `iaTools.js` — 15 ferramentas
 
@@ -59,7 +69,7 @@ Definições no formato Anthropic (`input_schema`) e o executor `executarTool(na
 
 `resolverPrompt(slug, clienteCtx)` carrega em paralelo o prompt do slug + `regras` + `estilo` + planos + tipos de ocorrência (cache 3 min) e substitui os placeholders `[REGRAS]`, `[ESTILO]`, `[PLANOS]`, `[TIPOS_OCORRENCIA]`, injetando o contexto do cliente ao final. Retorna `{system, modelo, provedor, temperatura}`.
 
-Os prompts são **editáveis em runtime** (tabela `prompts_ia`, tela Prompts IA). Os 8 slugs seed (migration 005): `regras`, `estilo`, `roteador`, `financeiro`, `suporte`, `comercial`, `faq`, `outros` — escritos com passos rígidos por setor e **fortemente acoplados à NetGo** (Natal/RN, fibra, horários, planos). Revender para outro provedor exige reescrever esses prompts por instância.
+Os prompts são **editáveis em runtime** (tabela `prompts_ia`, tela Prompts IA). Os 8 slugs seed (migration 005): `regras`, `estilo`, `roteador` (hoje o prompt da **recepção**, reescrito pela 029), `financeiro`, `suporte`, `comercial`, `faq`, `outros` — escritos com passos rígidos por setor e **fortemente acoplados à NetGo** (Natal/RN, fibra, horários, planos). Revender para outro provedor exige reescrever esses prompts por instância.
 
 Atenção: há **dois mecanismos de cache** — `promptService` (TTL 3 min) e `integrations.invalidateConfigCache`. Editar um prompt invalida só o de `integrations`, então o motor pode servir prompt desatualizado por até 3 min.
 
@@ -102,7 +112,7 @@ motivos e nada soma.
 **LLM Gateway** (`llmGateway.js`) — ponto único de chamada ao modelo, com erro
 normalizado. **Não tem `embed`**, de propósito: a Anthropic não oferece e a busca é
 full-text. ⚠️ Ainda **não é o único caminho**: `motorFluxo` e `supervisoraIA` seguem em
-`getAnthropicClient` (migrar o laço seria reescrever). **Chamada NOVA nasce no gateway** —
+~~`getAnthropicClient`~~ → **removido em 2026-09-06**: todo caminho passa por `services/llm/index.js:gerar()`, com provedor/modelo configuráveis (Claude, OpenAI, DeepSeek, Gemini, Groq, OpenRouter) e telemetria num lugar só. A língua franca interna continua sendo o formato de blocos da Anthropic; os adapters traduzem. Ver [[2026-09-06_provedor-e-modelo-de-ia]].
 foi assim com o Copiloto.
 
 ## See Also

@@ -85,6 +85,9 @@ Last rebuilt: 2026-08-26
 - **FASE 13 — Observabilidade e hardening** — `work/tasks/2026-08-22_fase-13-observabilidade.md`
 
 ### Pós-plano
+- **Provedor e modelo de IA configuráveis (2026-09-06)** (Claude/OpenAI/DeepSeek/Gemini/Groq/OpenRouter, `services/llm/`, um adapter compat cobre cinco, temperatura honrada, migration 031, catálogo com preços datados) — `work/tasks/2026-09-06_provedor-e-modelo-de-ia.md`
+- **Agente de recepção + agente financeiro (2026-09-05)** (`ia_roteador` delega ao laço do `ia_responde`; `identificar_cliente`; perfil/playbook/scorecard financeiro; migrations 029/030; sete defeitos, três no fluxo ativo) — `work/tasks/2026-09-05_recepcao-e-agente-financeiro.md`
+- **Levantamento: provedor e modelo global (2026-09-05)** (o pedido e o que o código já mostrava; entregue no dia seguinte) — `work/tasks/2026-09-05_provedor-e-modelo-global.md`
 - **Remoção dos módulos de ERP + Clientes como histórico** (Ocorrências, Ordens, Monitor de Rede, clientes_contato) — o produto parou de fingir ser ERP; migrations 027/028 — `work/tasks/2026-08-26_remocao-erp-e-clientes-historico.md`
 
 ### Outros

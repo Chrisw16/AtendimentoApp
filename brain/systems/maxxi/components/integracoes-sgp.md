@@ -12,7 +12,7 @@ tags: [backend, sgp, erp, evolution, integracao]
 
 # Integração SGP
 
-`apps/api/src/services/integrations.js` (~609 LOC) é a camada de integração externa: **[[SGP]]** (ERP), **ACS** (stub), **Anthropic** (IA) e **Evolution API** (WhatsApp). Cabeçalho do arquivo: "fiel ao `erp.js` de referência — endpoints, formatos e campos idênticos". Os nós SGP do [[Catálogo de Nós|catálogo]] e as tools da [[IA com Tool Calling|IA]] chamam estas funções.
+`apps/api/src/services/integrations.js` (~609 LOC) é a camada de integração externa: **[[SGP]]** (ERP), **ACS** (stub), ~~**Anthropic** (IA)~~ (saiu em 2026-09-06 — o cliente de IA mora em `services/llm/`, ver [[2026-09-06_provedor-e-modelo-de-ia]]) e **Evolution API** (WhatsApp). Cabeçalho do arquivo: "fiel ao `erp.js` de referência — endpoints, formatos e campos idênticos". Os nós SGP do [[Catálogo de Nós|catálogo]] e as tools da [[IA com Tool Calling|IA]] chamam estas funções.
 
 ## Configuração e transporte
 
