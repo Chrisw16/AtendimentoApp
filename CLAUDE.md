@@ -495,6 +495,14 @@ Confirmado por sonda de rota repetida: `GET /api/atendimento/filas` responde **4
 
 O deploy levou ~10 min depois do push, passou por uma janela de **rollout parcial** (404 e 401 alternando na mesma URL) e **não mexeu no `last-modified` de `GET /`** — não confie nessa sonda, nem numa única requisição (ver as armadilhas acima).
 
+**Pedido em aberto (2026-09-05):** escolher **provedor e modelo de IA em
+Configurações** (Claude/ChatGPT/DeepSeek/Gemini) para trocar qualidade por
+preço. ⚠️ `prompts_ia.provedor` e `.temperatura` **já existem, já são lidos por
+`resolverPrompt` e são IGNORADOS** pelo motor — configuração que a tela mostra e
+o backend não honra, a família do `agentes.permissoes`. E `openai_api_key` é
+campo da tela que **nenhuma linha de código lê**. Levantamento e perguntas em
+aberto em [brain/work/tasks/2026-09-05_provedor-e-modelo-global.md](brain/work/tasks/2026-09-05_provedor-e-modelo-global.md).
+
 Pendências de produto: rodar um atendimento real pelo WhatsApp (volume segue ~zero); destravar o deploy; parametrizar o acoplamento NetGo para revenda.
 
 > **Branch `dev`** tem 21 commits (WhatsApp via QR Code, de outro programador) que **não estão no `main`** e nunca foram deployados. Decisão de 2026-08-21: deixar de lado por ora.
